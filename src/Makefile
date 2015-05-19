@@ -15,13 +15,14 @@ endif
 
 
 
-dect-prog: boot.o tty.o error.o main.o state.o util.o preloader.o flashloader.o Crc.o app.o buffer.o busmail.o nvs.o fifo.o
+dectmngr2: boot.o tty.o error.o main.o state.o util.o preloader.o flashloader.o Crc.o app.o buffer.o busmail.o nvs.o fifo.o
 	$(CC) $(INCLUDE_PATHS) -o $@ $^
 
 
 clean:
 	rm -rf *.o
-	rm -rf dect-prog
+	rm -rf dectmngr2
+
 
 
 
