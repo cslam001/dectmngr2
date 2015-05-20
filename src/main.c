@@ -5,6 +5,7 @@
 #include <termios.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "dect.h"
 #include "tty.h"
@@ -61,7 +62,10 @@ int main(int argc, char * argv[]) {
 	
 
 	/* Check user arguments and init config */
-	check_args(argc, argv, config);
+	if ( check_args(argc, argv, config) < 0 ) {
+		exit(EXIT_FAILURE);
+	}
+	
 
 	/* Initial transition */
 	if (config->mode == PROG_MODE) {
