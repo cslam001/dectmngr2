@@ -3,9 +3,14 @@
 #include <unistd.h>
 #include <getopt.h>
 
-#include "util.h"
 #include "dect.h"
-
+#include "util.h"
+#include "state.h"
+#include "boot.h"
+#include "app.h"
+#include "nvs.h"
+#include "boot.h"
+#include "test.h"
 
 
 void util_dump(unsigned char *buf, int size, char *start) {
@@ -103,4 +108,39 @@ int check_args(int argc, char * argv[], config_t * c) {
 		print_usage(argv[0]);
 		return -1;
 	}
+}
+
+
+
+int initial_transition(config_t * config, int dect_fd) {
+
+	if (config->mode == PROG_MODE) {
+
+		/* Program new firmware */
+		state_add_handler(boot_state, dect_fd);
+		state_transition(BOOT_STATE);
+
+	} else if (config->mode == NVS_MODE) {
+
+		/* Firmware written, setup NVS */
+		state_add_handler(nvs_state, dect_fd);
+		state_transition(NVS_STATE);
+
+	} else if (config->mode == APP_MODE) {
+
+		/* Radio on, start regmode */
+		state_add_handler(app_state, dect_fd);
+		state_transition(APP_STATE);
+
+	} else if (config->mode == TEST_MODE) {
+
+		/* Toggle TBR6 mode */
+		state_add_handler(test_state, dect_fd);
+		state_transition(TEST_STATE);
+
+	} else {
+		return -1;
+	}
+	
+	return 0;
 }

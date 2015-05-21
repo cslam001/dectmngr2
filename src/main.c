@@ -68,35 +68,10 @@ int main(int argc, char * argv[]) {
 	}
 	
 
-	/* Initial transition */
-	if (config->mode == PROG_MODE) {
-
-		/* Program new firmware */
-		state_add_handler(boot_state, dect_fd);
-		state_transition(BOOT_STATE);
-
-	} else if (config->mode == NVS_MODE) {
-
-		/* Firmware written, setup NVS */
-		state_add_handler(nvs_state, dect_fd);
-		state_transition(NVS_STATE);
-
-	} else if (config->mode == APP_MODE) {
-
-		/* Radio on, start regmode */
-		state_add_handler(app_state, dect_fd);
-		state_transition(APP_STATE);
-
-	} else if (config->mode == TEST_MODE) {
-
-		/* Toggle TBR6 mode */
-		state_add_handler(test_state, dect_fd);
-		state_transition(TEST_STATE);
-
-	} else {
+	/* Setup state handler and init state  */
+	if ( initial_transition(config, dect_fd) < 0 ) {
 		err_exit("No known operating mode selected\n");
 	}
-
 
 	for(;;) {
 
