@@ -35,7 +35,7 @@
 
 buffer_t * buf;
 static int reset_ind = 0;
-
+static config_t * test_config;
 
 typedef struct __attribute__((__packed__))
 {
@@ -164,14 +164,28 @@ static void application_frame(busmail_t *m) {
 		//		uint8_t data[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01};
 		printf("\nSet NVS\n");
 
-		uint8_t data[] = {0x66, 0xf0, \
-				  0x00, 0x00, 0x00, 0x01, \
-				  0x10, 0x00, \ 
-				  0x80, 0x00, 0x00, 0x00, \ 
-				  0x01, \
-				  0x01 };
+		if (test_config->test_enable) {
+			uint8_t enable[] = {0x66, 0xf0,	  \
+					  0x00, 0x00, 0x00, 0x01, \
+					  0x10, 0x00, \ 
+					  0x80, 0x00, 0x00, 0x00, \ 
+					  0x01, \
+					  0x01 };
+			busmail_send0(enable, sizeof(enable));
+		} else {
 
-		busmail_send0(data, sizeof(data));
+			uint8_t disable[] = {0x66, 0xf0,		  \
+					  0x00, 0x00, 0x00, 0x01, \
+					  0x10, 0x00, \ 
+					  0x80, 0x00, 0x00, 0x00, \ 
+					  0x01, \
+					  0x00 };
+			busmail_send0(disable, sizeof(disable));
+
+
+		}
+
+
 		break;
 
 	case API_SCL_STATUS_IND:
@@ -181,9 +195,17 @@ static void application_frame(busmail_t *m) {
 }
 
 
-void init_test_state(int dect_fd) {
+void init_test_state(int dect_fd, config_t * config) {
 	
 	printf("TEST_STATE\n");
+
+	test_config = config;
+	
+	if ( test_config->test_enable ) {
+		printf("enable test\n");
+	} else {
+		printf("disable test\n");
+	}
 
 	tty_set_raw(dect_fd);
 	tty_set_baud(dect_fd, B115200);

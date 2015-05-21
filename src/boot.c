@@ -104,7 +104,7 @@ static void send_ack(event_t *e) {
 
 
 
-void init_boot_state(int dect_fd) {
+void init_boot_state(int dect_fd, config_t * config) {
 	
 	printf("BOOT_STATE\n");
 	

@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <string.h>
+#include <stdbool.h>
 
 #include "dect.h"
 #include "util.h"
@@ -11,6 +13,7 @@
 #include "nvs.h"
 #include "boot.h"
 #include "test.h"
+
 
 
 void util_dump(unsigned char *buf, int size, char *start) {
@@ -53,13 +56,13 @@ int check_args(int argc, char * argv[], config_t * c) {
 
 	int arg, count = 0;
 
-	const char * short_opt = "hpant";
+	const char * short_opt = "hpant:";
 	struct option long_opt[] = {
 		{"help", no_argument, NULL, 'h'},
 		{"prog", no_argument, NULL, 'p'},
 		{"app", no_argument, NULL, 'a'},
 		{"nvs", no_argument, NULL, 'n'},
-		{"test", no_argument, NULL, 't'},
+		{"test", required_argument, NULL, 't'},
 		{NULL, 0, NULL, 0}
 	};
 
@@ -84,6 +87,25 @@ int check_args(int argc, char * argv[], config_t * c) {
 
 		case 't':
 			c->mode = TEST_MODE;
+			printf("option: %s\n", optarg);
+			
+			/* Parse test options */
+			if ( strncmp("enable", optarg, 6) == 0){
+				
+				/* Quick fix */
+				c->test_enable = true;
+
+			} else if ( strncmp("disable", optarg, 7) == 0) {
+
+				/* Quick fix */
+				c->test_enable = false;
+
+			} else {
+				printf("Bad test option: %s\n", optarg);
+				print_usage(argv[0]);
+				return -1;
+			}
+
 			break;
 			
 		case 'h':

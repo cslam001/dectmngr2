@@ -14,6 +14,7 @@ struct bin_img {
 
 typedef struct {
 	uint32_t mode;
+	uint8_t test_enable;
 } config_t;
 
 

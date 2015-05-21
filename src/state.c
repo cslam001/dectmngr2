@@ -2,10 +2,12 @@
 
 #include "state.h"
 
+
 struct state_handler current_state;
 
 struct state_handler * s = &current_state;
 int source;
+extern config_t * config;
 
 void state_add_handler(struct state_handler *s, int fd) {
 	
@@ -22,7 +24,7 @@ void * state_get_handler(void) {
 
 void state_transition(int state) {
 	
-	s->init_state(source);
+	s->init_state(source, config);
 	return;
 }
 

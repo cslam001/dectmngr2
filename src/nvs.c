@@ -196,7 +196,7 @@ static void application_frame(busmail_t *m) {
 }
 
 
-void init_nvs_state(int dect_fd) {
+void init_nvs_state(int dect_fd, config_t * config) {
 	
 	printf("NVS_STATE\n");
 

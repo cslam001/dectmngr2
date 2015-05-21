@@ -1,5 +1,6 @@
 
 #include <stdint.h>
+#include "util.h"
 
 enum states {
 	BOOT_STATE,
@@ -22,7 +23,7 @@ typedef struct event {
 
 struct state_handler {
 	int state;
-	void (*init_state)(int fd);
+	void (*init_state)(int fd, config_t * c);
 	void (*event_handler)(event_t *e);
 };
 

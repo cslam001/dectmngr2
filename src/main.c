@@ -17,6 +17,8 @@
 #include "nvs.h"
 #include "test.h"
 
+config_t c;
+config_t *config = &c;
 
 
 #define MAX_EVENTS 10
@@ -34,8 +36,6 @@ int main(int argc, char * argv[]) {
 	int dect_fd;
 	event_t event;
 	event_t *e = &event;
-	config_t c;
-	config_t *config = &c;
 
 	e->in = inbuf;
 	e->out = outbuf;

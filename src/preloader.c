@@ -143,7 +143,7 @@ static void set_baudrate(event_t *e) {
 }
 
 
-void init_preloader_state(int dect_fd) {
+void init_preloader_state(int dect_fd, config_t * config) {
 	
 	uint8_t c = PRELOADER_START;
 	
