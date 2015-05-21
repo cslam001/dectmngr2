@@ -15,6 +15,7 @@
 #include "util.h"
 #include "app.h"
 #include "nvs.h"
+#include "test.h"
 
 
 
@@ -85,6 +86,12 @@ int main(int argc, char * argv[]) {
 		/* Radio on, start regmode */
 		state_add_handler(app_state, dect_fd);
 		state_transition(APP_STATE);
+
+	} else if (config->mode == TEST_MODE) {
+
+		/* Toggle TBR6 mode */
+		state_add_handler(test_state, dect_fd);
+		state_transition(TEST_STATE);
 
 	} else {
 		err_exit("No known operating mode selected\n");
