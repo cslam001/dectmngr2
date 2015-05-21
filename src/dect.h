@@ -35,6 +35,7 @@ enum {
 	PROG_MODE,
 	APP_MODE,
 	NVS_MODE,
+	TEST_MODE,
 };
 
 
