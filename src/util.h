@@ -3,21 +3,25 @@
 
 #include <stdint.h>
 
-void util_dump(unsigned char *buf, int size, char *start);
-void util_write(void *data, int size, int fd);
 
 struct bin_img {
-  uint8_t *img;
-  int size;
-  uint8_t size_msb;
-  uint8_t size_lsb;
-  uint32_t checksum;
+	uint8_t *img;
+	int size;
+	uint8_t size_msb;
+	uint8_t size_lsb;
+	uint32_t checksum;
 };
-
 
 typedef struct {
 	uint32_t mode;
+	uint8_t test_enable;
 } config_t;
+
+
+void util_dump(unsigned char *buf, int size, char *start);
+void util_write(void *data, int size, int fd);
+int check_args(int argc, char * argv[], config_t * c);
+int initial_transition(config_t * config, int dect_fd);
 
 
 #endif /* UTIL_H */

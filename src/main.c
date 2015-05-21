@@ -5,6 +5,7 @@
 #include <termios.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "dect.h"
 #include "tty.h"
@@ -14,7 +15,10 @@
 #include "util.h"
 #include "app.h"
 #include "nvs.h"
+#include "test.h"
 
+config_t c;
+config_t *config = &c;
 
 
 #define MAX_EVENTS 10
@@ -32,8 +36,6 @@ int main(int argc, char * argv[]) {
 	int dect_fd;
 	event_t event;
 	event_t *e = &event;
-	config_t c;
-	config_t *config = &c;
 
 	e->in = inbuf;
 	e->out = outbuf;
@@ -61,31 +63,15 @@ int main(int argc, char * argv[]) {
 	
 
 	/* Check user arguments and init config */
-	check_args(argc, argv, config);
+	if ( check_args(argc, argv, config) < 0 ) {
+		exit(EXIT_FAILURE);
+	}
+	
 
-	/* Initial transition */
-	if (config->mode == PROG_MODE) {
-
-		/* Program new firmware */
-		state_add_handler(boot_state, dect_fd);
-		state_transition(BOOT_STATE);
-
-	} else if (config->mode == NVS_MODE) {
-
-		/* Firmware written, setup NVS */
-		state_add_handler(nvs_state, dect_fd);
-		state_transition(NVS_STATE);
-
-	} else if (config->mode == APP_MODE) {
-
-		/* Radio on, start regmode */
-		state_add_handler(app_state, dect_fd);
-		state_transition(APP_STATE);
-
-	} else {
+	/* Setup state handler and init state  */
+	if ( initial_transition(config, dect_fd) < 0 ) {
 		err_exit("No known operating mode selected\n");
 	}
-
 
 	for(;;) {
 

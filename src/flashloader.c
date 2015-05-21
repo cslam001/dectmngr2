@@ -620,7 +620,7 @@ static void prog_flash_cfm(packet_t *p) {
 
 
 
-void init_flashloader_state(int dect_fd) {
+void init_flashloader_state(int dect_fd, config_t * config) {
 	
 	printf("FLASHLOADER_STATE\n");
 	

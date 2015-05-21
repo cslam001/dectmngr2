@@ -119,7 +119,7 @@ static void application_frame(busmail_t *m) {
 
 
 
-void init_app_state(int dect_fd) {
+void init_app_state(int dect_fd, config_t * config) {
 	
 	printf("APP_STATE\n");
 

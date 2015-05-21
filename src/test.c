@@ -29,12 +29,13 @@
 #define PT_CMD_SET_NVS 0x0100
 #define PT_CMD_GET_NVS 0x0101
 #define PT_CMD_NVS_DEFAULT 0x0102
-#define HEADER_OFFSET 10
+#define PT_CMD_SET_TESTMODE 0x0000
 
+#define HEADER_OFFSET 10
 
 buffer_t * buf;
 static int reset_ind = 0;
-
+static config_t * test_config;
 
 typedef struct __attribute__((__packed__))
 {
@@ -83,40 +84,13 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 		} else if (t->data[0] == RSS_SUCCESS) {
 
 			printf("nvs_default: ok\n");
+
 			printf("Set NVS\n");
-
-			/* /\* Set hard coded RFPI 0x02, 0x3f, 0x80, 0x00, 0xf8 *\/ */
-			/* uint8_t data[] = {0x66, 0xf0, 0x00, 0x00, 0x00, 0x01, 0x10, 0x00, \ */
-			/* 	  0x00, 0x00, 0x00, 0x00, 0x0b, 0x02, 0x3f, 0x80, \ */
-			/* 	  0x00, 0xf8, 0x25, 0xc0, 0x01, 0x00, 0xf8, 0x23}; */
-
-			/* Set hard coded RFPI 0x02, 0x3f, 0x80, 0x00, 0xf8 */
-			/* Applicaton mail type */
-			/* Something */
-			/* Command */
-			/* Address */
-			/* Size */
-			/* Data */
-
-			uint8_t data[] = {0x66, 0xf0, \
-					  0x00, 0x00, 0x00, 0x01, \
-					  0x10, 0x00, \
-					  0x00, 0x00, 0x00, 0x00, \
-					  0x0b, \
-					  0x02, 0x3f, 0x80, 0x00, \
-					  0xf8, 0x25, 0xc0, 0x01, \
-					  0x00, 0xf8, 0x23};
-
-			/* uint8_t data[] = {0x66, 0xf0, \ */
-			/* 		  0x00, 0x00, 0x00, 0x01, \ */
-			/* 		  0x10, 0x00, \  */
-			/* 		  0x80, 0x00, 0x00, 0x00, \  */
-			/* 		  0x01, \ */
-			/* 		  0x01 }; */
+			uint8_t data[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \
+				   0x00, 0x00, 0x00, 0x00, 0xff};
 
 
-
-
+			
 			busmail_send0(data, sizeof(data));
 		}
 
@@ -132,7 +106,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 
 	case PT_CMD_GET_NVS:
 		printf("PT_CMD_GET_NVS\n");
-		
+
 		printf("RFPI:\t\t");
 		for ( i = 0; i < 5; i++) {
 			printf("0x%02x ", m->mail_data[HEADER_OFFSET + i]);
@@ -142,11 +116,16 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 		printf("TEST MODE:\t");
 		printf("0x%02x ", m->mail_data[HEADER_OFFSET + 0x80]);
 		printf("\n");
-		
+
 		busmail_ack();
 		exit(0);
 		break;
+
+	case PT_CMD_SET_TESTMODE:
+		printf("PT_CMD_SET_TESTMODE\n");
+		break;
 	}
+
 		
 }
 
@@ -179,14 +158,34 @@ static void application_frame(busmail_t *m) {
 		printf("API_FP_GET_FW_VERSION_CFM\n");
 		fw_version_cfm(m);
 
-		printf("\nWRITE: NvsDefault\n");
-		uint8_t data[] = {0x66, 0xf0, 0x00, 0x00, 0x02, 0x01, 0x01, 0x00, 0x01};
-		busmail_send0(data, sizeof(data));
+		printf("\nWRITE: Testmode Enable\n");
 
-		/* printf("Get NVS\n"); */
-		/* uint8_t data1[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \ */
-		/* 		   0x00, 0x00, 0x00, 0x00, 0xff}; */
-		/* busmail_send0(data1, sizeof(data1)); */
+		/* Testmode enable */
+		//		uint8_t data[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01};
+		printf("\nSet NVS\n");
+
+		if (test_config->test_enable) {
+			uint8_t enable[] = {0x66, 0xf0,	  \
+					  0x00, 0x00, 0x00, 0x01, \
+					  0x10, 0x00, \ 
+					  0x80, 0x00, 0x00, 0x00, \ 
+					  0x01, \
+					  0x01 };
+			busmail_send0(enable, sizeof(enable));
+		} else {
+
+			uint8_t disable[] = {0x66, 0xf0,		  \
+					  0x00, 0x00, 0x00, 0x01, \
+					  0x10, 0x00, \ 
+					  0x80, 0x00, 0x00, 0x00, \ 
+					  0x01, \
+					  0x00 };
+			busmail_send0(disable, sizeof(disable));
+
+
+		}
+
+
 		break;
 
 	case API_SCL_STATUS_IND:
@@ -196,9 +195,17 @@ static void application_frame(busmail_t *m) {
 }
 
 
-void init_nvs_state(int dect_fd, config_t * config) {
+void init_test_state(int dect_fd, config_t * config) {
 	
-	printf("NVS_STATE\n");
+	printf("TEST_STATE\n");
+
+	test_config = config;
+	
+	if ( test_config->test_enable ) {
+		printf("enable test\n");
+	} else {
+		printf("disable test\n");
+	}
 
 	tty_set_raw(dect_fd);
 	tty_set_baud(dect_fd, B115200);
@@ -214,7 +221,7 @@ void init_nvs_state(int dect_fd, config_t * config) {
 }
 
 
-void handle_nvs_package(event_t *e) {
+void handle_test_package(event_t *e) {
 
 	uint8_t header;
 	packet_t packet;
@@ -241,10 +248,10 @@ void handle_nvs_package(event_t *e) {
 
 
 
-struct state_handler nvs_handler = {
-	.state = NVS_STATE,
-	.init_state = init_nvs_state,
-	.event_handler = handle_nvs_package,
+struct state_handler test_handler = {
+	.state = TEST_STATE,
+	.init_state = init_test_state,
+	.event_handler = handle_test_package,
 };
 
-struct state_handler * nvs_state = &nvs_handler;
+struct state_handler * test_state = &test_handler;
