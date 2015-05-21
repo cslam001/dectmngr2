@@ -41,13 +41,13 @@ void util_dump(unsigned char *buf, int size, char *start) {
 
 static void print_usage(const char * name) {
 
-	printf("Usage %s [--app] [--prog] [--nvs]\n", name);
+	printf("Usage: %s [--app] [--prog] [--nvs]\n", name);
 	printf("\t\t[--test=<enable|disable>] [--help]\n\n", name);
 
 	printf("\tapp\t: Start in application mode\n");
 	printf("\tprog\t: Program DECT flash chip\n");
 	printf("\tnvs\t: Configure DECT chip\n");
-	printf("\ttest\t: Enable test mode\n");
+	printf("\ttest\t: Enable/disable test mode\n");
 	printf("\thelp\t: print this help and exit\n\n");
 }
 
