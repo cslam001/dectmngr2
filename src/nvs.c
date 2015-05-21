@@ -29,6 +29,7 @@
 #define PT_CMD_SET_NVS 0x0100
 #define PT_CMD_GET_NVS 0x0101
 #define PT_CMD_NVS_DEFAULT 0x0102
+#define HEADER_OFFSET 10
 
 
 buffer_t * buf;
@@ -68,7 +69,7 @@ static void fw_version_cfm(busmail_t *m) {
 static void rtx_eap_hw_test_cfm(busmail_t *m) {
 	
 	rtx_eap_hw_test_cfm_t * t = (rtx_eap_hw_test_cfm_t *) m->mail_data;
-	
+	int i;
 	
 	switch (t->TestPrimitive) {
 
@@ -84,10 +85,37 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 			printf("nvs_default: ok\n");
 			printf("Set NVS\n");
 
+			/* /\* Set hard coded RFPI 0x02, 0x3f, 0x80, 0x00, 0xf8 *\/ */
+			/* uint8_t data[] = {0x66, 0xf0, 0x00, 0x00, 0x00, 0x01, 0x10, 0x00, \ */
+			/* 	  0x00, 0x00, 0x00, 0x00, 0x0b, 0x02, 0x3f, 0x80, \ */
+			/* 	  0x00, 0xf8, 0x25, 0xc0, 0x01, 0x00, 0xf8, 0x23}; */
+
 			/* Set hard coded RFPI 0x02, 0x3f, 0x80, 0x00, 0xf8 */
-			uint8_t data[] = {0x66, 0xf0, 0x00, 0x00, 0x00, 0x01, 0x10, 0x00, \
-				  0x00, 0x00, 0x00, 0x00, 0x0b, 0x02, 0x3f, 0x80, \
-				  0x00, 0xf8, 0x25, 0xc0, 0x01, 0x00, 0xf8, 0x23};
+			/* Applicaton mail type */
+			/* Something */
+			/* Command */
+			/* Address */
+			/* Size */
+			/* Data */
+
+			uint8_t data[] = {0x66, 0xf0, \
+					  0x00, 0x00, 0x00, 0x01, \
+					  0x10, 0x00, \
+					  0x00, 0x00, 0x00, 0x00, \
+					  0x0b, \
+					  0x02, 0x3f, 0x80, 0x00, \
+					  0xf8, 0x25, 0xc0, 0x01, \
+					  0x00, 0xf8, 0x23};
+
+			/* uint8_t data[] = {0x66, 0xf0, \ */
+			/* 		  0x00, 0x00, 0x00, 0x01, \ */
+			/* 		  0x10, 0x00, \  */
+			/* 		  0x80, 0x00, 0x00, 0x00, \  */
+			/* 		  0x01, \ */
+			/* 		  0x01 }; */
+
+
+
 
 			busmail_send0(data, sizeof(data));
 		}
@@ -104,6 +132,17 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 
 	case PT_CMD_GET_NVS:
 		printf("PT_CMD_GET_NVS\n");
+		
+		printf("RFPI:\t\t");
+		for ( i = 0; i < 5; i++) {
+			printf("0x%02x ", m->mail_data[HEADER_OFFSET + i]);
+		}
+		printf("\n");
+
+		printf("TEST MODE:\t");
+		printf("0x%02x ", m->mail_data[HEADER_OFFSET + 0x80]);
+		printf("\n");
+		
 		busmail_ack();
 		exit(0);
 		break;
@@ -143,6 +182,11 @@ static void application_frame(busmail_t *m) {
 		printf("\nWRITE: NvsDefault\n");
 		uint8_t data[] = {0x66, 0xf0, 0x00, 0x00, 0x02, 0x01, 0x01, 0x00, 0x01};
 		busmail_send0(data, sizeof(data));
+
+		/* printf("Get NVS\n"); */
+		/* uint8_t data1[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \ */
+		/* 		   0x00, 0x00, 0x00, 0x00, 0xff}; */
+		/* busmail_send0(data1, sizeof(data1)); */
 		break;
 
 	case API_SCL_STATUS_IND:
