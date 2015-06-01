@@ -15,7 +15,8 @@ endif
 
 
 
-dectmngr2: boot.o tty.o error.o main.o state.o util.o preloader.o flashloader.o Crc.o app.o buffer.o busmail.o nvs.o fifo.o test.o
+
+dectmngr2: boot.o tty.o error.o main.o state.o util.o preloader.o flashloader.o Crc.o app.o buffer.o busmail.o nvs.o fifo.o test.o list.o
 	$(CC) $(INCLUDE_PATHS) -o $@ $^
 
 

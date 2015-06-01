@@ -53,12 +53,25 @@ typedef struct {
 } tx_packet_t;
 
 
+#define CLIENT_PKT_DATA_SIZE 1000
+#define CLIENT_PKT_TYPE 5
+#define CLIENT_PKT_HEADER_SIZE 8
+
+typedef struct {
+	uint32_t size;
+	uint32_t type;
+	uint8_t data[CLIENT_PKT_DATA_SIZE];
+} client_packet_t;
+
+
+
 /* Module scope variables */
 static void * tx_fifo;
 static uint8_t tx_seq_l, rx_seq_l, tx_seq_r, rx_seq_r;
 static int busmail_fd;
 static void (*application_frame) (busmail_t *);
-
+extern void * client_list;
+client_packet_t client_p;
 
 
 static uint8_t * make_tx_packet(uint8_t * tx, void * packet, int data_size) {
@@ -233,7 +246,10 @@ void busmail_send(uint8_t * data, int size) {
 	tx->size = size;
 	
 	util_dump(tx->data, tx->size, "fifo_add");
-	fifo_add(tx_fifo, tx);
+	//fifo_add(tx_fifo, tx);
+       
+	busmail_tx(tx->data, tx->size, PF, tx->task_id);
+	free(tx);
 }
 
 
@@ -247,7 +263,10 @@ void busmail_send0(uint8_t * data, int size) {
 	tx->task_id = 0;
 	tx->size = size;
 
-	fifo_add(tx_fifo, tx);
+	//fifo_add(tx_fifo, tx);
+
+	busmail_tx(tx->data, tx->size, PF, tx->task_id);
+	free(tx);
 }
 
 
@@ -295,12 +314,23 @@ static void supervisory_control_frame(packet_t *p) {
 
 }
 
+
+static void send_to_client(int fd) {
+
+	printf("send_to_client: %d\n", fd);
+	
+	if (send(fd, &client_p, client_p.size, 0) == -1) {
+		perror("send");
+	}
+}
+
 static void information_frame(packet_t *p) {
 
 	busmail_t * m = (busmail_t *) &p->data[0];
 	uint8_t pf, sh, ih;
 	tx_packet_t * tx;
 	int ack = true;
+
 
 	/* Drop unwanted frames */
 	if( m->program_id != API_PROG_ID ) {
@@ -326,36 +356,19 @@ static void information_frame(packet_t *p) {
 	}
 
 	/* Process application frame. The application frame callback will enqueue 
-	 outgoing packets on tx_fifo with busmail_send() */
+	 outgoing packets on tx_fifo and directly transmit packages with busmail_send() */
 	application_frame(m);
 
-	
-	while ( fifo_count(tx_fifo) > 0 ) {
+	/* Send packet to connected client */
+	client_p.type = CLIENT_PKT_TYPE;
+	client_p.size = CLIENT_PKT_HEADER_SIZE + p->size - 3;
+	memcpy(&(client_p.data), &(p->data[3]), p->size - 3);
+	util_dump(&p->data[3], p->size - 3, "[TO CLIENT]");
+	list_each(client_list, send_to_client);
 
-		tx = (tx_packet_t *) fifo_get(tx_fifo);
-
-		assert(tx != NULL);
-		assert(tx->data);
-		assert(tx->size > 0);
-
-	       /* We got a packet, no need to send ack frame */
-		ack = false;
-
-		/* Transmit queued package */
-		busmail_tx(tx->data, tx->size, PF, tx->task_id);
-		free(tx);
-	}
-
-	if (ack) {
-
-		/* No packet queued, ack with control frame */
-		busmail_ack();
-	}
-		
+	/* Always ack with control frame */
+	busmail_ack();
 }
-
-
-
 
 
 int busmail_get(packet_t *p, buffer_t *b) {
