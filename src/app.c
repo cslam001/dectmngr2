@@ -31,14 +31,72 @@
 buffer_t * buf;
 static int reset_ind = 0;
 
+ApiCallReferenceType OutCallReference;
+
+
+static void setup_cfm(busmail_t *m) {
+	
+	ApiFpCcSetupCfmType * p = (ApiFpCcSetupCfmType *) &m->mail_header;
+
+	printf("handset: %d\n", p->CallReference.Instance.Fp);
+}
 
 
 static void setup_ind(busmail_t *m) {
 
 	ApiFpCcSetupIndType * p = (ApiFpCcSetupIndType *) &m->mail_header;
 	
+	ApiFpCcAudioIdType Audio, OutAudio;
+
+	
 	printf("CallReference: %d\n", p->CallReference);
 	printf("TerminalIdInitiating: %d\n", p->TerminalId);
+
+	/* Reply to initiating handset */
+	Audio.IntExtAudio = API_IEA_INT;
+	Audio.SourceTerminalId = p->TerminalId;
+
+	ApiFpCcSetupResType res = {
+		.Primitive = API_FP_CC_SETUP_RES,
+		.CallReference = p->CallReference,
+		.Status = RSS_SUCCESS,
+		.AudioId = Audio,
+	};
+
+	printf("API_FP_CC_SETUP_RES\n");
+	busmail_send((uint8_t *)&res, sizeof(ApiFpCcSetupResType));
+
+	
+	/* Connection request to dialed handset */
+	OutCallReference.Value = 0;
+	OutCallReference.Instance.Host = 0;
+	OutCallReference.Instance.Fp = 2; /* handset 2 */
+
+	//OutAudio.IntExtAudio = API_IEA_INT;
+	OutAudio.SourceTerminalId = 0;
+
+	
+	ApiFpCcSetupReqType req = {
+		.Primitive = API_FP_CC_SETUP_REQ,
+		//		.CallReference = OutCallReference,
+		.TerminalId = 2,
+		.AudioId.SourceTerminalId = 0,
+		.BasicService = API_BASIC_SPEECH,
+		.CallClass = API_CC_NORMAL,
+		.Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2,
+		.InfoElementLength = 0,
+	};
+
+	printf("API_FP_CC_SETUP_REQ\n");
+	busmail_send((uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
+
+	
+	/* ApiFpCcConnectReqType req = { */
+	/* 	.Primitive = API_FP_CC_CONNECT_REQ, */
+	/* 	.CallReference = p->CallReference, */
+	/* 	.InfoElement */
+	/* }; */
+	
 }
 
 
@@ -99,6 +157,15 @@ static void application_frame(busmail_t *m) {
 	case API_FP_GET_FW_VERSION_CFM:
 		printf("API_FP_GET_FW_VERSION_CFM\n");
 
+		/* Setup terminal id */
+		ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ, 
+					      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
+		busmail_send((uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
+		break;
+
+	case API_FP_FEATURES_CFM:
+		printf("API_FP_FEATURES_CFM\n");
+
 		/* Start protocol */
 		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
 		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
@@ -109,7 +176,6 @@ static void application_frame(busmail_t *m) {
 		ApiFpMmSetRegistrationModeReqType r2 = { .Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ, \
 							.RegistrationEnabled = true, .DeleteLastHandset = false};
 		busmail_send((uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType));
-
 		break;
 
 
@@ -133,6 +199,15 @@ static void application_frame(busmail_t *m) {
 
 	case API_FP_CC_RELEASE_IND:
 		printf("API_FP_CC_RELEASE_IND\n");
+		break;
+
+	case API_FP_CC_SETUP_CFM:
+		printf("API_FP_CC_SETUP_CFM\n");
+		setup_cfm(m);
+		break;
+
+	case API_FP_CC_REJECT_IND:
+		printf("API_FP_CC_REJECT_IND\n");
 		break;
 		
 	}
