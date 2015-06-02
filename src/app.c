@@ -33,6 +33,15 @@ static int reset_ind = 0;
 
 
 
+static void setup_ind(busmail_t *m) {
+
+	ApiFpCcSetupIndType * p = (ApiFpCcSetupIndType *) &m->mail_header;
+	
+	printf("CallReference: %d\n", p->CallReference);
+	printf("TerminalIdInitiating: %d\n", p->TerminalId);
+}
+
+
 static void fw_version_cfm(busmail_t *m) {
 
 	ApiFpGetFwVersionCfmType * p = (ApiFpGetFwVersionCfmType *) &m->mail_header;
@@ -112,6 +121,20 @@ static void application_frame(busmail_t *m) {
 	case API_FP_MM_SET_REGISTRATION_MODE_CFM:
 		printf("API_FP_MM_SET_REGISTRATION_MODE_CFM\n");
 		break;
+
+	case API_FP_CC_SETUP_IND:
+		printf("API_FP_CC_SETUP_IND\n");
+		setup_ind(m);
+		break;
+
+	case API_FP_CC_SETUP_REQ:
+		printf("API_FP_CC_SETUP_REQ\n");
+		break;
+
+	case API_FP_CC_RELEASE_IND:
+		printf("API_FP_CC_RELEASE_IND\n");
+		break;
+		
 	}
 }
 
