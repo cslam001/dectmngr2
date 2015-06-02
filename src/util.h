@@ -22,6 +22,8 @@ void util_dump(unsigned char *buf, int size, char *start);
 void util_write(void *data, int size, int fd);
 int check_args(int argc, char * argv[], config_t * c);
 int initial_transition(config_t * config, int dect_fd);
+int gpio_control(int gpio, int state);
+int dect_chip_reset(void);
 
 
 #endif /* UTIL_H */

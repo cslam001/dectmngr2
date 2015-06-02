@@ -211,7 +211,7 @@ void init_test_state(int dect_fd, config_t * config) {
 	tty_set_baud(dect_fd, B115200);
 
 	printf("RESET_DECT\n");
-	system("/usr/bin/dect-reset > /dev/null");
+	if(dect_chip_reset()) return;
 
 	/* Init input buffer */
 	buf = buffer_new(500);

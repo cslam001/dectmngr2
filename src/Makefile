@@ -3,10 +3,14 @@
 ifeq ($(NATALIE_DIR),)
 INCLUDE_PATHS += -I$(STAGING_DIR)/usr/include/natalie-dect/ \
 		-I$(STAGING_DIR)/usr/include/natalie-dect/Phoenix
+INCLUDE_PATHS += -I$(STAGING_DIR)/usr/include/bcm963xx/shared/opensource/include/bcm963xx/
+INCLUDE_PATHS += -I$(STAGING_DIR)/usr/include/bcm963xx/bcmdrivers/opensource/include/bcm963xx/
 
 else
 INCLUDE_PATHS += -I$(NATALIE_DIR)/SrcHeaders \
 	-I$(NATALIE_DIR)/SrcHeaders/Phoenix
+INCLUDE_PATHS += -I$(BCM_KERNEL_DIR)/bcm963xx/shared/opensource/include/bcm963xx/
+INCLUDE_PATHS += -I$(BCM_KERNEL_DIR)/cm963xx/bcmdrivers/opensource/include/bcm963xx/
 endif
 
 %.o: %.c

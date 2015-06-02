@@ -4,6 +4,9 @@
 #include <getopt.h>
 #include <string.h>
 #include <stdbool.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
 
 #include "dect.h"
 #include "util.h"
@@ -13,6 +16,7 @@
 #include "nvs.h"
 #include "boot.h"
 #include "test.h"
+#include <board.h>
 
 
 
@@ -166,3 +170,43 @@ int initial_transition(config_t * config, int dect_fd) {
 	
 	return 0;
 }
+
+
+int gpio_control(int gpio, int state) {
+	BOARD_IOCTL_PARMS IoctlParms;
+	IoctlParms.string = 0;
+	IoctlParms.strLen = gpio;
+	IoctlParms.offset = state;
+	IoctlParms.action = 0;
+	IoctlParms.buf = 0;
+	int boardFd;
+	
+	boardFd = open("/dev/brcmboard", O_RDWR);
+	if (boardFd == -1 ) {
+		perror("failed to open: /dev/brcmboard");
+		return -1;
+	}
+    
+	if ( ioctl(boardFd, BOARD_IOCTL_SET_GPIO, &IoctlParms) < 0 ) {
+		perror("ioctl set gpio failed");
+		return -1;
+	}
+
+	close(boardFd);
+
+    return 0;
+}
+
+
+int dect_chip_reset(void) {
+	if(gpio_control(3, 1)) return -1;
+	usleep(100000);								// Wait for chip to reset
+	if(gpio_control(3, 0)) return -1;
+	usleep(200000);								// Wait while chip starts up
+	
+	return 0;
+}
+
+
+
+
