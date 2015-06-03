@@ -127,8 +127,29 @@ static void setup_cfm(busmail_t *m) {
 	
 	ApiFpCcSetupCfmType * p = (ApiFpCcSetupCfmType *) &m->mail_header;
 
+	outgoing_call = p->CallReference;
 	printf("handset: %d\n", p->CallReference.Instance.Fp);
+	printf("outgoing_call: %x\n", p->CallReference);
 }
+
+
+static void release_ind(busmail_t *m) {
+	
+	ApiFpCcReleaseIndType * p = (ApiFpCcReleaseIndType *) &m->mail_header;
+
+	printf("handset: %d\n", p->CallReference.Instance.Fp);
+	
+	ApiFpCcReleaseResType res = {
+		.Primitive = API_FP_CC_RELEASE_RES,
+		.CallReference = p->CallReference,
+		.Status = RSS_SUCCESS,
+		.InfoElementLength = 0,
+	};
+	
+	printf("API_FP_CC_RELEASE_RES\n");
+	busmail_send((uint8_t *)&res, sizeof(res));
+}
+
 
 
 
@@ -175,6 +196,27 @@ static void setup_ind(busmail_t *m) {
 
 	return;
 }
+
+
+static void pinging_call(int handset) {
+
+	/* Connection request to dialed handset */
+	ApiFpCcSetupReqType req = {
+		.Primitive = API_FP_CC_SETUP_REQ,
+		.TerminalId = handset,
+		.AudioId.SourceTerminalId = 0, /* 0 is the base station id */
+		.BasicService = API_BASIC_SPEECH,
+		.CallClass = API_CC_NORMAL,
+		.Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2,
+		.InfoElementLength = 0,
+	};
+
+	printf("pinging_call\n");
+	printf("API_FP_CC_SETUP_REQ\n");
+	busmail_send((uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
+	return;
+}
+
 
 
 static void fw_version_cfm(busmail_t *m) {
@@ -264,6 +306,7 @@ static void application_frame(busmail_t *m) {
 
 	case API_FP_MM_SET_REGISTRATION_MODE_CFM:
 		printf("API_FP_MM_SET_REGISTRATION_MODE_CFM\n");
+		pinging_call(1);
 		break;
 
 	case API_FP_CC_SETUP_IND:
@@ -277,6 +320,7 @@ static void application_frame(busmail_t *m) {
 
 	case API_FP_CC_RELEASE_IND:
 		printf("API_FP_CC_RELEASE_IND\n");
+		release_ind(m);
 		break;
 
 	case API_FP_CC_SETUP_CFM:
