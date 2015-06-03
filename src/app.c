@@ -7,11 +7,10 @@
 
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
+#include <Api/CodecList/ApiCodecList.h>
 #include <Api/FpCc/ApiFpCc.h>
 #include <Api/FpMm/ApiFpMm.h>
 #include <Api/ProdTest/ApiProdTest.h>
-#include <Api/ProdTest/ApiProdTest.h>
-#include <RosPrimitiv.h>
 #include <Api/RsStandard.h>
 #include <termios.h>
 
@@ -35,6 +34,52 @@ ApiCallReferenceType incoming_call;
 ApiCallReferenceType outgoing_call;
 
 
+#ifndef RSOFFSETOF
+/*! \def RSOFFSETOF(type, field)                                                                                                                        
+ * Computes the byte offset of \a field from the beginning of \a type. */
+#define RSOFFSETOF(type, field) ((size_t)(&((type*)0)->field))
+#endif
+
+#define SINGLE_CODECLIST_LENGTH         (sizeof(ApiCodecListType))
+#define NBWB_CODECLIST_LENGTH           (SINGLE_CODECLIST_LENGTH + sizeof(ApiCodecInfoType))
+
+/* Codecs */
+char nbwbCodecList[NBWB_CODECLIST_LENGTH]={0x01, 0x02, 0x03, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x04};
+char nbCodecList[]={0x01, 0x01, 0x02, 0x00, 0x00, 0x04};
+char wbCodecList[]={0x01, 0x01, 0x03, 0x00, 0x00, 0x01};
+rsuint8 NarrowCodecArr[30];
+rsuint8 WideCodecArr[30];
+ApiInfoElementType * NarrowBandCodecIe = (ApiInfoElementType*) NarrowCodecArr;
+const rsuint16 NarrowBandCodecIeLen = (RSOFFSETOF(ApiInfoElementType, IeData) + 6);
+
+
+
+
+static void dect_conf_init(void)
+{
+	NarrowBandCodecIe->Ie = API_IE_CODEC_LIST;
+	NarrowBandCodecIe->IeLength = 6;
+	NarrowBandCodecIe->IeData[0] = 0x01; // NegotiationIndicator, Negotiation possible
+	NarrowBandCodecIe->IeData[1] = 0x01; // NoOfCodecs
+	NarrowBandCodecIe->IeData[2] = 0x02; // API_CT_G726 API_MDS_1_MD
+	NarrowBandCodecIe->IeData[3] = 0x00;  // MacDlcService
+	NarrowBandCodecIe->IeData[4] = 0x00;  // CplaneRouting  API_CPR_CS
+	NarrowBandCodecIe->IeData[5] = 0x04;  // SlotSize API_SS_FS fullslot
+
+	/* WideBandCodecIe->Ie = API_IE_CODEC_LIST; */
+	/* WideBandCodecIe->IeLength  = 6; */
+	/* WideBandCodecIe->IeData[0] = 0x01; */
+	/* WideBandCodecIe->IeData[1] = 0x01; */
+	/* WideBandCodecIe->IeData[2] = 0x03; */
+	/* WideBandCodecIe->IeData[3] = 0x00; */
+	/* WideBandCodecIe->IeData[4] = 0x00; */
+	/* WideBandCodecIe->IeData[5] = 0x01; */
+
+	return;
+}
+
+
+
 /* Handset answers */
 static void connect_ind(busmail_t *m) {
 	
@@ -43,10 +88,15 @@ static void connect_ind(busmail_t *m) {
 	printf("handset: %d\n", p->CallReference.Instance.Fp);
 
 	
-	/* ApiFpCcConnectReq req = { */
-	/* 	.Primitive = API_FP_CC_CONNECT_REQ, */
-	/* 	.CallReference =  */
-	/* }; */
+	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + NarrowBandCodecIeLen));
+
+        req->Primitive = API_FP_CC_CONNECT_REQ;
+	req->CallReference = incoming_call;
+        req->InfoElementLength = NarrowBandCodecIeLen;
+        memcpy(req->InfoElement,(rsuint8*)NarrowBandCodecIe,NarrowBandCodecIeLen);
+
+	busmail_send((uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + NarrowBandCodecIeLen);
+	free(req);
 
 	/* ApiFpCcConnectResType res = { */
 	/* 	.Primitive = API_FP_CC_CONNECT_RES, */
@@ -56,7 +106,7 @@ static void connect_ind(busmail_t *m) {
 	/* }; */
 	
 	/* printf("API_FP_CC_CONNECT_RES\n"); */
-	/* busmail_send((uint8_t *) &res, sizeof(res)); */
+
 }
 
 
