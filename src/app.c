@@ -91,21 +91,33 @@ static void connect_ind(busmail_t *m) {
 	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + NarrowBandCodecIeLen));
 
         req->Primitive = API_FP_CC_CONNECT_REQ;
-	req->CallReference = incoming_call;
+	//req->CallReference = incoming_call;
         req->InfoElementLength = NarrowBandCodecIeLen;
         memcpy(req->InfoElement,(rsuint8*)NarrowBandCodecIe,NarrowBandCodecIeLen);
-
+	
+	printf("API_FP_CC_CONNECT_REQ\n");
 	busmail_send((uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + NarrowBandCodecIeLen);
 	free(req);
 
-	/* ApiFpCcConnectResType res = { */
-	/* 	.Primitive = API_FP_CC_CONNECT_RES, */
-	/* 	.CallReference = p->CallReference, */
-	/* 	.Status = RSS_SUCCESS, */
-	/* 	.InfoElementLength = 0, */
-	/* }; */
+
+}
+
+
+static void connect_cfm(busmail_t *m) {
 	
-	/* printf("API_FP_CC_CONNECT_RES\n"); */
+	ApiFpCcConnectCfmType * p = (ApiFpCcConnectCfmType *) &m->mail_header;
+
+	printf("connected to handset: %d\n", p->CallReference.Instance.Fp);
+
+	ApiFpCcConnectResType res = {
+		.Primitive = API_FP_CC_CONNECT_RES,
+		.CallReference = incoming_call,
+		.Status = RSS_SUCCESS,
+		.InfoElementLength = 0,
+	};
+	
+	printf("API_FP_CC_CONNECT_RES\n");
+	busmail_send((uint8_t *)&res, sizeof(res));
 
 }
 
@@ -117,6 +129,8 @@ static void setup_cfm(busmail_t *m) {
 
 	printf("handset: %d\n", p->CallReference.Instance.Fp);
 }
+
+
 
 
 /* Caller dials */
@@ -277,6 +291,11 @@ static void application_frame(busmail_t *m) {
 	case API_FP_CC_CONNECT_IND:
 		printf("API_FP_CC_CONNECT_IND\n");
 		connect_ind(m);
+		break;
+
+	case API_FP_CC_CONNECT_CFM:
+		printf("API_FP_CC_CONNECT_CFM\n");
+		connect_cfm(m);
 		break;
 
 		
