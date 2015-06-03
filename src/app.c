@@ -31,7 +31,34 @@
 buffer_t * buf;
 static int reset_ind = 0;
 
-ApiCallReferenceType OutCallReference;
+ApiCallReferenceType incoming_call;
+ApiCallReferenceType outgoing_call;
+
+
+/* Handset answers */
+static void connect_ind(busmail_t *m) {
+	
+	ApiFpCcConnectIndType * p = (ApiFpCcSetupCfmType *) &m->mail_header;
+
+	printf("handset: %d\n", p->CallReference.Instance.Fp);
+
+	
+	/* ApiFpCcConnectReq req = { */
+	/* 	.Primitive = API_FP_CC_CONNECT_REQ, */
+	/* 	.CallReference =  */
+	/* }; */
+
+	/* ApiFpCcConnectResType res = { */
+	/* 	.Primitive = API_FP_CC_CONNECT_RES, */
+	/* 	.CallReference = p->CallReference, */
+	/* 	.Status = RSS_SUCCESS, */
+	/* 	.InfoElementLength = 0, */
+	/* }; */
+	
+	/* printf("API_FP_CC_CONNECT_RES\n"); */
+	/* busmail_send((uint8_t *) &res, sizeof(res)); */
+}
+
 
 
 static void setup_cfm(busmail_t *m) {
@@ -42,6 +69,7 @@ static void setup_cfm(busmail_t *m) {
 }
 
 
+/* Caller dials */
 static void setup_ind(busmail_t *m) {
 
 	ApiFpCcSetupIndType * p = (ApiFpCcSetupIndType *) &m->mail_header;
@@ -51,14 +79,16 @@ static void setup_ind(busmail_t *m) {
 	
 	printf("CallReference: %d\n", p->CallReference);
 	printf("TerminalIdInitiating: %d\n", p->TerminalId);
-
+	
+	incoming_call = p->CallReference;
+	
 	/* Reply to initiating handset */
 	Audio.IntExtAudio = API_IEA_INT;
 	Audio.SourceTerminalId = p->TerminalId;
 
 	ApiFpCcSetupResType res = {
 		.Primitive = API_FP_CC_SETUP_RES,
-		.CallReference = p->CallReference,
+		.CallReference = incoming_call,
 		.Status = RSS_SUCCESS,
 		.AudioId = Audio,
 	};
@@ -68,17 +98,15 @@ static void setup_ind(busmail_t *m) {
 
 	
 	/* Connection request to dialed handset */
-	OutCallReference.Value = 0;
-	OutCallReference.Instance.Host = 0;
-	OutCallReference.Instance.Fp = 2; /* handset 2 */
+	outgoing_call.Value = 0;
+	outgoing_call.Instance.Host = 0;
+	outgoing_call.Instance.Fp = 2; /* handset 2 */
 
-	//OutAudio.IntExtAudio = API_IEA_INT;
-	OutAudio.SourceTerminalId = 0;
-
+	/* OutAudio.IntExtAudio = API_IEA_INT; */
+	/* OutAudio.SourceTerminalId = 0; */
 	
 	ApiFpCcSetupReqType req = {
 		.Primitive = API_FP_CC_SETUP_REQ,
-		//		.CallReference = OutCallReference,
 		.TerminalId = 2,
 		.AudioId.SourceTerminalId = 0,
 		.BasicService = API_BASIC_SPEECH,
@@ -209,6 +237,12 @@ static void application_frame(busmail_t *m) {
 	case API_FP_CC_REJECT_IND:
 		printf("API_FP_CC_REJECT_IND\n");
 		break;
+
+	case API_FP_CC_CONNECT_IND:
+		printf("API_FP_CC_CONNECT_IND\n");
+		connect_ind(m);
+		break;
+
 		
 	}
 }
@@ -223,6 +257,9 @@ void init_app_state(int dect_fd, config_t * config) {
 
 	tty_set_raw(dect_fd);
 	tty_set_baud(dect_fd, B115200);
+
+	printf("DECT TX TO BRCM RX\n");
+	system("/sbin/brcm_fw_tool set -x 118 -p 0 > /dev/null");
 
 	printf("RESET_DECT\n");
 	system("/usr/bin/dect-reset > /dev/null");

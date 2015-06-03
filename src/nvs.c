@@ -203,6 +203,9 @@ void init_nvs_state(int dect_fd, config_t * config) {
 	tty_set_raw(dect_fd);
 	tty_set_baud(dect_fd, B115200);
 
+	printf("DECT TX TO BRCM RX\n");
+	system("/sbin/brcm_fw_tool set -x 118 -p 0 > /dev/null");
+
 	printf("RESET_DECT\n");
 	system("/usr/bin/dect-reset > /dev/null");
 
