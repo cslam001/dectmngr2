@@ -76,39 +76,30 @@ static void setup_ind(busmail_t *m) {
 	
 	ApiFpCcAudioIdType Audio, OutAudio;
 
-	
 	printf("CallReference: %d\n", p->CallReference);
 	printf("TerminalIdInitiating: %d\n", p->TerminalId);
 	
 	incoming_call = p->CallReference;
 	
 	/* Reply to initiating handset */
-	Audio.IntExtAudio = API_IEA_INT;
-	Audio.SourceTerminalId = p->TerminalId;
 
 	ApiFpCcSetupResType res = {
 		.Primitive = API_FP_CC_SETUP_RES,
 		.CallReference = incoming_call,
 		.Status = RSS_SUCCESS,
-		.AudioId = Audio,
+		.AudioId.IntExtAudio = API_IEA_INT,
+		.AudioId.SourceTerminalId = p->TerminalId,
 	};
 
 	printf("API_FP_CC_SETUP_RES\n");
 	busmail_send((uint8_t *)&res, sizeof(ApiFpCcSetupResType));
 
-	
 	/* Connection request to dialed handset */
-	outgoing_call.Value = 0;
-	outgoing_call.Instance.Host = 0;
-	outgoing_call.Instance.Fp = 2; /* handset 2 */
-
-	/* OutAudio.IntExtAudio = API_IEA_INT; */
-	/* OutAudio.SourceTerminalId = 0; */
-	
 	ApiFpCcSetupReqType req = {
 		.Primitive = API_FP_CC_SETUP_REQ,
 		.TerminalId = 2,
-		.AudioId.SourceTerminalId = 0,
+		.AudioId.SourceTerminalId = 2,
+		.AudioId.IntExtAudio = API_IEA_INT,
 		.BasicService = API_BASIC_SPEECH,
 		.CallClass = API_CC_NORMAL,
 		.Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2,
@@ -118,13 +109,7 @@ static void setup_ind(busmail_t *m) {
 	printf("API_FP_CC_SETUP_REQ\n");
 	busmail_send((uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
 
-	
-	/* ApiFpCcConnectReqType req = { */
-	/* 	.Primitive = API_FP_CC_CONNECT_REQ, */
-	/* 	.CallReference = p->CallReference, */
-	/* 	.InfoElement */
-	/* }; */
-	
+	return;
 }
 
 
@@ -148,6 +133,7 @@ static void fw_version_cfm(busmail_t *m) {
 		printf("DectType: BOGUS\n");
 	}
 
+	return;
 }
 
 
