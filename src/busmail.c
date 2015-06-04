@@ -64,14 +64,37 @@ typedef struct {
 } client_packet_t;
 
 
+typedef struct {
+	uint32_t fd;
+	uint8_t tx_seq_l;
+	uint8_t rx_seq_l;
+	uint8_t tx_seq_r;
+	uint8_t rx_seq_r;
+	void * tx_fifo;
+	buffer_t * buf;
+	void (*application_frame) (busmail_t *);
+} busmail_connection_t;
+
 
 /* Module scope variables */
-static void * tx_fifo;
-static uint8_t tx_seq_l, rx_seq_l, tx_seq_r, rx_seq_r;
-static int busmail_fd;
-static void (*application_frame) (busmail_t *);
+/* static uint8_t tx_seq_l, rx_seq_l, tx_seq_r, rx_seq_r; */
+/* static int busmail_fd; */
+/* static void (*application_frame) (busmail_t *); */
 extern void * client_list;
 client_packet_t client_p;
+
+
+static void reset_counters(void * _self) {
+
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
+
+	bus->tx_seq_l = 0;
+	bus->rx_seq_l = 0;
+	bus->tx_seq_r = 0;
+	bus->rx_seq_r = 0;
+
+	return;
+}
 
 
 static uint8_t * make_tx_packet(uint8_t * tx, void * packet, int data_size) {
@@ -113,21 +136,20 @@ static send_packet(void * data, int data_size, int fd) {
 
 
 
-static void unnumbered_control_frame(packet_t *p) {
+static void unnumbered_control_frame(void * _self, packet_t *p) {
 	
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
+
 	uint8_t header = p->data[0];
 	uint8_t data;
 	
 	if (header == SAMB_POLL_SET) {
 		printf("SAMB. Reset Rx and Tx counters\n");
-		tx_seq_l = 0;
-		rx_seq_l = 0;
-		tx_seq_r = 0;
-		rx_seq_r = 0;
+		reset_counters(bus);
 
 		printf("Reply SAMB_NO_POLL_SET. \n");
 		data = SAMB_NO_POLL_SET;
-		send_packet(&data, 1, p->fd);
+		send_packet(&data, 1, bus->fd);
 		
 	} else {
 		printf("Bad unnumbered control frame\n");
@@ -180,29 +202,32 @@ static int packet_inspect(packet_t *p) {
 
 
 
-static uint8_t make_supervisory_frame(uint8_t suid, uint8_t pf) {
+static uint8_t make_supervisory_frame(void * _self, uint8_t suid, uint8_t pf) {
 	
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	uint8_t header;
 
-	header = ( (suid << SUID_OFFSET) | (pf << PF_OFFSET) | rx_seq_l );
+	header = ( (suid << SUID_OFFSET) | (pf << PF_OFFSET) | bus->rx_seq_l );
 
 	return header;
 }
 
 
-static uint8_t make_info_frame(uint8_t pf) {
+static uint8_t make_info_frame(void * _self, uint8_t pf) {
 	
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	uint8_t header;
 
-	header = ( (tx_seq_l << TX_SEQ_OFFSET) | (pf << PF_OFFSET) | rx_seq_l );
+	header = ( (bus->tx_seq_l << TX_SEQ_OFFSET) | (pf << PF_OFFSET) | bus->rx_seq_l );
 
 	return header;
 }
 
 
 
-busmail_tx(uint8_t * data, int size, uint8_t pf, uint8_t task_id) {
+static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8_t task_id) {
 
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	uint8_t tx_seq_tmp, rx_seq_tmp;
 	busmail_t * r;	
 	
@@ -212,7 +237,7 @@ busmail_tx(uint8_t * data, int size, uint8_t pf, uint8_t task_id) {
 	}
 
 		
-	r->frame_header = make_info_frame(pf);
+	r->frame_header = make_info_frame(bus, pf);
 	r->program_id = API_PROG_ID;
 	r->task_id = task_id;
 	memcpy(&(r->mail_header), data, size);
@@ -221,23 +246,24 @@ busmail_tx(uint8_t * data, int size, uint8_t pf, uint8_t task_id) {
 	rx_seq_tmp = (r->frame_header & RX_SEQ_MASK) >> RX_SEQ_OFFSET;
 
 	printf("BUSMAIL_SEND_INFO\n");
-	printf("tx_seq_l: %d\n", tx_seq_l);
-	printf("rx_seq_l: %d\n", rx_seq_l);
+	printf("tx_seq_l: %d\n", bus->tx_seq_l);
+	printf("rx_seq_l: %d\n", bus->rx_seq_l);
 	printf("pf: %d\n", pf);
 
 	printf("frame_header: %x\n", (r->frame_header));
 	
-	send_packet(r, BUSMAIL_PACKET_OVER_HEAD - 1 + size, busmail_fd);
+	send_packet(r, BUSMAIL_PACKET_OVER_HEAD - 1 + size, bus->fd);
 	free(r);
 	
 	/* Update packet counter */
-	tx_seq_l++;
+	bus->tx_seq_l++;
 
 }
 
 
-void busmail_send(uint8_t * data, int size) {
-	
+void busmail_send(void * _self, uint8_t * data, int size) {
+
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);
 	
 	tx->data = malloc(size);
@@ -248,14 +274,15 @@ void busmail_send(uint8_t * data, int size) {
 	util_dump(tx->data, tx->size, "fifo_add");
 	//fifo_add(tx_fifo, tx);
        
-	busmail_tx(tx->data, tx->size, PF, tx->task_id);
+	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id);
 	free(tx);
 }
 
 
 /* Needed for test commands */
-void busmail_send0(uint8_t * data, int size) {
+void busmail_send0(void * _self, uint8_t * data, int size) {
 
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);
 	
 	tx->data = malloc(size);
@@ -265,30 +292,31 @@ void busmail_send0(uint8_t * data, int size) {
 
 	//fifo_add(tx_fifo, tx);
 
-	busmail_tx(tx->data, tx->size, PF, tx->task_id);
+	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id);
 	free(tx);
 }
 
 
-void busmail_ack(void) {
+void busmail_ack(void * _self) {
 
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	uint8_t sh, rx_seq_tmp;
 
-	sh = make_supervisory_frame(SUID_RR, NO_PF);
+	sh = make_supervisory_frame(bus, SUID_RR, NO_PF);
 	rx_seq_tmp = (sh & RX_SEQ_MASK) >> RX_SEQ_OFFSET;
 	
 	printf("\nWRITE: BUSMAIL_ACK %d\n", rx_seq_tmp);
-	send_packet(&sh, 1, busmail_fd);
-
+	send_packet(&sh, 1, bus->fd);
 }
 
 
-static void supervisory_control_frame(packet_t *p) {
+static void supervisory_control_frame(void * _self, packet_t *p) {
 	
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	busmail_t * m = (busmail_t *) &p->data[0];
 	uint8_t pf, suid;
 
-	rx_seq_r = (m->frame_header & RX_SEQ_MASK) >> RX_SEQ_OFFSET;
+	bus->rx_seq_r = (m->frame_header & RX_SEQ_MASK) >> RX_SEQ_OFFSET;
 	pf = (m->frame_header & PF_MASK) >> PF_OFFSET;
 	suid = (m->frame_header & SUID_MASK) >> SUID_OFFSET;
 
@@ -309,7 +337,7 @@ static void supervisory_control_frame(packet_t *p) {
 		break;
 	}
 
-	printf("rx_seq_r: %d\n", rx_seq_r);
+	printf("rx_seq_r: %d\n", bus->rx_seq_r);
 	printf("pf: %d\n", pf);
 
 }
@@ -323,9 +351,10 @@ static void send_to_client(int fd) {
 		perror("send");
 	}
 }
+   	
+static void information_frame(void * _self, packet_t *p) {
 
-static void information_frame(packet_t *p) {
-
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	busmail_t * m = (busmail_t *) &p->data[0];
 	uint8_t pf, sh, ih;
 	tx_packet_t * tx;
@@ -340,24 +369,24 @@ static void information_frame(packet_t *p) {
 	packet_dump(p);
 	
 	/* Update busmail packet counters */
-	tx_seq_r = (m->frame_header & TX_SEQ_MASK) >> TX_SEQ_OFFSET;
-	rx_seq_r = (m->frame_header & RX_SEQ_MASK) >> RX_SEQ_OFFSET;
+	bus->tx_seq_r = (m->frame_header & TX_SEQ_MASK) >> TX_SEQ_OFFSET;
+	bus->rx_seq_r = (m->frame_header & RX_SEQ_MASK) >> RX_SEQ_OFFSET;
 
 	pf = (m->frame_header & PF_MASK) >> PF_OFFSET;
 
 	printf("frame_header: %02x\n", m->frame_header);
-	printf("tx_seq_r: %d\n", tx_seq_r);
-	printf("rx_seq_r: %d\n", rx_seq_r);
+	printf("tx_seq_r: %d\n", bus->tx_seq_r);
+	printf("rx_seq_r: %d\n", bus->rx_seq_r);
 	printf("pf: %d\n", pf);
 
-	rx_seq_l = tx_seq_r + 1;
-	if (rx_seq_l == 7) {
-		rx_seq_l = 0;
+	bus->rx_seq_l = bus->tx_seq_r + 1;
+	if (bus->rx_seq_l == 7) {
+		bus->rx_seq_l = 0;
 	}
 
 	/* Process application frame. The application frame callback will enqueue 
-	 outgoing packets on tx_fifo and directly transmit packages with busmail_send() */
-	application_frame(m);
+	   outgoing packets on tx_fifo and directly transmit packages with busmail_send() */
+	bus->application_frame(m);
 
 	/* Send packet to connected client */
 	client_p.type = CLIENT_PKT_TYPE;
@@ -367,20 +396,17 @@ static void information_frame(packet_t *p) {
 	list_each(client_list, send_to_client);
 
 	/* Always ack with control frame */
-	busmail_ack();
+	busmail_ack(bus);
 }
 
 
-int busmail_get(packet_t *p, buffer_t *b) {
-	
+int busmail_get(void * _self, packet_t *p, buffer_t *b) {
+
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	int i, start, stop, size, read = 0;
 	uint8_t crc = 0, crc_calc = 0;
 	uint8_t buf[5000];
 
-	/* start = buffer_find(b, BUSMAIL_PACKET_HEADER); */
-	/* if (start < 0) { */
-	/* 	return -1; */
-	/* } */
 
 	/* Do we have a start of frame? */
 	while (buffer_read(b, buf, 1) > 0) {
@@ -446,22 +472,17 @@ void packet_dump(packet_t *p) {
 }
 
 
-void busmail_dispatch(packet_t *p) {
+void busmail_dispatch(void * _self, packet_t *p) {
 
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	busmail_t * m = (busmail_t *) &p->data[0];
-	
-	/* Drop invalid packets */
-	/* if (packet_inspect(p) < 0) { */
-	/* 	printf("dropped packet\n"); */
-	/* }  */
 	
 
 	/* Route packet based on type */
-
 	switch (m->frame_header & PACKET_TYPE_MASK) {
 		
 	case INFORMATION_FRAME:
-		information_frame(p);
+		information_frame(bus, p);
 		break;
 
 	case CONTROL_FRAME:
@@ -470,11 +491,11 @@ void busmail_dispatch(packet_t *p) {
 			
 		case UNNUMBERED_CONTROL_FRAME:
 			printf("UNNUMBERED_CONTROL_FRAME\n");
-			unnumbered_control_frame(p);
+			unnumbered_control_frame(bus, p);
 			break;
 
 		case SUPERVISORY_CONTROL_FRAME:
-			supervisory_control_frame(p);
+			supervisory_control_frame(bus, p);
 			break;
 		}
 
@@ -489,12 +510,18 @@ void busmail_dispatch(packet_t *p) {
 
 }
 
-int busmail_init(int fd, void (*app_handler)(busmail_t *)) {
-
-	printf("busmail_init\n");
-	busmail_fd = fd;
-	application_frame = app_handler;
 
 
-	tx_fifo = fifo_new();
+void * busmail_new(int fd, void (*app_handler)(busmail_t *)) {
+
+	busmail_connection_t * bus = (busmail_connection_t *) calloc(sizeof(busmail_connection_t), 1);
+
+	bus->fd = fd;
+	bus->application_frame = app_handler;
+	bus->tx_fifo = fifo_new();
+	bus->buf = buffer_new(500);
+
+	reset_counters(bus);
+
+	return bus;
 }

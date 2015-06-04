@@ -36,6 +36,7 @@
 buffer_t * buf;
 static int reset_ind = 0;
 static config_t * test_config;
+void * bus;
 
 typedef struct __attribute__((__packed__))
 {
@@ -91,7 +92,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 
 
 			
-			busmail_send0(data, sizeof(data));
+			busmail_send0(bus, data, sizeof(data));
 		}
 
 		break;
@@ -101,7 +102,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 		printf("Get NVS\n");
 		uint8_t data1[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \
 				   0x00, 0x00, 0x00, 0x00, 0xff};
-		busmail_send0(data1, sizeof(data1));
+		busmail_send0(bus, data1, sizeof(data1));
 		break;
 
 	case PT_CMD_GET_NVS:
@@ -117,7 +118,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 		printf("0x%02x ", m->mail_data[HEADER_OFFSET + 0x80]);
 		printf("\n");
 
-		busmail_ack();
+		busmail_ack(bus);
 		exit(0);
 		break;
 
@@ -144,7 +145,7 @@ static void application_frame(busmail_t *m) {
 
 			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
 			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
-			busmail_send((uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
+			busmail_send(bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 		}
 
 		break;
@@ -171,7 +172,7 @@ static void application_frame(busmail_t *m) {
 					  0x80, 0x00, 0x00, 0x00, \ 
 					  0x01, \
 					  0x01 };
-			busmail_send0(enable, sizeof(enable));
+			busmail_send0(bus, enable, sizeof(enable));
 		} else {
 
 			uint8_t disable[] = {0x66, 0xf0,		  \
@@ -180,7 +181,7 @@ static void application_frame(busmail_t *m) {
 					  0x80, 0x00, 0x00, 0x00, \ 
 					  0x01, \
 					  0x00 };
-			busmail_send0(disable, sizeof(disable));
+			busmail_send0(bus, disable, sizeof(disable));
 
 
 		}
@@ -217,7 +218,7 @@ void init_test_state(int dect_fd, config_t * config) {
 	buf = buffer_new(500);
 	
 	/* Init busmail subsystem */
-	busmail_init(dect_fd, application_frame);
+	bus = busmail_new(dect_fd, application_frame);
 }
 
 
@@ -239,8 +240,8 @@ void handle_test_package(event_t *e) {
 	//buffer_dump(buf);
 
 	/* Process whole packets in buffer */
-	while(busmail_get(p, buf) == 0) {
-		busmail_dispatch(p);
+	while(busmail_get(bus, p, buf) == 0) {
+		busmail_dispatch(bus, p);
 	}
 }
 
