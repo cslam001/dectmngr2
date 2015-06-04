@@ -103,7 +103,12 @@ static void application_frame(busmail_t *m) {
 		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
 		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
 		busmail_send(bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
-		
+
+		/* Start registration */
+		printf("\nWRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n");
+		ApiFpMmSetRegistrationModeReqType r2 = { .Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ, \
+							.RegistrationEnabled = true, .DeleteLastHandset = false};
+		busmail_send(bus, (uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType));
 		break;
 
 	case API_SCL_STATUS_IND:
