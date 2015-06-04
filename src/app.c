@@ -30,7 +30,7 @@
 
 buffer_t * buf;
 static int reset_ind = 0;
-
+void * bus;
 
 
 static void fw_version_cfm(busmail_t *m) {
@@ -71,7 +71,7 @@ static void application_frame(busmail_t *m) {
 
 			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
 			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
-			busmail_send((uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
+			busmail_send(bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 
 		} else {
 			
@@ -93,7 +93,7 @@ static void application_frame(busmail_t *m) {
 		/* Setup terminal id */
 		ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ, 
 					      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
-		busmail_send((uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
+		busmail_send(bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
 		break;
 
 	case API_FP_FEATURES_CFM:
@@ -102,7 +102,7 @@ static void application_frame(busmail_t *m) {
 		/* Start protocol */
 		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
 		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
-		busmail_send((uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+		busmail_send(bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
 		
 		break;
 
@@ -137,7 +137,7 @@ void init_app_state(int dect_fd, config_t * config) {
 	buf = buffer_new(500);
 	
 	/* Init busmail subsystem */
-	busmail_init(dect_fd, application_frame);
+	bus = busmail_new(dect_fd, application_frame);
 	
 }
 
@@ -158,8 +158,8 @@ void handle_app_package(event_t *e) {
 	}
 	
 	/* Process whole packets in buffer */
-	while(busmail_get(p, buf) == 0) {
-		busmail_dispatch(p);
+	while(busmail_get(bus, p, buf) == 0) {
+		busmail_dispatch(bus, p);
 	}
 }
 
