@@ -211,6 +211,9 @@ void init_test_state(int dect_fd, config_t * config) {
 	tty_set_raw(dect_fd);
 	tty_set_baud(dect_fd, B115200);
 
+	printf("DECT TX TO BRCM RX\n");
+	if(gpio_control(118, 0)) return;
+
 	printf("RESET_DECT\n");
 	if(dect_chip_reset()) return;
 
