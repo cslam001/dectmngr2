@@ -30,7 +30,9 @@
 
 buffer_t * buf;
 static int reset_ind = 0;
-void * bus;
+extern void * client_bus;
+extern int client_connected;
+void * dect_bus;
 
 
 static void fw_version_cfm(busmail_t *m) {
@@ -56,12 +58,17 @@ static void fw_version_cfm(busmail_t *m) {
 }
 
 
-static void application_frame(busmail_t *m) {
+static void application_frame(packet_t *p) {
 	
 	int i;
-
+	busmail_t * m = (busmail_t *) &p->data[0];
+	
 	/* Send packets to connected clients */
-	//busmail_send(client_bus, m, sizeof(m));
+	if ( client_connected == 1 ) {
+		printf("send to client_bus\n");
+		packet_dump(p);
+		busmail_send(client_bus, p->data, p->size);
+	}
 
 	switch (m->mail_header) {
 		
@@ -74,7 +81,7 @@ static void application_frame(busmail_t *m) {
 
 			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
 			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
-			busmail_send(bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
+			busmail_send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 
 		} else {
 
@@ -96,7 +103,7 @@ static void application_frame(busmail_t *m) {
 		/* Setup terminal id */
 		ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
 					      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
-		busmail_send(bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
+		busmail_send(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
 		break;
 
 	case API_FP_FEATURES_CFM:
@@ -105,13 +112,13 @@ static void application_frame(busmail_t *m) {
 		/* Start protocol */
 		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
 		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
-		busmail_send(bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
 
 		/* Start registration */
 		printf("\nWRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n");
 		ApiFpMmSetRegistrationModeReqType r2 = { .Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ, \
 							.RegistrationEnabled = true, .DeleteLastHandset = false};
-		busmail_send(bus, (uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType));
+		busmail_send(dect_bus, (uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType));
 		break;
 
 	case API_SCL_STATUS_IND:
@@ -145,7 +152,7 @@ void init_app_state(int dect_fd, config_t * config) {
 	if(dect_chip_reset()) return;
 
 	/* Init busmail subsystem */
-	bus = busmail_new(dect_fd, application_frame);
+	dect_bus = busmail_new(dect_fd, application_frame);
 	
 	return;
 }
@@ -158,13 +165,13 @@ void handle_app_package(event_t *e) {
 	//util_dump(e->in, e->incount, "\n[READ]");
 
 	/* Add input to busmail subsystem */
-	if (busmail_write(bus, e) < 0) {
+	if (busmail_write(dect_bus, e) < 0) {
 		printf("busmail buffer full\n");
 	}
 	
 	/* Process whole packets in buffer. The previously registered
 	   callback will be called for application frames */
-	busmail_dispatch(bus);
+	busmail_dispatch(dect_bus);
 
 	return;
 }

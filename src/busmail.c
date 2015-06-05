@@ -387,14 +387,14 @@ static void information_frame(void * _self, packet_t *p) {
 
 	/* Process application frame. The application frame callback will enqueue 
 	   outgoing packets on tx_fifo and directly transmit packages with busmail_send() */
-	bus->application_frame(m);
+	bus->application_frame(p);
 
 	/* Send packet to connected client */
-	client_p.type = CLIENT_PKT_TYPE;
-	client_p.size = CLIENT_PKT_HEADER_SIZE + p->size - 3;
-	memcpy(&(client_p.data), &(p->data[3]), p->size - 3);
-	util_dump(&p->data[3], p->size - 3, "[TO CLIENT]");
-	list_each(client_list, send_to_client);
+	/* client_p.type = CLIENT_PKT_TYPE; */
+	/* client_p.size = CLIENT_PKT_HEADER_SIZE + p->size - 3; */
+	/* memcpy(&(client_p.data), &(p->data[3]), p->size - 3); */
+	/* util_dump(&p->data[3], p->size - 3, "[TO CLIENT]"); */
+	/* list_each(client_list, send_to_client); */
 
 	/* Always ack with control frame */
 	busmail_ack(bus);
@@ -530,7 +530,7 @@ void busmail_dispatch(void * _self) {
 
 
 
-void * busmail_new(int fd, void (*app_handler)(busmail_t *)) {
+void * busmail_new(int fd, void (*app_handler)(packet_t *)) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) calloc(sizeof(busmail_connection_t), 1);
 
