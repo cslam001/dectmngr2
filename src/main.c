@@ -218,7 +218,7 @@ int main(int argc, char * argv[]) {
 					/* We should buffer packet here to make 
 					   sure we send a complete application frame */
 					util_dump(buf, ret, "[CLIENT]");
-					busmail_send(buf, ret);
+					//busmail_send(buf, ret);
 				}
 				
 			}

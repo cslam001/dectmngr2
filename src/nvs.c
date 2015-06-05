@@ -209,8 +209,6 @@ void init_nvs_state(int dect_fd, config_t * config) {
 	printf("RESET_DECT\n");
 	if(dect_chip_reset()) return;
 
-	/* Init input buffer */
-	buf = buffer_new(500);
 	
 	/* Init busmail subsystem */
 	bus = busmail_new(dect_fd, application_frame);
@@ -227,17 +225,16 @@ void handle_nvs_package(event_t *e) {
 
 	//util_dump(e->in, e->incount, "\n[READ]");
 
-	/* Add input to buffer */
-	if (buffer_write(buf, e->in, e->incount) == 0) {
-		printf("buffer full\n");
+	/* Add input to busmail subsystem */
+	if (busmail_write(bus, e) < 0) {
+		printf("busmail buffer full\n");
 	}
 	
-	//buffer_dump(buf);
+	/* Process whole packets in buffer. The previously registered
+	   callback will be called for application frames */
+	busmail_dispatch(bus);
 
-	/* Process whole packets in buffer */
-	while(busmail_get(bus, p, buf) == 0) {
-		busmail_dispatch(bus, p);
-	}
+	return;
 }
 
 

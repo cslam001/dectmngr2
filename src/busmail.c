@@ -7,6 +7,7 @@
 #include "error.h"
 #include "busmail.h"
 #include "fifo.h"
+#include "state.h"
 
 
 #define BUSMAIL_PACKET_HEADER 0x10
@@ -400,7 +401,20 @@ static void information_frame(void * _self, packet_t *p) {
 }
 
 
-int busmail_get(void * _self, packet_t *p, buffer_t *b) {
+
+int busmail_write(void * _self, event_t * e) {
+
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
+	
+	if ( buffer_write(bus->buf, e->in, e->incount) == 0 ) {
+		return -1;
+	}
+	
+	return 0;
+}
+
+
+int busmail_get(void * _self, packet_t *p) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	int i, start, stop, size, read = 0;
@@ -409,7 +423,7 @@ int busmail_get(void * _self, packet_t *p, buffer_t *b) {
 
 
 	/* Do we have a start of frame? */
-	while (buffer_read(b, buf, 1) > 0) {
+	while (buffer_read(bus->buf, buf, 1) > 0) {
 		read++;
 		if (buf[0] == BUSMAIL_PACKET_HEADER) {
 			break;
@@ -422,22 +436,22 @@ int busmail_get(void * _self, packet_t *p, buffer_t *b) {
 	}
 
 	/* Do we have a full header? */
-	if (buffer_size(b) < 2) {
-		buffer_rewind(b, 1);
+	if (buffer_size(bus->buf) < 2) {
+		buffer_rewind(bus->buf, 1);
 		return -1;
 	}
-	buffer_read(b, buf + 1, 2);
+	buffer_read(bus->buf, buf + 1, 2);
 
 	/* Packet size */
 	size = (((uint32_t) buf[1] << 8) | buf[2]);
 	
 	/* Do we have a full packet? */
 	/* Data + crc */
-	if (1 + size > buffer_size(b)) {
-		buffer_rewind(b, 3);
+	if (1 + size > buffer_size(bus->buf)) {
+		buffer_rewind(bus->buf, 3);
 		return -1;
 	}
-	buffer_read(b, buf + 3, size + 1);
+	buffer_read(bus->buf, buf + 3, size + 1);
 	
 	/* Read packet checksum */
 	crc = (( (uint8_t) buf[start + BUSMAIL_PACKET_OVER_HEAD + size - 1]));
@@ -472,42 +486,46 @@ void packet_dump(packet_t *p) {
 }
 
 
-void busmail_dispatch(void * _self, packet_t *p) {
+void busmail_dispatch(void * _self) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
-	busmail_t * m = (busmail_t *) &p->data[0];
+	packet_t packet;
+	packet_t *p = &packet;
+	busmail_t * m;
 	
+	/* Process whole packets in buffer */
+	while ( busmail_get(bus, p) == 0) {
 
-	/* Route packet based on type */
-	switch (m->frame_header & PACKET_TYPE_MASK) {
+		m = (busmail_t *) &p->data[0];
+
+		/* Route packet based on type */
+		switch (m->frame_header & PACKET_TYPE_MASK) {
 		
-	case INFORMATION_FRAME:
-		information_frame(bus, p);
-		break;
+		case INFORMATION_FRAME:
+			information_frame(bus, p);
+			break;
 
-	case CONTROL_FRAME:
+		case CONTROL_FRAME:
 
-		switch (m->frame_header & CONTROL_FRAME_MASK) {
+			switch (m->frame_header & CONTROL_FRAME_MASK) {
 			
-		case UNNUMBERED_CONTROL_FRAME:
-			printf("UNNUMBERED_CONTROL_FRAME\n");
-			unnumbered_control_frame(bus, p);
+			case UNNUMBERED_CONTROL_FRAME:
+				printf("UNNUMBERED_CONTROL_FRAME\n");
+				unnumbered_control_frame(bus, p);
+				break;
+
+			case SUPERVISORY_CONTROL_FRAME:
+				supervisory_control_frame(bus, p);
+				break;
+			}
+
 			break;
 
-		case SUPERVISORY_CONTROL_FRAME:
-			supervisory_control_frame(bus, p);
-			break;
+		default:
+			printf("Unknown packet header: %x\n", m->frame_header);
+
 		}
-
-	break;
-
-	default:
-		printf("Unknown packet header: %x\n", m->frame_header);
-
 	}
-
-
-
 }
 
 
