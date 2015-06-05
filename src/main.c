@@ -52,7 +52,7 @@ void barf(packet_t *p) {
 	printf("send to dect_bus\n");
 	packet_dump(p);
 	
-	busmail_send0(dect_bus, p->data, p->size);
+	busmail_send0(dect_bus, &p->data[3], p->size - 3);
 }
 
 

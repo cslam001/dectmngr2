@@ -258,7 +258,6 @@ static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8
 	
 	/* Update packet counter */
 	bus->tx_seq_l++;
-
 }
 
 

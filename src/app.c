@@ -67,7 +67,7 @@ static void application_frame(packet_t *p) {
 	if ( client_connected == 1 ) {
 		printf("send to client_bus\n");
 		packet_dump(p);
-		busmail_send(client_bus, p->data, p->size);
+		busmail_send(client_bus, &p->data[3], p->size);
 	}
 
 	switch (m->mail_header) {
