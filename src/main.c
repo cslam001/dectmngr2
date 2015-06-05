@@ -100,8 +100,8 @@ int main(int argc, char * argv[]) {
 	/* Setup listening socket */
 	memset(&my_addr, 0, sizeof(my_addr));
 	my_addr.sin_family = AF_INET;
-	my_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	my_addr.sin_port = htons(7777);
+	my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	my_addr.sin_port = htons(10468);
 	
 	if ( (listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ) {
 		exit_failure("socket");
@@ -215,10 +215,12 @@ int main(int argc, char * argv[]) {
 				} else {
 
 					/* Data is read from client */
-					/* We should buffer packet here to make 
-					   sure we send a complete application frame */
 					util_dump(buf, ret, "[CLIENT]");
-					//busmail_send(buf, ret);
+					//busmail_add(client_bus, e);
+					//busmail_dispatch(client_bus);
+					
+
+					/* Send packets from clients to dect_bus */
 				}
 				
 			}

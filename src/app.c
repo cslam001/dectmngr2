@@ -60,12 +60,15 @@ static void application_frame(busmail_t *m) {
 	
 	int i;
 
+	/* Send packets to connected clients */
+	//busmail_send(client_bus, m, sizeof(m));
+
 	switch (m->mail_header) {
 		
 	case API_FP_RESET_IND:
+
 		printf("API_FP_RESET_IND\n");
 		
-
 		if (reset_ind == 0) {
 			reset_ind = 1;
 
@@ -74,7 +77,7 @@ static void application_frame(busmail_t *m) {
 			busmail_send(bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 
 		} else {
-			
+
 		}
 
 		break;
@@ -91,7 +94,7 @@ static void application_frame(busmail_t *m) {
 		printf("API_FP_GET_FW_VERSION_CFM\n");
 		
 		/* Setup terminal id */
-		ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ, 
+		ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
 					      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
 		busmail_send(bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
 		break;
