@@ -24,6 +24,7 @@
 #include "app.h"
 #include "buffer.h"
 #include "busmail.h"
+#include "eap.h"
 
 
 #define INBUF_SIZE 5000
@@ -67,7 +68,7 @@ static void application_frame(packet_t *p) {
 	if ( client_connected == 1 ) {
 		printf("send to client_bus\n");
 		packet_dump(p);
-		busmail_send(client_bus, &p->data[3], p->size);
+		eap_send(client_bus, &p->data[3], p->size);
 	}
 
 	switch (m->mail_header) {
@@ -115,10 +116,10 @@ static void application_frame(packet_t *p) {
 		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
 
 		/* Start registration */
-		printf("\nWRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n");
-		ApiFpMmSetRegistrationModeReqType r2 = { .Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ, \
-							.RegistrationEnabled = true, .DeleteLastHandset = false};
-		busmail_send(dect_bus, (uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType));
+		/* printf("\nWRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n"); */
+		/* ApiFpMmSetRegistrationModeReqType r2 = { .Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ, \ */
+		/* 					.RegistrationEnabled = true, .DeleteLastHandset = false}; */
+		/* busmail_send(dect_bus, (uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType)); */
 		break;
 
 	case API_SCL_STATUS_IND:

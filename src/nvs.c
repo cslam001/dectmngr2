@@ -103,7 +103,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 					  0x10, 0x00, \
 					  0x00, 0x00, 0x00, 0x00, \
 					  0x0b, \
-					  0x02, 0x3f, 0x80, 0x00, \
+					  0x02, 0x3f, 0x90, 0x00, \
 					  0xf8, 0x25, 0xc0, 0x01, \
 					  0x00, 0xf8, 0x23};
 
@@ -151,9 +151,10 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 }
 
 
-static void application_frame(busmail_t *m) {
+static void application_frame(packet_t *p) {
 	
 	int i;
+	busmail_t * m = (busmail_t *) &p->data[0];
 
 	switch (m->mail_header) {
 		

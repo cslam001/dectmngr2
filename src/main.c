@@ -202,7 +202,7 @@ int main(int argc, char * argv[]) {
 
 					/* Setup client busmail connection */
 					printf("setup client_bus\n");
-					client_bus = busmail_new(client_fd, barf);
+					client_bus = eap_new(client_fd, barf);
 					client_connected = 1;
 				}
 				
@@ -237,8 +237,8 @@ int main(int argc, char * argv[]) {
 					util_dump(e->in, e->incount, "[CLIENT]");
 
 					/* Send packets from clients to dect_bus */
-					busmail_write(client_bus, e);
-					busmail_dispatch(client_bus);
+					eap_write(client_bus, e);
+					eap_dispatch(client_bus);
 
 					/* Reset event_t */
 					e->outcount = 0;
