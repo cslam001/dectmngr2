@@ -73,7 +73,7 @@ typedef struct {
 	uint8_t rx_seq_r;
 	void * tx_fifo;
 	buffer_t * buf;
-	void (*application_frame) (busmail_t *);
+	void (*application_frame) (packet_t *);
 } busmail_connection_t;
 
 
@@ -243,8 +243,8 @@ static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8
 	r->task_id = task_id;
 	memcpy(&(r->mail_header), data, size);
 
-	tx_seq_tmp = (r->frame_header & TX_SEQ_MASK) >> TX_SEQ_OFFSET;
-	rx_seq_tmp = (r->frame_header & RX_SEQ_MASK) >> RX_SEQ_OFFSET;
+	/* tx_seq_tmp = (r->frame_header & TX_SEQ_MASK) >> TX_SEQ_OFFSET; */
+	/* rx_seq_tmp = (r->frame_header & RX_SEQ_MASK) >> RX_SEQ_OFFSET; */
 
 	printf("BUSMAIL_SEND_INFO\n");
 	printf("tx_seq_l: %d\n", bus->tx_seq_l);
@@ -256,8 +256,12 @@ static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8
 	send_packet(r, BUSMAIL_PACKET_OVER_HEAD - 1 + size, bus->fd);
 	free(r);
 	
-	/* Update packet counter */
+	/* Update packet counter. For compatability with 
+	   Natalie 12.13, tx_seq_l needs to equal 1, not 0, on wrap. */
 	bus->tx_seq_l++;
+	if (bus->tx_seq_l == 8) {
+		bus->tx_seq_l = 1;
+	}
 }
 
 
@@ -271,7 +275,7 @@ void busmail_send(void * _self, uint8_t * data, int size) {
 	tx->task_id = API_TEST;
 	tx->size = size;
 	
-	util_dump(tx->data, tx->size, "fifo_add");
+	//util_dump(tx->data, tx->size, "fifo_add");
 	//fifo_add(tx_fifo, tx);
        
 	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id);
@@ -371,7 +375,6 @@ static void information_frame(void * _self, packet_t *p) {
 	/* Update busmail packet counters */
 	bus->tx_seq_r = (m->frame_header & TX_SEQ_MASK) >> TX_SEQ_OFFSET;
 	bus->rx_seq_r = (m->frame_header & RX_SEQ_MASK) >> RX_SEQ_OFFSET;
-
 	pf = (m->frame_header & PF_MASK) >> PF_OFFSET;
 
 	printf("frame_header: %02x\n", m->frame_header);
@@ -379,8 +382,9 @@ static void information_frame(void * _self, packet_t *p) {
 	printf("rx_seq_r: %d\n", bus->rx_seq_r);
 	printf("pf: %d\n", pf);
 
+	/* ACK the recieved package */
 	bus->rx_seq_l = bus->tx_seq_r + 1;
-	if (bus->rx_seq_l == 7) {
+	if (bus->rx_seq_l == 8) {
 		bus->rx_seq_l = 0;
 	}
 
@@ -537,6 +541,7 @@ void * busmail_new(int fd, void (*app_handler)(packet_t *)) {
 	bus->application_frame = app_handler;
 	bus->tx_fifo = fifo_new();
 	bus->buf = buffer_new(500);
+	//bus->name = malloc(strlen(name));
 
 	reset_counters(bus);
 
