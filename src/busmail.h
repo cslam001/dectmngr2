@@ -32,5 +32,6 @@ void packet_dump(packet_t *p);
 void busmail_dispatch(void * _self);
 void busmail_send0(void * _self, uint8_t * data, int size);
 void busmail_send(void * _self, uint8_t * data, int size);
+void busmail_send_prog(void * _self, uint8_t * data, int size, int prog_id);
 
 #endif /* BUSMAIL_H */

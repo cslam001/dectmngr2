@@ -45,7 +45,7 @@ void list_connected(int fd) {
 	printf("connected fd:s : %d\n", fd);
 }
 
-void barf(packet_t *p) {
+void eap(packet_t *p) {
 	
 	int i;
 
@@ -53,6 +53,9 @@ void barf(packet_t *p) {
 	packet_dump(p);
 	
 	busmail_send0(dect_bus, &p->data[3], p->size - 3);
+	
+	/* /\* For RSX *\/ */
+	/* busmail_send_prog(dect_bus, &p->data[3], p->size - 3, 0x81); */
 }
 
 
@@ -202,7 +205,7 @@ int main(int argc, char * argv[]) {
 
 					/* Setup client busmail connection */
 					printf("setup client_bus\n");
-					client_bus = eap_new(client_fd, barf);
+					client_bus = eap_new(client_fd, eap);
 					client_connected = 1;
 				}
 				

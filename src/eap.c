@@ -25,7 +25,7 @@
 #define SUPERVISORY_CONTROL_FRAME ((1 << 7) | (0 << 6))
 
 /* Information frame */
-#define TX_SEQ_MASK ((1 << 6) | (1 << 5) | (1 << 4))
+#define TX_SEQ_MASK ( (1 << 7) | (1 << 6) | (1 << 5) | (1 << 4))
 #define TX_SEQ_OFFSET 4
 #define RX_SEQ_MASK  ((1 << 2) | (1 << 1) | (1 << 0))
 #define RX_SEQ_OFFSET 0
@@ -256,11 +256,11 @@ static void eap_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8_t t
 	send_packet(r, BUSMAIL_PACKET_OVER_HEAD - 1 + size, bus->fd);
 	free(r);
 	
-	/* Update packet counter. For compatability with 
-	   Natalie 12.13, tx_seq_l needs to equal 1, not 0, on wrap. */
+	/* Update packet counter. */
+
 	bus->tx_seq_l++;
-	if (bus->tx_seq_l == 8) {
-		bus->tx_seq_l = 1;
+	if (bus->tx_seq_l == 0x10) {
+		bus->tx_seq_l = 0;
 	}
 }
 
@@ -353,9 +353,10 @@ static void information_frame(void * _self, packet_t *p) {
 
 
 	/* Drop unwanted frames */
-	if( m->program_id != API_PROG_ID ) {
-		return;
-	}
+	/* if( m->program_id != API_PROG_ID ) { */
+	/* 	printf("Drop bad prog id: %x\n", m->program_id); */
+	/* 	return; */
+	/* } */
 
 	packet_dump(p);
 	
@@ -371,14 +372,13 @@ static void information_frame(void * _self, packet_t *p) {
 
 	/* ACK the recieved package */
 	bus->rx_seq_l = bus->tx_seq_r + 1;
-	if (bus->rx_seq_l == 8) {
+	if (bus->rx_seq_l == 0x10) {
 		bus->rx_seq_l = 0;
 	}
 
 	/* Process application frame. The application frame callback will enqueue 
 	   outgoing packets on tx_fifo and directly transmit packages with busmail_send() */
 	bus->application_frame(p);
-
 }
 
 
@@ -465,37 +465,9 @@ void eap_dispatch(void * _self) {
 	/* Process whole packets in buffer */
 	while ( busmail_get(bus, p) == 0) {
 
-		//		m = (busmail_t *) &p->data[0];
-
+		/* No control frames in EAP */
 		information_frame(bus, p);
 
-		/* /\* Route packet based on type *\/ */
-		/* switch (m->frame_header & PACKET_TYPE_MASK) { */
-		
-		/* case INFORMATION_FRAME: */
-
-		/* 	break; */
-
-		/* case CONTROL_FRAME: */
-
-		/* 	switch (m->frame_header & CONTROL_FRAME_MASK) { */
-			
-		/* 	case UNNUMBERED_CONTROL_FRAME: */
-		/* 		printf("UNNUMBERED_CONTROL_FRAME\n"); */
-		/* 		unnumbered_control_frame(bus, p); */
-		/* 		break; */
-
-		/* 	case SUPERVISORY_CONTROL_FRAME: */
-		/* 		supervisory_control_frame(bus, p); */
-		/* 		break; */
-		/* 	} */
-
-		/* 	break; */
-
-		/* default: */
-		/* 	printf("Unknown packet header: %x\n", m->frame_header); */
-
-		/* } */
 	}
 }
 

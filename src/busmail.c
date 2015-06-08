@@ -226,7 +226,7 @@ static uint8_t make_info_frame(void * _self, uint8_t pf) {
 
 
 
-static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8_t task_id) {
+static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8_t task_id, uint8_t prog_id) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	uint8_t tx_seq_tmp, rx_seq_tmp;
@@ -239,7 +239,7 @@ static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8
 
 		
 	r->frame_header = make_info_frame(bus, pf);
-	r->program_id = API_PROG_ID;
+	r->program_id = prog_id;
 	r->task_id = task_id;
 	memcpy(&(r->mail_header), data, size);
 
@@ -278,7 +278,7 @@ void busmail_send(void * _self, uint8_t * data, int size) {
 	//util_dump(tx->data, tx->size, "fifo_add");
 	//fifo_add(tx_fifo, tx);
        
-	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id);
+	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id, API_PROG_ID);
 	free(tx);
 }
 
@@ -296,7 +296,24 @@ void busmail_send0(void * _self, uint8_t * data, int size) {
 
 	//fifo_add(tx_fifo, tx);
 
-	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id);
+	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id, API_PROG_ID);
+	free(tx);
+}
+
+
+void busmail_send_prog(void * _self, uint8_t * data, int size, int prog_id) {
+
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
+	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);
+	
+	tx->data = malloc(size);
+	memcpy(tx->data, data, size);
+	tx->task_id = 0;
+	tx->size = size;
+
+	//fifo_add(tx_fifo, tx);
+
+	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id, prog_id);
 	free(tx);
 }
 
