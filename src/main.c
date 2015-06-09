@@ -234,6 +234,8 @@ int main(int argc, char * argv[]) {
 					list_delete(client_list, client_fd);
 					list_each(client_list, list_connected);
 
+					/* Destroy client connection object here */
+
 				} else {
 
 					/* Data is read from client */

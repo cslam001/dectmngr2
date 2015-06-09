@@ -64,75 +64,86 @@ static void application_frame(packet_t *p) {
 	int i;
 	busmail_t * m = (busmail_t *) &p->data[0];
 	
-	/* Send packets to connected clients */
-	if ( client_connected == 1 ) {
-		printf("send to client_bus\n");
-		packet_dump(p);
-		eap_send(client_bus, &p->data[3], p->size);
-	}
+	switch (m->task_id) {
 
-	switch (m->mail_header) {
+	case 0:
+
+		/* Production test command */
+		if ( client_connected == 1 ) {
+
+			/* Send packets to connected clients */
+			printf("send to client_bus\n");
+			packet_dump(p);
+			eap_send(client_bus, &p->data[3], p->size - 3);
+		}
+		break;
+
+	case 1:
+
+		/* Application command */
+		switch (m->mail_header) {
 		
-	case API_FP_RESET_IND:
+		case API_FP_RESET_IND:
 
-		printf("API_FP_RESET_IND\n");
+			printf("API_FP_RESET_IND\n");
 		
-		if (reset_ind == 0) {
-			reset_ind = 1;
+			if (reset_ind == 0) {
+				reset_ind = 1;
 
-			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
-			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
-			busmail_send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
+				printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
+				ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
+				busmail_send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 
-		} else {
+			} else {
 
+			}
+
+			break;
+
+		case API_PROD_TEST_CFM:
+			printf("API_PROD_TEST_CFM\n");
+			break;
+
+		case RTX_EAP_HW_TEST_CFM:
+			printf("RTX_EAP_HW_TEST_CFM\n");
+			break;
+
+		case API_FP_GET_FW_VERSION_CFM:
+			printf("API_FP_GET_FW_VERSION_CFM\n");
+		
+			/* Setup terminal id */
+			ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
+						      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
+			busmail_send(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
+			break;
+
+		case API_FP_FEATURES_CFM:
+			printf("API_FP_FEATURES_CFM\n");
+
+			/* Start protocol */
+			printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
+			ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
+			busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+
+			/* Start registration */
+			/* printf("\nWRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n"); */
+			/* ApiFpMmSetRegistrationModeReqType r2 = { .Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ, \ */
+			/* 					.RegistrationEnabled = true, .DeleteLastHandset = false}; */
+			/* busmail_send(dect_bus, (uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType)); */
+			break;
+
+		case API_SCL_STATUS_IND:
+			printf("API_SCL_STATUS_IND\n");
+			break;
+
+
+		case API_FP_MM_SET_REGISTRATION_MODE_CFM:
+			printf("API_FP_MM_SET_REGISTRATION_MODE_CFM\n");
+			break;
 		}
 
 		break;
-
-	case API_PROD_TEST_CFM:
-		printf("API_PROD_TEST_CFM\n");
-		break;
-
-	case RTX_EAP_HW_TEST_CFM:
-		printf("RTX_EAP_HW_TEST_CFM\n");
-		break;
-
-	case API_FP_GET_FW_VERSION_CFM:
-		printf("API_FP_GET_FW_VERSION_CFM\n");
-		
-		/* Setup terminal id */
-		ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
-					      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
-		busmail_send(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
-		break;
-
-	case API_FP_FEATURES_CFM:
-		printf("API_FP_FEATURES_CFM\n");
-
-		/* Start protocol */
-		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
-		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
-		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
-
-		/* Start registration */
-		/* printf("\nWRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n"); */
-		/* ApiFpMmSetRegistrationModeReqType r2 = { .Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ, \ */
-		/* 					.RegistrationEnabled = true, .DeleteLastHandset = false}; */
-		/* busmail_send(dect_bus, (uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType)); */
-		break;
-
-	case API_SCL_STATUS_IND:
-		printf("API_SCL_STATUS_IND\n");
-		break;
-
-
-	case API_FP_MM_SET_REGISTRATION_MODE_CFM:
-		printf("API_FP_MM_SET_REGISTRATION_MODE_CFM\n");
-		break;
 	}
-
-	
 }
 
 
