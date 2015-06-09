@@ -23,12 +23,16 @@
 #include "app.h"
 #include "buffer.h"
 #include "busmail.h"
+#include "eap.h"
 
 
 #define INBUF_SIZE 5000
 
 buffer_t * buf;
 static int reset_ind = 0;
+extern void * client_bus;
+extern int client_connected;
+void * dect_bus;
 
 ApiCallReferenceType incoming_call;
 ApiCallReferenceType outgoing_call;
@@ -219,6 +223,7 @@ static void pinging_call(int handset) {
 
 
 
+
 static void fw_version_cfm(busmail_t *m) {
 
 	ApiFpGetFwVersionCfmType * p = (ApiFpGetFwVersionCfmType *) &m->mail_header;
@@ -243,65 +248,88 @@ static void fw_version_cfm(busmail_t *m) {
 }
 
 
-static void application_frame(busmail_t *m) {
+static void application_frame(packet_t *p) {
 	
 	int i;
+	busmail_t * m = (busmail_t *) &p->data[0];
+	
+	switch (m->task_id) {
 
-	switch (m->mail_header) {
-		
-	case API_FP_RESET_IND:
-		printf("API_FP_RESET_IND\n");
-		
+	case 0:
 
-		if (reset_ind == 0) {
-			reset_ind = 1;
+		/* Production test command */
+		if ( client_connected == 1 ) {
 
-			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
-			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
-			busmail_send((uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
-
-		} else {
-			
+			/* Send packets to connected clients */
+			printf("send to client_bus\n");
+			packet_dump(p);
+			eap_send(client_bus, &p->data[3], p->size - 3);
 		}
-
 		break;
 
-	case API_PROD_TEST_CFM:
-		printf("API_PROD_TEST_CFM\n");
-		break;
+	case 1:
 
-	case RTX_EAP_HW_TEST_CFM:
-		printf("RTX_EAP_HW_TEST_CFM\n");
-		break;
+		/* Application command */
+		switch (m->mail_header) {
+		
+		case API_FP_RESET_IND:
 
-	case API_FP_GET_FW_VERSION_CFM:
-		printf("API_FP_GET_FW_VERSION_CFM\n");
+			printf("API_FP_RESET_IND\n");
+		
+			if (reset_ind == 0) {
+				reset_ind = 1;
 
-		/* Setup terminal id */
-		ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ, 
-					      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
-		busmail_send((uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
-		break;
+				printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
+				ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
+				busmail_send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 
-	case API_FP_FEATURES_CFM:
-		printf("API_FP_FEATURES_CFM\n");
+			} else {
 
-		/* Start protocol */
-		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
-		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
-		busmail_send((uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+			}
 
-		/* Start registration */
-		printf("\nWRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n");
-		ApiFpMmSetRegistrationModeReqType r2 = { .Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ, \
-							.RegistrationEnabled = true, .DeleteLastHandset = false};
-		busmail_send((uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType));
-		break;
+			break;
+
+		case API_PROD_TEST_CFM:
+			printf("API_PROD_TEST_CFM\n");
+			break;
+
+		case RTX_EAP_HW_TEST_CFM:
+			printf("RTX_EAP_HW_TEST_CFM\n");
+			break;
+
+		case API_FP_GET_FW_VERSION_CFM:
+			printf("API_FP_GET_FW_VERSION_CFM\n");
+		
+			/* Setup terminal id */
+			ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
+						      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
+			busmail_send(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
+			break;
+
+		case API_FP_FEATURES_CFM:
+			printf("API_FP_FEATURES_CFM\n");
+
+			/* Start protocol */
+			printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
+			ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
+			busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+
+			/* Start registration */
+			/* printf("\nWRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n"); */
+			/* ApiFpMmSetRegistrationModeReqType r2 = { .Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ, \ */
+			/* 					.RegistrationEnabled = true, .DeleteLastHandset = false}; */
+			/* busmail_send(dect_bus, (uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType)); */
+			break;
+
+		case API_SCL_STATUS_IND:
+			printf("API_SCL_STATUS_IND\n");
+			break;
 
 
-	case API_SCL_STATUS_IND:
-		printf("API_SCL_STATUS_IND\n");
-		break;
+		case API_FP_MM_SET_REGISTRATION_MODE_CFM:
+			printf("API_FP_MM_SET_REGISTRATION_MODE_CFM\n");
+			break;
+		}
 
 
 	case API_FP_MM_SET_REGISTRATION_MODE_CFM:
@@ -358,39 +386,34 @@ void init_app_state(int dect_fd, config_t * config) {
 	tty_set_baud(dect_fd, B115200);
 
 	printf("DECT TX TO BRCM RX\n");
-	system("/sbin/brcm_fw_tool set -x 118 -p 0 > /dev/null");
+	if(gpio_control(118, 0)) return;
 
 	printf("RESET_DECT\n");
-	system("/usr/bin/dect-reset > /dev/null");
+	if(dect_chip_reset()) return;
 
-	/* Init input buffer */
-	buf = buffer_new(500);
-	
 	/* Init busmail subsystem */
-	busmail_init(dect_fd, application_frame);
+	dect_bus = busmail_new(dect_fd, application_frame);
 	
+	return;
 }
 
 
 void handle_app_package(event_t *e) {
 
 	uint8_t header;
-	packet_t packet;
-	packet_t *p = &packet;
-	p->fd = e->fd;
-	p->size = 0;
 
 	//util_dump(e->in, e->incount, "\n[READ]");
 
-	/* Add input to buffer */
-	if (buffer_write(buf, e->in, e->incount) == 0) {
-		printf("buffer full\n");
+	/* Add input to busmail subsystem */
+	if (busmail_write(dect_bus, e) < 0) {
+		printf("busmail buffer full\n");
 	}
 	
-	/* Process whole packets in buffer */
-	while(busmail_get(p, buf) == 0) {
-		busmail_dispatch(p);
-	}
+	/* Process whole packets in buffer. The previously registered
+	   callback will be called for application frames */
+	busmail_dispatch(dect_bus);
+
+	return;
 }
 
 

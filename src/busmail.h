@@ -26,11 +26,12 @@ typedef struct __attribute__((__packed__))
 
 
 
-
-int busmail_get(packet_t *p, buffer_t *b);
+void * busmail_new(int fd, void (*app_handler)(packet_t *));
+int busmail_get(void * _self, packet_t *p);
 void packet_dump(packet_t *p);
-void busmail_dispatch(packet_t *p);
-void busmail_send0(uint8_t * data, int size);
-void busmail_send(uint8_t * data, int size);
+void busmail_dispatch(void * _self);
+void busmail_send0(void * _self, uint8_t * data, int size);
+void busmail_send(void * _self, uint8_t * data, int size);
+void busmail_send_prog(void * _self, uint8_t * data, int size, int prog_id);
 
 #endif /* BUSMAIL_H */

@@ -34,7 +34,7 @@
 
 buffer_t * buf;
 static int reset_ind = 0;
-
+void * bus;
 
 typedef struct __attribute__((__packed__))
 {
@@ -103,7 +103,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 					  0x10, 0x00, \
 					  0x00, 0x00, 0x00, 0x00, \
 					  0x0b, \
-					  0x02, 0x3f, 0x80, 0x00, \
+					  0x02, 0x3f, 0x90, 0x00, \
 					  0xf8, 0x25, 0xc0, 0x01, \
 					  0x00, 0xf8, 0x23};
 
@@ -117,7 +117,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 
 
 
-			busmail_send0(data, sizeof(data));
+			busmail_send0(bus, data, sizeof(data));
 		}
 
 		break;
@@ -127,7 +127,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 		printf("Get NVS\n");
 		uint8_t data1[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \
 				   0x00, 0x00, 0x00, 0x00, 0xff};
-		busmail_send0(data1, sizeof(data1));
+		busmail_send0(bus, data1, sizeof(data1));
 		break;
 
 	case PT_CMD_GET_NVS:
@@ -143,7 +143,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 		printf("0x%02x ", m->mail_data[HEADER_OFFSET + 0x80]);
 		printf("\n");
 		
-		busmail_ack();
+		busmail_ack(bus);
 		exit(0);
 		break;
 	}
@@ -151,9 +151,10 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 }
 
 
-static void application_frame(busmail_t *m) {
+static void application_frame(packet_t *p) {
 	
 	int i;
+	busmail_t * m = (busmail_t *) &p->data[0];
 
 	switch (m->mail_header) {
 		
@@ -165,7 +166,7 @@ static void application_frame(busmail_t *m) {
 
 			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
 			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
-			busmail_send((uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
+			busmail_send(bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 		}
 
 		break;
@@ -181,7 +182,7 @@ static void application_frame(busmail_t *m) {
 
 		printf("\nWRITE: NvsDefault\n");
 		uint8_t data[] = {0x66, 0xf0, 0x00, 0x00, 0x02, 0x01, 0x01, 0x00, 0x01};
-		busmail_send0(data, sizeof(data));
+		busmail_send0(bus, data, sizeof(data));
 
 		/* printf("Get NVS\n"); */
 		/* uint8_t data1[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \ */
@@ -204,16 +205,14 @@ void init_nvs_state(int dect_fd, config_t * config) {
 	tty_set_baud(dect_fd, B115200);
 
 	printf("DECT TX TO BRCM RX\n");
-	system("/sbin/brcm_fw_tool set -x 118 -p 0 > /dev/null");
+	if(gpio_control(118, 0)) return;
 
 	printf("RESET_DECT\n");
-	system("/usr/bin/dect-reset > /dev/null");
+	if(dect_chip_reset()) return;
 
-	/* Init input buffer */
-	buf = buffer_new(500);
 	
 	/* Init busmail subsystem */
-	busmail_init(dect_fd, application_frame);
+	bus = busmail_new(dect_fd, application_frame);
 }
 
 
@@ -227,17 +226,16 @@ void handle_nvs_package(event_t *e) {
 
 	//util_dump(e->in, e->incount, "\n[READ]");
 
-	/* Add input to buffer */
-	if (buffer_write(buf, e->in, e->incount) == 0) {
-		printf("buffer full\n");
+	/* Add input to busmail subsystem */
+	if (busmail_write(bus, e) < 0) {
+		printf("busmail buffer full\n");
 	}
 	
-	//buffer_dump(buf);
+	/* Process whole packets in buffer. The previously registered
+	   callback will be called for application frames */
+	busmail_dispatch(bus);
 
-	/* Process whole packets in buffer */
-	while(busmail_get(p, buf) == 0) {
-		busmail_dispatch(p);
-	}
+	return;
 }
 
 

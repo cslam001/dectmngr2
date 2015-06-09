@@ -112,13 +112,13 @@ void init_boot_state(int dect_fd, config_t * config) {
 	calculate_checksum();
 	
 	printf("DECT TX PULLDOWN\n");
-	system("/sbin/brcm_fw_tool set -x 118 -p 1 > /dev/null");
-	
+	if(gpio_control(118, 1)) return;
+
 	printf("RESET_DECT\n");
-	system("/usr/bin/dect-reset > /dev/null");
+	if(dect_chip_reset()) return;
 
 	printf("DECT TX TO BRCM RX\n");
-	system("/sbin/brcm_fw_tool set -x 118 -p 0 > /dev/null");
+	if(gpio_control(118, 0)) return;
 	
 	tty_set_raw(dect_fd);
 	tty_set_baud(dect_fd, B19200);
