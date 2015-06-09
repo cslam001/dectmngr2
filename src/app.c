@@ -87,20 +87,36 @@ static void dect_conf_init(void)
 /* Handset answers */
 static void connect_ind(busmail_t *m) {
 	
-	ApiFpCcConnectIndType * p = (ApiFpCcSetupCfmType *) &m->mail_header;
+	ApiFpCcConnectIndType * p = (ApiFpCcConnectIndType *) &m->mail_header;
+	ApiInfoElementType * ie_block = NULL;
+	rsuint16 ie_block_len = 0;
 
 	printf("handset: %d\n", p->CallReference.Instance.Fp);
 
 	
-	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + NarrowBandCodecIeLen));
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_CODEC_LIST,
+			    NarrowBandCodecIe->IeLength,
+			    (rsuint8 *) NarrowBandCodecIe->IeData);
+
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_SYSTEM_CALL_ID,
+			    sizeof(ApiSystemCallIdType),
+			    (rsuint8 *) &internal_call);
+
+	
+
+	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len));
 
         req->Primitive = API_FP_CC_CONNECT_REQ;
-	//req->CallReference = incoming_call;
-        req->InfoElementLength = NarrowBandCodecIeLen;
-        memcpy(req->InfoElement,(rsuint8*)NarrowBandCodecIe,NarrowBandCodecIeLen);
+	req->CallReference = incoming_call;
+        req->InfoElementLength = ie_block_len;
+        memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len);
 	
 	printf("API_FP_CC_CONNECT_REQ\n");
-	busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + NarrowBandCodecIeLen);
+	busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
 	free(req);
 
 
@@ -289,7 +305,7 @@ static void setup_ind(busmail_t *m) {
 		info = ApiGetInfoElement(p->InfoElement, p->InfoElementLength, API_IE_SYSTEM_CALL_ID);
 		if ( info && info->IeLength > 0 ) {
 			printf("API_IE_SYSTEM_CALL_ID\n");
-			memcpy(&internal_call, info, info->IeLength);
+			memcpy(&internal_call, &info->IeData[0], info->IeLength);
 		}
 
 	}
