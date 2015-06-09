@@ -36,7 +36,7 @@ void * dect_bus;
 
 ApiCallReferenceType incoming_call;
 ApiCallReferenceType outgoing_call;
-
+ApiSystemCallIdType internal_call;
 
 #ifndef RSOFFSETOF
 /*! \def RSOFFSETOF(type, field)                                                                                                                        
@@ -289,6 +289,7 @@ static void setup_ind(busmail_t *m) {
 		info = ApiGetInfoElement(p->InfoElement, p->InfoElementLength, API_IE_SYSTEM_CALL_ID);
 		if ( info && info->IeLength > 0 ) {
 			printf("API_IE_SYSTEM_CALL_ID\n");
+			memcpy(&internal_call, info, info->IeLength);
 		}
 
 	}
@@ -305,20 +306,22 @@ static void setup_ind(busmail_t *m) {
 	printf("API_FP_CC_SETUP_RES\n");
 	busmail_send(dect_bus, (uint8_t *)&res, sizeof(ApiFpCcSetupResType));
 
-	/* /\* Connection request to dialed handset *\/ */
-	/* ApiFpCcSetupReqType req = { */
-	/* 	.Primitive = API_FP_CC_SETUP_REQ, */
-	/* 	.TerminalId = 2, */
-	/* 	.AudioId.SourceTerminalId = 1, */
-	/* 	.AudioId.IntExtAudio = API_IEA_INT, */
-	/* 	.BasicService = API_BASIC_SPEECH, */
-	/* 	.CallClass = API_CC_NORMAL, */
-	/* 	.Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2, */
-	/* 	.InfoElementLength = 0, */
-	/* }; */
+	ApiFpCcSetupReqType * req = (ApiFpCcSetupReqType *) malloc(sizeof(ApiFpCcSetupReqType) - 1 + info->IeLength);
+	/* Connection request to dialed handset */
+	req->Primitive = API_FP_CC_SETUP_REQ;
+	req->TerminalId = 2;
+	req->AudioId.SourceTerminalId = 1;
+	req->AudioId.IntExtAudio = API_IEA_INT;
+	req->BasicService = API_BASIC_SPEECH;
+	req->CallClass = API_CC_NORMAL;
+	req->Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2;
+	req->InfoElementLength = info->IeLength;
 
-	/* printf("API_FP_CC_SETUP_REQ\n"); */
-	/* busmail_send(dect_bus, (uint8_t *)&req, sizeof(ApiFpCcSetupReqType)); */
+	memcpy(req->InfoElement, info, info->IeLength);
+
+	printf("API_FP_CC_SETUP_REQ\n");
+	busmail_send(dect_bus, (uint8_t *)req, sizeof(ApiFpCcSetupReqType));
+	free(req);
 
 	return;
 }
