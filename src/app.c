@@ -100,7 +100,7 @@ static void connect_ind(busmail_t *m) {
         memcpy(req->InfoElement,(rsuint8*)NarrowBandCodecIe,NarrowBandCodecIeLen);
 	
 	printf("API_FP_CC_CONNECT_REQ\n");
-	busmail_send((uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + NarrowBandCodecIeLen);
+	busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + NarrowBandCodecIeLen);
 	free(req);
 
 
@@ -121,7 +121,7 @@ static void connect_cfm(busmail_t *m) {
 	};
 	
 	printf("API_FP_CC_CONNECT_RES\n");
-	busmail_send((uint8_t *)&res, sizeof(res));
+	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
 
 }
 
@@ -151,7 +151,7 @@ static void release_ind(busmail_t *m) {
 	};
 	
 	printf("API_FP_CC_RELEASE_RES\n");
-	busmail_send((uint8_t *)&res, sizeof(res));
+	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
 }
 
 
@@ -181,13 +181,13 @@ static void setup_ind(busmail_t *m) {
 	};
 
 	printf("API_FP_CC_SETUP_RES\n");
-	busmail_send((uint8_t *)&res, sizeof(ApiFpCcSetupResType));
+	busmail_send(dect_bus, (uint8_t *)&res, sizeof(ApiFpCcSetupResType));
 
 	/* Connection request to dialed handset */
 	ApiFpCcSetupReqType req = {
 		.Primitive = API_FP_CC_SETUP_REQ,
 		.TerminalId = 2,
-		.AudioId.SourceTerminalId = 2,
+		.AudioId.SourceTerminalId = 1,
 		.AudioId.IntExtAudio = API_IEA_INT,
 		.BasicService = API_BASIC_SPEECH,
 		.CallClass = API_CC_NORMAL,
@@ -196,7 +196,7 @@ static void setup_ind(busmail_t *m) {
 	};
 
 	printf("API_FP_CC_SETUP_REQ\n");
-	busmail_send((uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
+	busmail_send(dect_bus, (uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
 
 	return;
 }
@@ -217,7 +217,7 @@ static void pinging_call(int handset) {
 
 	printf("pinging_call\n");
 	printf("API_FP_CC_SETUP_REQ\n");
-	busmail_send((uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
+	busmail_send(dect_bus, (uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
 	return;
 }
 
@@ -325,52 +325,44 @@ static void application_frame(packet_t *p) {
 			printf("API_SCL_STATUS_IND\n");
 			break;
 
-
 		case API_FP_MM_SET_REGISTRATION_MODE_CFM:
 			printf("API_FP_MM_SET_REGISTRATION_MODE_CFM\n");
 			break;
+
+		case API_FP_CC_SETUP_IND:
+			printf("API_FP_CC_SETUP_IND\n");
+			setup_ind(m);
+			break;
+
+		case API_FP_CC_SETUP_REQ:
+			printf("API_FP_CC_SETUP_REQ\n");
+			break;
+
+		case API_FP_CC_RELEASE_IND:
+			printf("API_FP_CC_RELEASE_IND\n");
+			release_ind(m);
+			break;
+
+		case API_FP_CC_SETUP_CFM:
+			printf("API_FP_CC_SETUP_CFM\n");
+			setup_cfm(m);
+			break;
+
+		case API_FP_CC_REJECT_IND:
+			printf("API_FP_CC_REJECT_IND\n");
+			break;
+
+		case API_FP_CC_CONNECT_IND:
+			printf("API_FP_CC_CONNECT_IND\n");
+			connect_ind(m);
+			break;
+
+		case API_FP_CC_CONNECT_CFM:
+			printf("API_FP_CC_CONNECT_CFM\n");
+			connect_cfm(m);
+			break;
+
 		}
-
-
-	case API_FP_MM_SET_REGISTRATION_MODE_CFM:
-		printf("API_FP_MM_SET_REGISTRATION_MODE_CFM\n");
-		pinging_call(1);
-		break;
-
-	case API_FP_CC_SETUP_IND:
-		printf("API_FP_CC_SETUP_IND\n");
-		setup_ind(m);
-		break;
-
-	case API_FP_CC_SETUP_REQ:
-		printf("API_FP_CC_SETUP_REQ\n");
-		break;
-
-	case API_FP_CC_RELEASE_IND:
-		printf("API_FP_CC_RELEASE_IND\n");
-		release_ind(m);
-		break;
-
-	case API_FP_CC_SETUP_CFM:
-		printf("API_FP_CC_SETUP_CFM\n");
-		setup_cfm(m);
-		break;
-
-	case API_FP_CC_REJECT_IND:
-		printf("API_FP_CC_REJECT_IND\n");
-		break;
-
-	case API_FP_CC_CONNECT_IND:
-		printf("API_FP_CC_CONNECT_IND\n");
-		connect_ind(m);
-		break;
-
-	case API_FP_CC_CONNECT_CFM:
-		printf("API_FP_CC_CONNECT_CFM\n");
-		connect_cfm(m);
-		break;
-
-		
 	}
 }
 
