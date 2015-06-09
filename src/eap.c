@@ -25,7 +25,7 @@
 #define SUPERVISORY_CONTROL_FRAME ((1 << 7) | (0 << 6))
 
 /* Information frame */
-#define TX_SEQ_MASK ((1 << 6) | (1 << 5) | (1 << 4))
+#define TX_SEQ_MASK ( (1 << 7) | (1 << 6) | (1 << 5) | (1 << 4))
 #define TX_SEQ_OFFSET 4
 #define RX_SEQ_MASK  ((1 << 2) | (1 << 1) | (1 << 0))
 #define RX_SEQ_OFFSET 0
@@ -226,7 +226,7 @@ static uint8_t make_info_frame(void * _self, uint8_t pf) {
 
 
 
-static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8_t task_id, uint8_t prog_id) {
+static void eap_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8_t task_id) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	uint8_t tx_seq_tmp, rx_seq_tmp;
@@ -239,7 +239,7 @@ static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8
 
 		
 	r->frame_header = make_info_frame(bus, pf);
-	r->program_id = prog_id;
+	r->program_id = API_PROG_ID;
 	r->task_id = task_id;
 	memcpy(&(r->mail_header), data, size);
 
@@ -256,16 +256,16 @@ static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8
 	send_packet(r, BUSMAIL_PACKET_OVER_HEAD - 1 + size, bus->fd);
 	free(r);
 	
-	/* Update packet counter. For compatability with 
-	   Natalie 12.13, tx_seq_l needs to equal 1, not 0, on wrap. */
+	/* Update packet counter. */
+
 	bus->tx_seq_l++;
-	if (bus->tx_seq_l == 8) {
-		bus->tx_seq_l = 1;
+	if (bus->tx_seq_l == 0x10) {
+		bus->tx_seq_l = 0;
 	}
 }
 
 
-void busmail_send(void * _self, uint8_t * data, int size) {
+void eap_send(void * _self, uint8_t * data, int size) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);
@@ -278,13 +278,13 @@ void busmail_send(void * _self, uint8_t * data, int size) {
 	//util_dump(tx->data, tx->size, "fifo_add");
 	//fifo_add(tx_fifo, tx);
        
-	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id, API_PROG_ID);
+	eap_tx(bus, tx->data, tx->size, PF, tx->task_id);
 	free(tx);
 }
 
 
 /* Needed for test commands */
-void busmail_send0(void * _self, uint8_t * data, int size) {
+void eap_send0(void * _self, uint8_t * data, int size) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);
@@ -296,38 +296,8 @@ void busmail_send0(void * _self, uint8_t * data, int size) {
 
 	//fifo_add(tx_fifo, tx);
 
-	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id, API_PROG_ID);
+	eap_tx(bus, tx->data, tx->size, PF, tx->task_id);
 	free(tx);
-}
-
-
-void busmail_send_prog(void * _self, uint8_t * data, int size, int prog_id) {
-
-	busmail_connection_t * bus = (busmail_connection_t *) _self;
-	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);
-	
-	tx->data = malloc(size);
-	memcpy(tx->data, data, size);
-	tx->task_id = 0;
-	tx->size = size;
-
-	//fifo_add(tx_fifo, tx);
-
-	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id, prog_id);
-	free(tx);
-}
-
-
-void busmail_ack(void * _self) {
-
-	busmail_connection_t * bus = (busmail_connection_t *) _self;
-	uint8_t sh, rx_seq_tmp;
-
-	sh = make_supervisory_frame(bus, SUID_RR, NO_PF);
-	rx_seq_tmp = (sh & RX_SEQ_MASK) >> RX_SEQ_OFFSET;
-	
-	printf("\nWRITE: BUSMAIL_ACK %d\n", rx_seq_tmp);
-	send_packet(&sh, 1, bus->fd);
 }
 
 
@@ -383,9 +353,10 @@ static void information_frame(void * _self, packet_t *p) {
 
 
 	/* Drop unwanted frames */
-	if( m->program_id != API_PROG_ID ) {
-		return;
-	}
+	/* if( m->program_id != API_PROG_ID ) { */
+	/* 	printf("Drop bad prog id: %x\n", m->program_id); */
+	/* 	return; */
+	/* } */
 
 	packet_dump(p);
 	
@@ -401,28 +372,18 @@ static void information_frame(void * _self, packet_t *p) {
 
 	/* ACK the recieved package */
 	bus->rx_seq_l = bus->tx_seq_r + 1;
-	if (bus->rx_seq_l == 8) {
+	if (bus->rx_seq_l == 0x10) {
 		bus->rx_seq_l = 0;
 	}
 
 	/* Process application frame. The application frame callback will enqueue 
 	   outgoing packets on tx_fifo and directly transmit packages with busmail_send() */
 	bus->application_frame(p);
-
-	/* Send packet to connected client */
-	/* client_p.type = CLIENT_PKT_TYPE; */
-	/* client_p.size = CLIENT_PKT_HEADER_SIZE + p->size - 3; */
-	/* memcpy(&(client_p.data), &(p->data[3]), p->size - 3); */
-	/* util_dump(&p->data[3], p->size - 3, "[TO CLIENT]"); */
-	/* list_each(client_list, send_to_client); */
-
-	/* Always ack with control frame */
-	busmail_ack(bus);
 }
 
 
 
-int busmail_write(void * _self, event_t * e) {
+int eap_write(void * _self, event_t * e) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	
@@ -434,7 +395,7 @@ int busmail_write(void * _self, event_t * e) {
 }
 
 
-int busmail_get(void * _self, packet_t *p) {
+int eap_get(void * _self, packet_t *p) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	int i, start, stop, size, read = 0;
@@ -494,19 +455,7 @@ int busmail_get(void * _self, packet_t *p) {
 }
 
 
-void packet_dump(packet_t *p) {
-	
-	int i;
-
-	printf("\n[PACKET %d] - ", p->size);
-	for (i = 0; i < p->size; i++) {
-		printf("%02x ", p->data[i]);
-	}
-	printf("\n");
-}
-
-
-void busmail_dispatch(void * _self) {
+void eap_dispatch(void * _self) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	packet_t packet;
@@ -516,41 +465,15 @@ void busmail_dispatch(void * _self) {
 	/* Process whole packets in buffer */
 	while ( busmail_get(bus, p) == 0) {
 
-		m = (busmail_t *) &p->data[0];
+		/* No control frames in EAP */
+		information_frame(bus, p);
 
-		/* Route packet based on type */
-		switch (m->frame_header & PACKET_TYPE_MASK) {
-		
-		case INFORMATION_FRAME:
-			information_frame(bus, p);
-			break;
-
-		case CONTROL_FRAME:
-
-			switch (m->frame_header & CONTROL_FRAME_MASK) {
-			
-			case UNNUMBERED_CONTROL_FRAME:
-				printf("UNNUMBERED_CONTROL_FRAME\n");
-				unnumbered_control_frame(bus, p);
-				break;
-
-			case SUPERVISORY_CONTROL_FRAME:
-				supervisory_control_frame(bus, p);
-				break;
-			}
-
-			break;
-
-		default:
-			printf("Unknown packet header: %x\n", m->frame_header);
-
-		}
 	}
 }
 
 
 
-void * busmail_new(int fd, void (*app_handler)(packet_t *)) {
+void * eap_new(int fd, void (*app_handler)(packet_t *)) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) calloc(sizeof(busmail_connection_t), 1);
 
@@ -558,7 +481,6 @@ void * busmail_new(int fd, void (*app_handler)(packet_t *)) {
 	bus->application_frame = app_handler;
 	bus->tx_fifo = fifo_new();
 	bus->buf = buffer_new(500);
-	//bus->name = malloc(strlen(name));
 
 	reset_counters(bus);
 

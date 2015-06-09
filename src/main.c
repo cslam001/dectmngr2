@@ -20,6 +20,7 @@
 #include "nvs.h"
 #include "test.h"
 #include "list.h"
+#include "busmail.h"
 
 config_t c;
 config_t *config = &c;
@@ -36,9 +37,25 @@ void sighandler(int signum, siginfo_t * info, void * ptr) {
 }
 
 void * client_list;
+void * client_bus;
+int client_connected = 0;
+extern void * dect_bus;
 
 void list_connected(int fd) {
 	printf("connected fd:s : %d\n", fd);
+}
+
+void eap(packet_t *p) {
+	
+	int i;
+
+	printf("send to dect_bus\n");
+	packet_dump(p);
+	
+	busmail_send0(dect_bus, &p->data[3], p->size - 3);
+	
+	/* /\* For RSX *\/ */
+	/* busmail_send_prog(dect_bus, &p->data[3], p->size - 3, 0x81); */
 }
 
 
@@ -100,8 +117,8 @@ int main(int argc, char * argv[]) {
 	/* Setup listening socket */
 	memset(&my_addr, 0, sizeof(my_addr));
 	my_addr.sin_family = AF_INET;
-	my_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	my_addr.sin_port = htons(7777);
+	my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	my_addr.sin_port = htons(10468);
 	
 	if ( (listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ) {
 		exit_failure("socket");
@@ -185,6 +202,11 @@ int main(int argc, char * argv[]) {
 					/* Add client */
 					list_add(client_list, client_fd);
 					list_each(client_list, list_connected);
+
+					/* Setup client busmail connection */
+					printf("setup client_bus\n");
+					client_bus = eap_new(client_fd, eap);
+					client_connected = 1;
 				}
 				
 			} else {
@@ -192,11 +214,11 @@ int main(int argc, char * argv[]) {
 				client_fd = events[i].data.fd;
 				
 				/* Client connection */
-				ret = recv(client_fd, buf, sizeof(buf), 0);
-				if ( ret == -1 ) {
+				e->incount = recv(client_fd, inbuf, BUF_SIZE, 0);
+				if ( e->incount == -1 ) {
 					
 					perror("recv");
-				} else if ( ret == 0 ) {
+				} else if ( e->incount == 0 ) {
 
 					/* Deregister fd */
 					if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL) == -1) {
@@ -212,15 +234,23 @@ int main(int argc, char * argv[]) {
 					list_delete(client_list, client_fd);
 					list_each(client_list, list_connected);
 
+					/* Destroy client connection object here */
+
 				} else {
 
 					/* Data is read from client */
-					/* We should buffer packet here to make 
-					   sure we send a complete application frame */
-					util_dump(buf, ret, "[CLIENT]");
-					busmail_send(buf, ret);
+					util_dump(e->in, e->incount, "[CLIENT]");
+
+					/* Send packets from clients to dect_bus */
+					eap_write(client_bus, e);
+					eap_dispatch(client_bus);
+
+					/* Reset event_t */
+					e->outcount = 0;
+					e->incount = 0;
+					memset(e->out, 0, BUF_SIZE);
+					memset(e->in, 0, BUF_SIZE);
 				}
-				
 			}
 		}
 	}
