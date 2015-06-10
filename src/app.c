@@ -36,7 +36,7 @@ void * dect_bus;
 
 ApiCallReferenceType incoming_call;
 ApiCallReferenceType outgoing_call;
-ApiSystemCallIdType internal_call;
+ApiSystemCallIdType * internal_call;
 
 #ifndef RSOFFSETOF
 /*! \def RSOFFSETOF(type, field)                                                                                                                        
@@ -79,10 +79,11 @@ static void print_status(RsStatusType s) {
 }
 
 
-static void get_system_call_id(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
+static ApiSystemCallIdType * get_system_call_id(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
 
 	ApiInfoElementType * info;
 	ApiSystemCallIdType * callid;
+	ApiSystemCallIdType * id;
 	
 	info = ApiGetInfoElement(InfoElement, InfoElementLength, API_IE_SYSTEM_CALL_ID);
 	if ( info && info->IeLength > 0 ) {
@@ -94,14 +95,19 @@ static void get_system_call_id(ApiInfoElementType * InfoElement, rsuint16 InfoEl
 		case API_SUB_CALL_ID:
 			printf("API_SUB_CALL_ID\n");
 			printf("ApiSystemCallId: %d\n", callid->ApiSystemCallId);
+			id = malloc(sizeof(ApiSystemCallIdType));
+			memcpy(id, &(callid->ApiSystemCallId), sizeof(ApiSystemCallIdType));
+			return id;
 			break;
 
 		case API_SUB_CALL_ID_UPDATE:
 			printf("API_SUB_CALL_ID_UPDATE\n");
+			return NULL;
 			break;
 
 		case API_SUB_CALL_ID_INVALID:
 			printf("API_SUB_CALL_ID_INVALID\n");
+			return NULL;
 			break;
 		}
 
@@ -143,6 +149,7 @@ static void connect_ind(busmail_t *m) {
 	rsuint16 ie_block_len = 0;
 
 	printf("CallReference: %x\n", p->CallReference);
+	
 
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
@@ -154,7 +161,7 @@ static void connect_ind(busmail_t *m) {
 			    &ie_block_len,
 			    API_IE_SYSTEM_CALL_ID,
 			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) &internal_call);
+			    (rsuint8 *) internal_call);
 
 	
 	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len));
@@ -214,7 +221,7 @@ static void alert_ind(busmail_t *m) {
 			    &ie_block_len,
 			    API_IE_SYSTEM_CALL_ID,
 			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) &internal_call);
+			    (rsuint8 *) internal_call);
 
 
 	r = malloc(sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);	
@@ -272,7 +279,7 @@ static void connect_cfm(busmail_t *m) {
 			    &ie_block_len,
 			    API_IE_SYSTEM_CALL_ID,
 			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) &internal_call);
+			    (rsuint8 *) internal_call);
 	
 
 	ApiFpCcInfoReqType * ir = (ApiFpCcInfoReqType *) malloc( sizeof(ApiFpCcInfoReqType) - 1 + ie_block_len);
@@ -448,7 +455,7 @@ static void setup_ind(busmail_t *m) {
 	incoming_call = p->CallReference;
 	
 	if ( p->InfoElementLength > 0 ) {
-		get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+		internal_call = get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 	}
 
 
@@ -473,7 +480,7 @@ static void setup_ind(busmail_t *m) {
 			    &ie_block_len,
 			    API_IE_SYSTEM_CALL_ID,
 			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) &internal_call);
+			    (rsuint8 *) internal_call);
 
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
@@ -506,7 +513,7 @@ static void setup_ind(busmail_t *m) {
 			    &ie_block_len,
 			    API_IE_SYSTEM_CALL_ID,
 			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) &internal_call);
+			    (rsuint8 *) internal_call);
 
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
