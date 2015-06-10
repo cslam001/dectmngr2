@@ -142,9 +142,8 @@ static void connect_ind(busmail_t *m) {
 	ApiInfoElementType * ie_block = NULL;
 	rsuint16 ie_block_len = 0;
 
-	printf("handset: %d\n", p->CallReference.Instance.Fp);
+	printf("CallReference: %x\n", p->CallReference);
 
-	
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
 			    API_IE_CODEC_LIST,
@@ -178,6 +177,7 @@ static void alert_cfm(busmail_t *m) {
 	ApiFpCcAlertCfmType * p = (ApiFpCcAlertCfmType *) &m->mail_header;
 
 	printf("CallReference: %x\n", p->CallReference);
+	print_status(p->Status);
 }
 
 
@@ -244,12 +244,11 @@ static void connect_cfm(busmail_t *m) {
 
 	ApiFpCcConnectResType res = {
 		.Primitive = API_FP_CC_CONNECT_RES,
-		.CallReference = incoming_call,
+		.CallReference = outgoing_call,
 		.Status = RSS_SUCCESS,
 		.InfoElementLength = 0,
 	};
 	
-
 
 
 	printf("API_FP_CC_CONNECT_RES\n");
@@ -264,13 +263,8 @@ static void setup_cfm(busmail_t *m) {
 	ApiFpCcSetupCfmType * p = (ApiFpCcSetupCfmType *) &m->mail_header;
 	
 	printf("SystemCallId: %x\n", p->SystemCallId);
-	printf("Status: %x\n", p->Status);
 	
 	print_status(p->Status);
-
-	/* if ( p->InfoElementLength > 0 ) { */
-	/* 	get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength); */
-	/* } */
 
 	outgoing_call = p->CallReference;
 	printf("outgoing_call: %x\n", p->CallReference);
@@ -496,10 +490,11 @@ static void setup_ind(busmail_t *m) {
 
 	req->Primitive = API_FP_CC_SETUP_REQ;
 	req->TerminalId = 2;
+	req->CallReference.Value = 0;
 	req->AudioId.SourceTerminalId = 1;
 	req->AudioId.IntExtAudio = API_IEA_INT;
 	req->BasicService = API_BASIC_SPEECH;
-	req->CallClass = API_CC_NORMAL;
+	req->CallClass = API_CC_INTERNAL;
 	req->Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2;
 	req->InfoElementLength = ie_block_len;
 
