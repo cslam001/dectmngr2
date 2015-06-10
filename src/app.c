@@ -58,6 +58,36 @@ const rsuint16 NarrowBandCodecIeLen = (RSOFFSETOF(ApiInfoElementType, IeData) + 
 
 
 
+static void get_system_call_id(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
+
+	ApiInfoElementType * info;
+	ApiSystemCallIdType * callid;
+	
+	info = ApiGetInfoElement(InfoElement, InfoElementLength, API_IE_SYSTEM_CALL_ID);
+	if ( info && info->IeLength > 0 ) {
+		printf("API_IE_SYSTEM_CALL_ID\n");
+		callid = (ApiSystemCallIdType *) &info->IeData[0];
+			
+		switch ( callid->ApiSubId ) {
+
+		case API_SUB_CALL_ID:
+			printf("API_SUB_CALL_ID\n");
+			printf("ApiSystemCallId: %d\n", callid->ApiSystemCallId);
+			break;
+
+		case API_SUB_CALL_ID_UPDATE:
+			printf("API_SUB_CALL_ID_UPDATE\n");
+			break;
+
+		case API_SUB_CALL_ID_INVALID:
+			printf("API_SUB_CALL_ID_INVALID\n");
+			break;
+		}
+
+	}
+}
+
+
 
 static void dect_conf_init(void)
 {
@@ -107,7 +137,6 @@ static void connect_ind(busmail_t *m) {
 			    (rsuint8 *) &internal_call);
 
 	
-
 	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len));
 
         req->Primitive = API_FP_CC_CONNECT_REQ;
@@ -123,11 +152,15 @@ static void connect_ind(busmail_t *m) {
 }
 
 
+
+
 static void connect_cfm(busmail_t *m) {
 	
 	ApiFpCcConnectCfmType * p = (ApiFpCcConnectCfmType *) &m->mail_header;
 
-	printf("connected to handset: %d\n", p->CallReference.Instance.Fp);
+	if ( p->InfoElementLength > 0 ) {
+		get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+	}
 
 	ApiFpCcConnectResType res = {
 		.Primitive = API_FP_CC_CONNECT_RES,
@@ -136,6 +169,9 @@ static void connect_cfm(busmail_t *m) {
 		.InfoElementLength = 0,
 	};
 	
+
+
+
 	printf("API_FP_CC_CONNECT_RES\n");
 	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
 
@@ -146,9 +182,14 @@ static void connect_cfm(busmail_t *m) {
 static void setup_cfm(busmail_t *m) {
 	
 	ApiFpCcSetupCfmType * p = (ApiFpCcSetupCfmType *) &m->mail_header;
+	
+	printf("SystemCallId: %d\n", p->SystemCallId);
+
+	/* if ( p->InfoElementLength > 0 ) { */
+	/* 	get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength); */
+	/* } */
 
 	outgoing_call = p->CallReference;
-	printf("handset: %d\n", p->CallReference.Instance.Fp);
 	printf("outgoing_call: %x\n", p->CallReference);
 }
 
@@ -298,22 +339,12 @@ static void setup_ind(busmail_t *m) {
 	printf("InfoElementLength: %d\n", p->InfoElementLength);
 	
 	incoming_call = p->CallReference;
-
-	if ( p->InfoElementLength > 0 ) {
-
-		info = ApiGetInfoElement(p->InfoElement, p->InfoElementLength, API_IE_MULTIKEYPAD);
-		if ( info && info->IeLength > 0 ) {
-			printf("API_IE_MULTIKEYPAD\n");
-		}
-
-		info = ApiGetInfoElement(p->InfoElement, p->InfoElementLength, API_IE_SYSTEM_CALL_ID);
-		if ( info && info->IeLength > 0 ) {
-			printf("API_IE_SYSTEM_CALL_ID\n");
-			memcpy(&internal_call, &info->IeData[0], info->IeLength);
-		}
-
-	}
 	
+	if ( p->InfoElementLength > 0 ) {
+		get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+	}
+
+
 	/* Reply to initiating handset */
 	ApiFpCcSetupResType res = {
 		.Primitive = API_FP_CC_SETUP_RES,
