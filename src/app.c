@@ -152,6 +152,56 @@ static void connect_ind(busmail_t *m) {
 }
 
 
+static void alert_cfm(busmail_t *m) {
+
+	ApiFpCcAlertCfmType * p = (ApiFpCcAlertCfmType *) &m->mail_header;
+
+	printf("CallReference: %x\n", p->CallReference);
+}
+
+
+static void alert_ind(busmail_t *m) {
+
+	ApiFpCcAlertIndType * p = (ApiFpCcAlertIndType *) &m->mail_header;
+	ApiFpCcAlertReqType * r;
+	ApiInfoElementType * ie_block = NULL;
+	rsuint16 ie_block_len = 0;
+	ApiCallStatusType call_status;
+
+
+	printf("CallReference: %x\n", p->CallReference);
+	
+	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
+	call_status.CallStatusValue.State = API_CSS_CALL_ALERTING;
+
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_CALL_STATUS,
+			    sizeof(ApiCallStatusType),
+			    (rsuint8 *) &call_status);
+
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_SYSTEM_CALL_ID,
+			    sizeof(ApiSystemCallIdType),
+			    (rsuint8 *) &internal_call);
+
+
+	r = malloc(sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);	
+
+        r->Primitive = API_FP_CC_ALERT_REQ;
+	r->CallReference = incoming_call;
+        r->InfoElementLength = ie_block_len;
+        memcpy(r->InfoElement,(rsuint8*)ie_block, ie_block_len);
+	
+	printf("API_FP_CC_ALERT_REQ\n");
+	busmail_send(dect_bus, (uint8_t *) r, sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
+	free(r);
+
+
+
+	
+}
 
 
 static void connect_cfm(busmail_t *m) {
@@ -334,7 +384,7 @@ static void setup_ind(busmail_t *m) {
 	rsuint16 ie_block_len = 0;
 
 
-	printf("CallReference: %d\n", p->CallReference);
+	printf("CallReference: %x\n", p->CallReference);
 	printf("TerminalIdInitiating: %d\n", p->TerminalId);
 	printf("InfoElementLength: %d\n", p->InfoElementLength);
 	
@@ -554,6 +604,16 @@ static void application_frame(packet_t *p) {
 		case API_FP_CC_CONNECT_CFM:
 			printf("API_FP_CC_CONNECT_CFM\n");
 			connect_cfm(m);
+			break;
+
+		case API_FP_CC_ALERT_IND:
+			printf("API_FP_CC_ALERT_IND\n");
+			alert_ind(m);
+			break;
+
+		case API_FP_CC_ALERT_CFM:
+			printf("API_FP_CC_ALERT_CFM\n");
+			alert_cfm(m);
 			break;
 
 		}
