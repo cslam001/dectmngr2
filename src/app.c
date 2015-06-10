@@ -287,7 +287,11 @@ static void setup_ind(busmail_t *m) {
 	ApiInfoElementType* info;
 	ApiMultikeyPadType * keypad_entr = NULL;
         unsigned char keypad_len;
+	ApiCallStatusType call_status;
 	int i;
+	ApiInfoElementType * ie_block = NULL;
+	rsuint16 ie_block_len = 0;
+
 
 	printf("CallReference: %d\n", p->CallReference);
 	printf("TerminalIdInitiating: %d\n", p->TerminalId);
@@ -322,7 +326,25 @@ static void setup_ind(busmail_t *m) {
 	printf("API_FP_CC_SETUP_RES\n");
 	busmail_send(dect_bus, (uint8_t *)&res, sizeof(ApiFpCcSetupResType));
 
-	ApiFpCcSetupReqType * req = (ApiFpCcSetupReqType *) malloc(sizeof(ApiFpCcSetupReqType) - 1 + info->IeLength);
+
+	/* Setup req */
+	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
+	call_status.CallStatusValue.State = API_CSS_CALL_SETUP;
+	
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_SYSTEM_CALL_ID,
+			    sizeof(ApiSystemCallIdType),
+			    (rsuint8 *) &internal_call);
+
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_CALL_STATUS,
+			    sizeof(ApiCallStatusType),
+			    (rsuint8 *) &call_status);
+
+
+	ApiFpCcSetupReqType * req = (ApiFpCcSetupReqType *) malloc(sizeof(ApiFpCcSetupReqType) - 1 + ie_block_len);
 	/* Connection request to dialed handset */
 	req->Primitive = API_FP_CC_SETUP_REQ;
 	req->TerminalId = 2;
@@ -331,12 +353,12 @@ static void setup_ind(busmail_t *m) {
 	req->BasicService = API_BASIC_SPEECH;
 	req->CallClass = API_CC_NORMAL;
 	req->Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2;
-	req->InfoElementLength = info->IeLength;
+	req->InfoElementLength = ie_block_len;
 
-	memcpy(req->InfoElement, info, info->IeLength);
+	memcpy(req->InfoElement, ie_block, ie_block_len);
 
 	printf("API_FP_CC_SETUP_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)req, sizeof(ApiFpCcSetupReqType));
+	busmail_send(dect_bus, (uint8_t *)req, sizeof(ApiFpCcSetupReqType) - 1 + ie_block_len);
 	free(req);
 
 	return;
