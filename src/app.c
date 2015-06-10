@@ -55,7 +55,7 @@ rsuint8 NarrowCodecArr[30];
 rsuint8 WideCodecArr[30];
 ApiInfoElementType * NarrowBandCodecIe = (ApiInfoElementType*) NarrowCodecArr;
 const rsuint16 NarrowBandCodecIeLen = (RSOFFSETOF(ApiInfoElementType, IeData) + 6);
-
+ApiCodecListType * codecs;
 
 static void print_status(RsStatusType s) {
 
@@ -115,6 +115,28 @@ static ApiSystemCallIdType * get_system_call_id(ApiInfoElementType * InfoElement
 }
 
 
+static ApiCodecListType * get_codecs(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
+
+	ApiInfoElementType * info;
+	ApiCodecListType * list;
+	
+	info = ApiGetInfoElement(InfoElement, InfoElementLength, API_IE_CODEC_LIST);
+	if ( info && info->IeLength > 0 ) {
+		printf("API_IE_CODEC_LIST\n");
+		list = (ApiSystemCallIdType *) &info->IeData[0];
+		printf("NegotiationIndicator: %x\n", list->NegotiationIndicator);
+		printf("NoOfCodecs: %x\n", list->NoOfCodecs);
+		printf("NoOfCodecs: %x\n", info->IeLength);
+
+		list = malloc(info->IeLength);
+
+		return list;
+	}
+
+	return NULL;
+}
+
+
 
 static void dect_conf_init(void)
 {
@@ -149,13 +171,17 @@ static void connect_ind(busmail_t *m) {
 	rsuint16 ie_block_len = 0;
 
 	printf("CallReference: %x\n", p->CallReference);
-	
+	printf("p->InfoElementLength: %d\n", p->InfoElementLength);
 
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_CODEC_LIST,
-			    NarrowBandCodecIe->IeLength,
-			    (rsuint8 *) NarrowBandCodecIe->IeData);
+	if (p->InfoElementLength > 0) {
+		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+	}
+
+	/* ApiBuildInfoElement(&ie_block, */
+	/* 		    &ie_block_len, */
+	/* 		    API_IE_CODEC_LIST, */
+	/* 		    NarrowBandCodecIe->IeLength, */
+	/* 		    (rsuint8 *) NarrowBandCodecIe->IeData); */
 
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
@@ -205,8 +231,12 @@ static void alert_ind(busmail_t *m) {
 	rsuint16 ie_block_len = 0;
 	ApiCallStatusType call_status;
 
-
 	printf("CallReference: %x\n", p->CallReference);
+	printf("p->InfoElementLength: %d\n", p->InfoElementLength);
+
+	if (p->InfoElementLength > 0) {
+		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+	}
 	
 	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
 	call_status.CallStatusValue.State = API_CSS_CALL_ALERTING;
