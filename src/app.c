@@ -503,7 +503,7 @@ static void setup_ind(busmail_t *m) {
 	ApiMultikeyPadType * keypad_entr = NULL;
         unsigned char keypad_len;
 	ApiCallStatusType call_status;
-	int i;
+	int i, called_hs, calling_hs;
 	ApiInfoElementType * ie_block = NULL;
 	rsuint16 ie_block_len = 0;
 
@@ -515,6 +515,14 @@ static void setup_ind(busmail_t *m) {
 	printf("CallClass: %d\n", p->CallClass);
 	
 	incoming_call = p->CallReference;
+	
+	if ( p->TerminalId == 1 ) {
+		calling_hs = 1;
+		called_hs = 2;
+	} else {
+		calling_hs = 2;
+		called_hs = 1; 
+	}
 	
 	if ( p->InfoElementLength > 0 ) {
 		internal_call = get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
@@ -531,7 +539,7 @@ static void setup_ind(busmail_t *m) {
 		.CallReference = incoming_call,
 		.Status = RSS_SUCCESS,
 		.AudioId.IntExtAudio = API_IEA_INT,
-		.AudioId.SourceTerminalId = 2,
+		.AudioId.SourceTerminalId = called_hs,
 	};
 
 	printf("API_FP_CC_SETUP_RES\n");
@@ -591,9 +599,9 @@ static void setup_ind(busmail_t *m) {
 	ApiFpCcSetupReqType * req = (ApiFpCcSetupReqType *) malloc(sizeof(ApiFpCcSetupReqType) - 1 + ie_block_len);
 
 	req->Primitive = API_FP_CC_SETUP_REQ;
-	req->TerminalId = 2;
+	req->TerminalId = called_hs;
 	req->CallReference.Value = 0;
-	req->AudioId.SourceTerminalId = 1;
+	req->AudioId.SourceTerminalId = calling_hs;
 	req->AudioId.IntExtAudio = API_IEA_INT;
 	req->BasicService = API_WIDEBAND_SPEECH;
 	//req->BasicService = API_BASIC_SPEECH;
