@@ -311,31 +311,6 @@ static void connect_cfm(busmail_t *m) {
 	
 	printf("API_FP_CC_CONNECT_RES\n");
 	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
-
-	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
-	call_status.CallStatusValue.State = API_CSS_CALL_CONNECT;
-
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_CALL_STATUS,
-			    sizeof(ApiCallStatusType),
-			    (rsuint8 *) &call_status);
-
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_SYSTEM_CALL_ID,
-			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) internal_call);
-	
-
-	ApiFpCcInfoReqType * ir = (ApiFpCcInfoReqType *) malloc( sizeof(ApiFpCcInfoReqType) - 1 + ie_block_len);
-	ir->Primitive = API_FP_CC_INFO_REQ;
-	ir->CallReference = outgoing_call;
-	ir->InfoElementLength = ie_block_len;
-        memcpy(ir->InfoElement,(rsuint8*)ie_block, ie_block_len);
-
-	busmail_send(dect_bus, (uint8_t *)ir, sizeof(ApiFpCcInfoReqType) - 1 + ie_block_len);
-	free(ir);
 }
 
 
