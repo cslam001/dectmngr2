@@ -55,7 +55,10 @@ rsuint8 NarrowCodecArr[30];
 rsuint8 WideCodecArr[30];
 ApiInfoElementType * NarrowBandCodecIe = (ApiInfoElementType*) NarrowCodecArr;
 const rsuint16 NarrowBandCodecIeLen = (RSOFFSETOF(ApiInfoElementType, IeData) + 6);
-ApiCodecListType * codecs;
+ApiInfoElementType * WideBandCodecIe = (ApiInfoElementType*) WideCodecArr;
+const rsuint16 WideBandCodecIeLen = (RSOFFSETOF(ApiInfoElementType, IeData) + 6);
+
+ApiCodecListType * codecs = NULL;
 
 static void print_status(RsStatusType s) {
 
@@ -126,9 +129,9 @@ static ApiCodecListType * get_codecs(ApiInfoElementType * InfoElement, rsuint16 
 		list = (ApiSystemCallIdType *) &info->IeData[0];
 		printf("NegotiationIndicator: %x\n", list->NegotiationIndicator);
 		printf("NoOfCodecs: %x\n", list->NoOfCodecs);
-		printf("NoOfCodecs: %x\n", info->IeLength);
 
 		list = malloc(info->IeLength);
+		memcpy(list, &info->IeData[0], info->IeLength);
 
 		return list;
 	}
@@ -149,14 +152,14 @@ static void dect_conf_init(void)
 	NarrowBandCodecIe->IeData[4] = 0x00;  // CplaneRouting  API_CPR_CS
 	NarrowBandCodecIe->IeData[5] = 0x04;  // SlotSize API_SS_FS fullslot
 
-	/* WideBandCodecIe->Ie = API_IE_CODEC_LIST; */
-	/* WideBandCodecIe->IeLength  = 6; */
-	/* WideBandCodecIe->IeData[0] = 0x01; */
-	/* WideBandCodecIe->IeData[1] = 0x01; */
-	/* WideBandCodecIe->IeData[2] = 0x03; */
-	/* WideBandCodecIe->IeData[3] = 0x00; */
-	/* WideBandCodecIe->IeData[4] = 0x00; */
-	/* WideBandCodecIe->IeData[5] = 0x01; */
+	WideBandCodecIe->Ie = API_IE_CODEC_LIST;
+	WideBandCodecIe->IeLength  = 6;
+	WideBandCodecIe->IeData[0] = 0x01;
+	WideBandCodecIe->IeData[1] = 0x01;
+	WideBandCodecIe->IeData[2] = 0x03;
+	WideBandCodecIe->IeData[3] = 0x00;
+	WideBandCodecIe->IeData[4] = 0x00;
+	WideBandCodecIe->IeData[5] = 0x01;
 
 	return;
 }
@@ -172,16 +175,17 @@ static void connect_ind(busmail_t *m) {
 
 	printf("CallReference: %x\n", p->CallReference);
 	printf("p->InfoElementLength: %d\n", p->InfoElementLength);
+	printf("internal_call: %x\n", internal_call->ApiSystemCallId);
 
 	if (p->InfoElementLength > 0) {
 		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 	}
 
-	/* ApiBuildInfoElement(&ie_block, */
-	/* 		    &ie_block_len, */
-	/* 		    API_IE_CODEC_LIST, */
-	/* 		    NarrowBandCodecIe->IeLength, */
-	/* 		    (rsuint8 *) NarrowBandCodecIe->IeData); */
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_CODEC_LIST,
+			    WideBandCodecIe->IeLength,
+			    (rsuint8 *) WideBandCodecIe->IeData);
 
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
@@ -196,13 +200,23 @@ static void connect_ind(busmail_t *m) {
 	req->CallReference = incoming_call;
         req->InfoElementLength = ie_block_len;
         memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len);
-	
+
 	printf("API_FP_CC_CONNECT_REQ\n");
 	busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
 	free(req);
 
 
 }
+
+
+static void reject_ind(busmail_t *m) {
+
+	ApiFpCcRejectIndType * p = (ApiFpCcRejectIndType *) &m->mail_header;
+
+	printf("CallReference: %x\n", p->CallReference);
+	printf("Reason: %x\n", p->Reason);
+}
+
 
 
 static void alert_cfm(busmail_t *m) {
@@ -326,9 +340,41 @@ static void connect_cfm(busmail_t *m) {
 static void info_ind(busmail_t *m) {
 
 	ApiFpCcInfoIndType * p = (ApiFpCcInfoIndType *) &m->mail_header;
-	
+	rsuint16 ie_block_len = 0;
+	ApiInfoElementType * ie_block = NULL;
+	ApiCallStatusType call_status;
+
 	printf("CallReference: %x\n", p->CallReference);
 	
+	/* /\* Call progress state to initiating handset *\/ */
+	/* /\* call_status.CallStatusSubId = API_SUB_CALL_STATUS; *\/ */
+	/* /\* call_status.CallStatusValue.State = API_CSS_CALL_PROC; *\/ */
+	
+	/* ApiBuildInfoElement(&ie_block, */
+	/* 		    &ie_block_len, */
+	/* 		    API_IE_SYSTEM_CALL_ID, */
+	/* 		    sizeof(ApiSystemCallIdType), */
+	/* 		    (rsuint8 *) internal_call); */
+
+	/* /\* ApiBuildInfoElement(&ie_block, *\/ */
+	/* /\* 		    &ie_block_len, *\/ */
+	/* /\* 		    API_IE_CALL_STATUS, *\/ */
+	/* /\* 		    sizeof(ApiCallStatusType), *\/ */
+	/* /\* 		    (rsuint8 *) &call_status); *\/ */
+
+
+	/* ApiFpCcInfoReqType * r = (ApiFpCcInfoReqType *) malloc(sizeof(ApiFpCcInfoReqType) - 1 + ie_block_len); */
+	/* r->Primitive = API_FP_CC_INFO_REQ; */
+	/* r->CallReference = incoming_call; */
+	/* r->Signal = API_CC_SIGNAL_TONES_OFF; */
+	/* r->ProgressInd = API_IN_BAND_NOT_AVAILABLE; */
+	
+	/* memcpy(r->InfoElement, ie_block, ie_block_len); */
+
+	/* printf("API_FP_CC_INFO_REQ\n"); */
+	/* busmail_send(dect_bus, (uint8_t *)r, sizeof(ApiFpCcInfoReqType) - 1 + ie_block_len); */
+	/* free(r); */
+
 }
 
 static void setup_cfm(busmail_t *m) {
@@ -488,14 +534,19 @@ static void setup_ind(busmail_t *m) {
 	printf("CallReference: %x\n", p->CallReference);
 	printf("TerminalIdInitiating: %d\n", p->TerminalId);
 	printf("InfoElementLength: %d\n", p->InfoElementLength);
+	printf("BasicService: %d\n", p->BasicService);
+	printf("CallClass: %d\n", p->CallClass);
 	
 	incoming_call = p->CallReference;
 	
 	if ( p->InfoElementLength > 0 ) {
 		internal_call = get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 		printf("internal_call: %x\n", internal_call->ApiSystemCallId);
+
+		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 	}
 
+		
 
 	/* Reply to initiating handset */
 	ApiFpCcSetupResType res = {
@@ -512,7 +563,7 @@ static void setup_ind(busmail_t *m) {
 
 	/* Call progress state to initiating handset */
 	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
-	call_status.CallStatusValue.State = API_CSS_CALL_SETUP_ACK;
+	call_status.CallStatusValue.State = API_CSS_CALL_PROC;
 	
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
@@ -567,7 +618,8 @@ static void setup_ind(busmail_t *m) {
 	req->CallReference.Value = 0;
 	req->AudioId.SourceTerminalId = 1;
 	req->AudioId.IntExtAudio = API_IEA_INT;
-	req->BasicService = API_BASIC_SPEECH;
+	req->BasicService = API_WIDEBAND_SPEECH;
+	//req->BasicService = API_BASIC_SPEECH;
 	req->CallClass = API_CC_INTERNAL;
 	req->Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2;
 	req->InfoElementLength = ie_block_len;
@@ -578,6 +630,7 @@ static void setup_ind(busmail_t *m) {
 	busmail_send(dect_bus, (uint8_t *)req, sizeof(ApiFpCcSetupReqType) - 1 + ie_block_len);
 	free(req);
 
+	printf("\n\n");
 	return;
 }
 
@@ -730,6 +783,7 @@ static void application_frame(packet_t *p) {
 
 		case API_FP_CC_REJECT_IND:
 			printf("API_FP_CC_REJECT_IND\n");
+			reject_ind(m);
 			break;
 
 		case API_FP_CC_CONNECT_IND:
