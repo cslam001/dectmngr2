@@ -94,9 +94,9 @@ static ApiSystemCallIdType * get_system_call_id(ApiInfoElementType * InfoElement
 
 		case API_SUB_CALL_ID:
 			printf("API_SUB_CALL_ID\n");
-			printf("ApiSystemCallId: %d\n", callid->ApiSystemCallId);
 			id = malloc(sizeof(ApiSystemCallIdType));
-			memcpy(id, &(callid->ApiSystemCallId), sizeof(ApiSystemCallIdType));
+			memcpy(id, callid, sizeof(ApiSystemCallIdType));
+			printf("callid: %x\n", id->ApiSystemCallId);
 			return id;
 			break;
 
@@ -323,6 +323,13 @@ static void connect_cfm(busmail_t *m) {
 }
 
 
+static void info_ind(busmail_t *m) {
+
+	ApiFpCcInfoIndType * p = (ApiFpCcInfoIndType *) &m->mail_header;
+	
+	printf("CallReference: %x\n", p->CallReference);
+	
+}
 
 static void setup_cfm(busmail_t *m) {
 	
@@ -486,6 +493,7 @@ static void setup_ind(busmail_t *m) {
 	
 	if ( p->InfoElementLength > 0 ) {
 		internal_call = get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+		printf("internal_call: %x\n", internal_call->ApiSystemCallId);
 	}
 
 
@@ -748,6 +756,12 @@ static void application_frame(packet_t *p) {
 			printf("API_FP_CC_SETUP_ACK_CFM\n");
 			setup_ack_cfm(m);
 			break;
+
+		case API_FP_CC_INFO_IND:
+			printf("API_FP_CC_INFO_IND\n");
+			info_ind(m);
+			break;
+
 
 		}
 	}
