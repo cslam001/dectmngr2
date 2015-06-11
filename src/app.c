@@ -201,6 +201,8 @@ static void connect_ind(busmail_t *m) {
         req->InfoElementLength = ie_block_len;
         memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len);
 
+	codecs = get_codecs((ApiInfoElementType *) req->InfoElement, req->InfoElementLength);
+
 	printf("API_FP_CC_CONNECT_REQ\n");
 	busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
 	free(req);
@@ -837,6 +839,8 @@ void init_app_state(int dect_fd, config_t * config) {
 
 	printf("RESET_DECT\n");
 	if(dect_chip_reset()) return;
+
+	dect_conf_init();
 
 	/* Init busmail subsystem */
 	dect_bus = busmail_new(dect_fd, application_frame);
