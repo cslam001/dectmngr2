@@ -126,7 +126,7 @@ static ApiCodecListType * get_codecs(ApiInfoElementType * InfoElement, rsuint16 
 	info = ApiGetInfoElement(InfoElement, InfoElementLength, API_IE_CODEC_LIST);
 	if ( info && info->IeLength > 0 ) {
 		printf("API_IE_CODEC_LIST\n");
-		list = (ApiSystemCallIdType *) &info->IeData[0];
+		list = (ApiCodecListType *) &info->IeData[0];
 		printf("NegotiationIndicator: %x\n", list->NegotiationIndicator);
 		printf("NoOfCodecs: %x\n", list->NoOfCodecs);
 
@@ -367,13 +367,32 @@ static void setup_cfm(busmail_t *m) {
 }
 
 
+
+static void release_cfm(busmail_t *m) {
+	
+	ApiFpCcReleaseCfmType * p = (ApiFpCcReleaseCfmType *) &m->mail_header;
+
+	printf("CallReference: %x\n", p->CallReference);	
+	print_status(p->Status);
+}
+
+
 static void release_ind(busmail_t *m) {
 	
 	ApiFpCcReleaseIndType * p = (ApiFpCcReleaseIndType *) &m->mail_header;
+	ApiCallReferenceType terminate_call;
 
 	printf("CallReference: %x\n", p->CallReference);
 	printf("Reason: %x\n", p->Reason);
 	
+	if ( p->CallReference.Value == incoming_call.Value ) {
+		terminate_call = outgoing_call;
+	} else {
+		terminate_call = incoming_call;
+	}
+
+	printf("CallReference: %x\n", p->CallReference);
+
 	ApiFpCcReleaseResType res = {
 		.Primitive = API_FP_CC_RELEASE_RES,
 		.CallReference = p->CallReference,
@@ -383,6 +402,18 @@ static void release_ind(busmail_t *m) {
 	
 	printf("API_FP_CC_RELEASE_RES\n");
 	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
+
+
+	ApiFpCcReleaseReqType req = {
+		.Primitive = API_FP_CC_RELEASE_REQ,
+		.CallReference = terminate_call,
+		.Reason = API_RR_NORMAL,
+		.InfoElementLength = 0,
+	};
+	
+	printf("API_FP_CC_RELEASE_REQ\n");
+	busmail_send(dect_bus, (uint8_t *)&req, sizeof(req));
+
 }
 
 
@@ -604,7 +635,6 @@ static void setup_ind(busmail_t *m) {
 	req->AudioId.SourceTerminalId = calling_hs;
 	req->AudioId.IntExtAudio = API_IEA_INT;
 	req->BasicService = API_WIDEBAND_SPEECH;
-	//req->BasicService = API_BASIC_SPEECH;
 	req->CallClass = API_CC_INTERNAL;
 	req->Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2;
 	req->InfoElementLength = ie_block_len;
@@ -761,6 +791,11 @@ static void application_frame(packet_t *p) {
 			release_ind(m);
 			break;
 
+		case API_FP_CC_RELEASE_CFM:
+			printf("API_FP_CC_RELEASE_CFM\n");
+			release_cfm(m);
+			break;
+
 		case API_FP_CC_SETUP_CFM:
 			printf("API_FP_CC_SETUP_CFM\n");
 			setup_cfm(m);
@@ -800,7 +835,6 @@ static void application_frame(packet_t *p) {
 			printf("API_FP_CC_INFO_IND\n");
 			info_ind(m);
 			break;
-
 
 		}
 	}
