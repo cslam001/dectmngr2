@@ -260,7 +260,7 @@ static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8
 	   Natalie 12.13, tx_seq_l needs to equal 1, not 0, on wrap. */
 	bus->tx_seq_l++;
 	if (bus->tx_seq_l == 8) {
-		bus->tx_seq_l = 1;
+		bus->tx_seq_l = 0;
 	}
 }
 
