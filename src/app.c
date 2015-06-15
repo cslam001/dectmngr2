@@ -172,6 +172,7 @@ static void connect_ind(busmail_t *m) {
 	ApiFpCcConnectIndType * p = (ApiFpCcConnectIndType *) &m->mail_header;
 	ApiInfoElementType * ie_block = NULL;
 	rsuint16 ie_block_len = 0;
+	ApiCallStatusType call_status;
 
 	printf("CallReference: %x\n", p->CallReference);
 	printf("p->InfoElementLength: %d\n", p->InfoElementLength);
@@ -180,6 +181,16 @@ static void connect_ind(busmail_t *m) {
 	if (p->InfoElementLength > 0) {
 		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 	}
+	
+	/* Call progress state to initiating handset */
+	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
+	call_status.CallStatusValue.State = API_CSS_CALL_CONNECT;
+
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_CALL_STATUS,
+			    sizeof(ApiCallStatusType),
+			    (rsuint8 *) &call_status);
 
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
@@ -254,32 +265,32 @@ static void alert_ind(busmail_t *m) {
 		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 	}
 	
-	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
-	call_status.CallStatusValue.State = API_CSS_CALL_ALERTING;
+	/* call_status.CallStatusSubId = API_SUB_CALL_STATUS; */
+	/* call_status.CallStatusValue.State = API_CSS_CALL_ALERTING; */
 
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_CALL_STATUS,
-			    sizeof(ApiCallStatusType),
-			    (rsuint8 *) &call_status);
+	/* ApiBuildInfoElement(&ie_block, */
+	/* 		    &ie_block_len, */
+	/* 		    API_IE_CALL_STATUS, */
+	/* 		    sizeof(ApiCallStatusType), */
+	/* 		    (rsuint8 *) &call_status); */
 
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_SYSTEM_CALL_ID,
-			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) internal_call);
+	/* ApiBuildInfoElement(&ie_block, */
+	/* 		    &ie_block_len, */
+	/* 		    API_IE_SYSTEM_CALL_ID, */
+	/* 		    sizeof(ApiSystemCallIdType), */
+	/* 		    (rsuint8 *) internal_call); */
 
 
-	r = malloc(sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);	
+	/* r = malloc(sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);	 */
 
-        r->Primitive = API_FP_CC_ALERT_REQ;
-	r->CallReference = incoming_call;
-        r->InfoElementLength = ie_block_len;
-        memcpy(r->InfoElement,(rsuint8*)ie_block, ie_block_len);
+        /* r->Primitive = API_FP_CC_ALERT_REQ; */
+	/* r->CallReference = incoming_call; */
+        /* r->InfoElementLength = ie_block_len; */
+        /* memcpy(r->InfoElement,(rsuint8*)ie_block, ie_block_len); */
 	
-	printf("API_FP_CC_ALERT_REQ\n");
-	busmail_send(dect_bus, (uint8_t *) r, sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
-	free(r);
+	/* printf("API_FP_CC_ALERT_REQ\n"); */
+	/* busmail_send(dect_bus, (uint8_t *) r, sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len); */
+	/* free(r); */
 
 
 
@@ -311,6 +322,33 @@ static void connect_cfm(busmail_t *m) {
 	
 	printf("API_FP_CC_CONNECT_RES\n");
 	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
+
+	/* /\* Call progress state to initiating handset *\/ */
+	/* call_status.CallStatusSubId = API_SUB_CALL_STATUS; */
+	/* call_status.CallStatusValue.State = API_CSS_CALL_CONNECT; */
+	
+	/* ApiBuildInfoElement(&ie_block, */
+	/* 		    &ie_block_len, */
+	/* 		    API_IE_SYSTEM_CALL_ID, */
+	/* 		    sizeof(ApiSystemCallIdType), */
+	/* 		    (rsuint8 *) internal_call); */
+
+	/* ApiBuildInfoElement(&ie_block, */
+	/* 		    &ie_block_len, */
+	/* 		    API_IE_CALL_STATUS, */
+	/* 		    sizeof(ApiCallStatusType), */
+	/* 		    (rsuint8 *) &call_status); */
+
+	/* ApiFpCcInfoReqType * r = (ApiFpCcInfoReqType *) malloc(sizeof(ApiFpCcInfoReqType) - 1 + ie_block_len); */
+	/* r->Primitive = API_FP_CC_INFO_REQ; */
+	/* r->CallReference = outgoing_call; */
+	
+	/* memcpy(r->InfoElement, ie_block, ie_block_len); */
+
+	/* printf("API_FP_CC_INFO_REQ\n"); */
+	/* busmail_send(dect_bus, (uint8_t *)r, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len); */
+	/* free(r); */
+
 }
 
 
@@ -322,35 +360,6 @@ static void info_ind(busmail_t *m) {
 	ApiCallStatusType call_status;
 
 	printf("CallReference: %x\n", p->CallReference);
-	
-	/* /\* Call progress state to initiating handset *\/ */
-	/* /\* call_status.CallStatusSubId = API_SUB_CALL_STATUS; *\/ */
-	/* /\* call_status.CallStatusValue.State = API_CSS_CALL_PROC; *\/ */
-	
-	/* ApiBuildInfoElement(&ie_block, */
-	/* 		    &ie_block_len, */
-	/* 		    API_IE_SYSTEM_CALL_ID, */
-	/* 		    sizeof(ApiSystemCallIdType), */
-	/* 		    (rsuint8 *) internal_call); */
-
-	/* /\* ApiBuildInfoElement(&ie_block, *\/ */
-	/* /\* 		    &ie_block_len, *\/ */
-	/* /\* 		    API_IE_CALL_STATUS, *\/ */
-	/* /\* 		    sizeof(ApiCallStatusType), *\/ */
-	/* /\* 		    (rsuint8 *) &call_status); *\/ */
-
-
-	/* ApiFpCcInfoReqType * r = (ApiFpCcInfoReqType *) malloc(sizeof(ApiFpCcInfoReqType) - 1 + ie_block_len); */
-	/* r->Primitive = API_FP_CC_INFO_REQ; */
-	/* r->CallReference = incoming_call; */
-	/* r->Signal = API_CC_SIGNAL_TONES_OFF; */
-	/* r->ProgressInd = API_IN_BAND_NOT_AVAILABLE; */
-	
-	/* memcpy(r->InfoElement, ie_block, ie_block_len); */
-
-	/* printf("API_FP_CC_INFO_REQ\n"); */
-	/* busmail_send(dect_bus, (uint8_t *)r, sizeof(ApiFpCcInfoReqType) - 1 + ie_block_len); */
-	/* free(r); */
 
 }
 
@@ -579,7 +588,7 @@ static void setup_ind(busmail_t *m) {
 
 	/* Call progress state to initiating handset */
 	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
-	call_status.CallStatusValue.State = API_CSS_CALL_PROC;
+	call_status.CallStatusValue.State = API_CSS_CALL_SETUP_ACK;
 	
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
