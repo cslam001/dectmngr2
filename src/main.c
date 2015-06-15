@@ -63,7 +63,7 @@ int main(int argc, char * argv[]) {
 	
 	struct epoll_event ev, events[MAX_EVENTS];
 	int state = BOOT_STATE;
-	int epoll_fd, nfds, i, count, listen_fd, client_fd, ret;
+	int epoll_fd, nfds, i, count, listen_fd, client_fd, ret, opt = 1;
 	uint8_t inbuf[BUF_SIZE];
 	uint8_t outbuf[BUF_SIZE];
 	void (*state_event_handler)(event_t *e);
@@ -122,6 +122,10 @@ int main(int argc, char * argv[]) {
 	
 	if ( (listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ) {
 		exit_failure("socket");
+	}
+
+	if ( (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &(opt), sizeof(opt))) == -1 ) {
+		exit_failure("setsockopt");
 	}
 
 	if ( (bind(listen_fd, (struct sockaddr *) &my_addr, sizeof(struct sockaddr))) == -1) {
