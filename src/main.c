@@ -21,6 +21,7 @@
 #include "test.h"
 #include "list.h"
 #include "busmail.h"
+#include "eap.h"
 
 config_t c;
 config_t *config = &c;
@@ -37,7 +38,7 @@ void sighandler(int signum, siginfo_t * info, void * ptr) {
 }
 
 void * client_list;
-void * client_bus;
+void *client_bus;
 int client_connected = 0;
 extern void * dect_bus;
 
@@ -51,7 +52,7 @@ void eap(packet_t *p) {
 
 	printf("send to dect_bus\n");
 	//packet_dump(p);
-	busmail_send_addressee(dect_bus, &p->data, p->size);	
+	busmail_send_addressee(dect_bus, p->data, p->size);	
 }
 
 

@@ -227,7 +227,7 @@ void eap_dispatch(void * _self) {
 
 
 
-void * eap_new(int fd, void (*app_handler)(packet_t *)) {
+void* eap_new(int fd, void (*app_handler)(packet_t *)) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) calloc(sizeof(busmail_connection_t), 1);
 
