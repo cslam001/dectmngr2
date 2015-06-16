@@ -24,28 +24,36 @@
 #include "stream.h"
 
 
-config_t c;
-config_t *config = &c;
-
-
 #define MAX_EVENTS 10
 #define BUF_SIZE 50000
 
+
+/* Global variables */
+config_t c;
+config_t *config = &c;
 struct sigaction act;
+struct sockaddr_in my_addr, peer_addr;
+socklen_t peer_addr_size;
+void * client_list;
+void * client_bus;
+int client_connected = 0;
+extern void * dect_bus;
+struct epoll_event ev, events[MAX_EVENTS];
+int epoll_fd;
+void * dect_stream, * listen_stream, * client_stream;
+
 
 void sighandler(int signum, siginfo_t * info, void * ptr) {
 
 	printf("Recieved signal %d\n", signum);
 }
 
-void * client_list;
-void * client_bus;
-int client_connected = 0;
-extern void * dect_bus;
+
 
 void list_connected(int fd) {
 	printf("connected fd:s : %d\n", fd);
 }
+
 
 void eap(packet_t *p) {
 	
@@ -61,11 +69,101 @@ void eap(packet_t *p) {
 }
 
 
+void client_handler(void * client_stream) {
+
+	int client_fd = stream_get_fd(client_stream);
+	event_t event;
+	event_t *e = &event;
+	uint8_t inbuf[BUF_SIZE];
+	uint8_t outbuf[BUF_SIZE];
+
+	e->in = inbuf;
+	e->out = outbuf;
+
+	/* Client connection */
+	e->incount = recv(client_fd, inbuf, BUF_SIZE, 0);
+
+
+	if ( e->incount == -1 ) {
+					
+		perror("recv");
+	} else if ( e->incount == 0 ) {
+
+		/* Deregister fd */
+		if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL) == -1) {
+			exit_failure("epoll_ctl\n");
+		}
+					
+		/* Client connection closed */
+		printf("client closed connection\n");
+		if (close(client_fd) == -1) {
+			exit_failure("close");
+		}
+					
+		list_delete(client_list, client_fd);
+		list_each(client_list, list_connected);
+
+		/* Destroy client connection object here */
+
+	} else {
+
+		/* Data is read from client */
+		util_dump(e->in, e->incount, "[CLIENT]");
+
+		/* Send packets from clients to dect_bus */
+		eap_write(client_bus, e);
+		eap_dispatch(client_bus);
+
+		/* Reset event_t */
+		e->outcount = 0;
+		e->incount = 0;
+		memset(e->out, 0, BUF_SIZE);
+		memset(e->in, 0, BUF_SIZE);
+	}
+
+}
+
+
+void listen_handler(void * listen_stream) {
+
+	int client_fd;
+	void * client_stream;
+
+	peer_addr_size = sizeof(peer_addr);
+
+	if ( (client_fd = accept(stream_get_fd(listen_stream), (struct sockaddr *) &peer_addr, &peer_addr_size)) == -1) {
+		exit_failure("accept");
+	} else {
+
+		printf("accepted connection: %d\n", client_fd);
+
+		client_stream = stream_new(client_fd);
+
+		/* Add new connection to epoll instance */
+		ev.events = EPOLLIN;
+		ev.data.ptr = client_stream;
+
+		if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, stream_get_fd(client_stream), &ev) == -1) {
+			exit_failure("epoll_ctl\n");
+		}
+
+		/* Add client */
+		list_add(client_list, client_fd);
+		list_each(client_list, list_connected);
+
+		/* Setup client busmail connection */
+		printf("setup client_bus\n");
+		client_bus = eap_new(client_fd, eap);
+		client_connected = 1;
+	}
+}
+
+
+
 int main(int argc, char * argv[]) {
 	
-	struct epoll_event ev, events[MAX_EVENTS];
 	int state = BOOT_STATE;
-	int epoll_fd, nfds, i, count, listen_fd, client_fd, ret, opt = 1;
+	int nfds, i, count, listen_fd, client_fd, ret, opt = 1;
 	uint8_t inbuf[BUF_SIZE];
 	uint8_t outbuf[BUF_SIZE];
 	void (*state_event_handler)(event_t *e);
@@ -74,10 +172,7 @@ int main(int argc, char * argv[]) {
 	event_t *e = &event;
 	config_t c;
 	config_t *config = &c;
-	struct sockaddr_in my_addr, peer_addr;
-	socklen_t peer_addr_size;
 	uint8_t buf[BUF_SIZE];
-	void * dect_stream, * listen_stream, * client_stream;
 
 
 	/* Init client list */
@@ -195,77 +290,13 @@ int main(int argc, char * argv[]) {
 				memset(e->in, 0, BUF_SIZE);
 				
 			} else if (events[i].data.ptr == listen_stream) {
-
-				peer_addr_size = sizeof(peer_addr);
-				if ( (client_fd = accept(stream_get_fd(listen_stream), (struct sockaddr *) &peer_addr, &peer_addr_size)) == -1) {
-					exit_failure("accept");
-				} else {
-
-					printf("accepted connection: %d\n", client_fd);
-
-					client_stream = stream_new(client_fd);
-
-					/* Add new connection to epoll instance */
-					ev.events = EPOLLIN;
-					ev.data.ptr = client_stream;
-
-					if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, stream_get_fd(client_stream), &ev) == -1) {
-						exit_failure("epoll_ctl\n");
-					}
-
-					/* Add client */
-					list_add(client_list, client_fd);
-					list_each(client_list, list_connected);
-
-					/* Setup client busmail connection */
-					printf("setup client_bus\n");
-					client_bus = eap_new(client_fd, eap);
-					client_connected = 1;
-				}
 				
+				listen_handler(listen_stream);
+
 			} else {
 				
 				client_stream = events[i].data.ptr;
-				client_fd = stream_get_fd(client_stream);
-				
-				/* Client connection */
-				e->incount = recv(client_fd, inbuf, BUF_SIZE, 0);
-				if ( e->incount == -1 ) {
-					
-					perror("recv");
-				} else if ( e->incount == 0 ) {
-
-					/* Deregister fd */
-					if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL) == -1) {
-						exit_failure("epoll_ctl\n");
-					}
-					
-					/* Client connection closed */
-					printf("client closed connection\n");
-					if (close(client_fd) == -1) {
-						exit_failure("close");
-					}
-					
-					list_delete(client_list, client_fd);
-					list_each(client_list, list_connected);
-
-					/* Destroy client connection object here */
-
-				} else {
-
-					/* Data is read from client */
-					util_dump(e->in, e->incount, "[CLIENT]");
-
-					/* Send packets from clients to dect_bus */
-					eap_write(client_bus, e);
-					eap_dispatch(client_bus);
-
-					/* Reset event_t */
-					e->outcount = 0;
-					e->incount = 0;
-					memset(e->out, 0, BUF_SIZE);
-					memset(e->in, 0, BUF_SIZE);
-				}
+				client_handler(client_stream);
 			}
 		}
 	}

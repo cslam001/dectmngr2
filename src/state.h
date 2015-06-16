@@ -12,13 +12,6 @@ enum states {
 };
 
 
-typedef struct event {
-	int fd;
-	uint8_t *in;
-	int incount;
-	uint8_t *out;
-	int outcount;
-} event_t;
 
 
 struct state_handler {

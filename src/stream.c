@@ -1,10 +1,13 @@
 #include <stdlib.h>
 
 #include "stream.h"
+#include "util.h"
+
 
 
 typedef struct {
 	int fd;
+	void (*event_handler)(event_t *e);
 } stream_t;
 
 void * stream_new(int fd) {
@@ -23,4 +26,23 @@ int stream_get_fd(void * _self) {
 	
 	return s->fd;
 }
+
+
+void * stream_get_handler(void * _self) {
+	
+	stream_t * s = (stream_t *) _self;
+	
+	return s->event_handler;
+}
+
+
+void stream_add_handler(void * _self, void (*event_handler)(event_t *e)) {
+	
+	stream_t * s = (stream_t *) _self;
+	
+	s->event_handler = event_handler;
+	
+	return;
+}
+
 

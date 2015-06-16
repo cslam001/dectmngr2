@@ -18,6 +18,15 @@ typedef struct {
 } config_t;
 
 
+typedef struct event {
+	int fd;
+	uint8_t *in;
+	int incount;
+	uint8_t *out;
+	int outcount;
+} event_t;
+
+
 void util_dump(unsigned char *buf, int size, char *start);
 void util_write(void *data, int size, int fd);
 int check_args(int argc, char * argv[], config_t * c);
