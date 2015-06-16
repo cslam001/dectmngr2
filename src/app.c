@@ -215,7 +215,7 @@ static void connect_ind(busmail_t *m) {
 	codecs = get_codecs((ApiInfoElementType *) req->InfoElement, req->InfoElementLength);
 
 	printf("API_FP_CC_CONNECT_REQ\n");
-	busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
+	busmail_send_dect(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
 	free(req);
 
 
@@ -289,7 +289,7 @@ static void alert_ind(busmail_t *m) {
         /* memcpy(r->InfoElement,(rsuint8*)ie_block, ie_block_len); */
 	
 	/* printf("API_FP_CC_ALERT_REQ\n"); */
-	/* busmail_send(dect_bus, (uint8_t *) r, sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len); */
+	/* busmail_send_dect(dect_bus, (uint8_t *) r, sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len); */
 	/* free(r); */
 
 
@@ -321,7 +321,7 @@ static void connect_cfm(busmail_t *m) {
 	
 	
 	printf("API_FP_CC_CONNECT_RES\n");
-	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
+	busmail_send_dect(dect_bus, (uint8_t *)&res, sizeof(res));
 
 	/* /\* Call progress state to initiating handset *\/ */
 	/* call_status.CallStatusSubId = API_SUB_CALL_STATUS; */
@@ -346,7 +346,7 @@ static void connect_cfm(busmail_t *m) {
 	/* memcpy(r->InfoElement, ie_block, ie_block_len); */
 
 	/* printf("API_FP_CC_INFO_REQ\n"); */
-	/* busmail_send(dect_bus, (uint8_t *)r, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len); */
+	/* busmail_send_dect(dect_bus, (uint8_t *)r, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len); */
 	/* free(r); */
 
 }
@@ -410,7 +410,7 @@ static void release_ind(busmail_t *m) {
 	};
 	
 	printf("API_FP_CC_RELEASE_RES\n");
-	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
+	busmail_send_dect(dect_bus, (uint8_t *)&res, sizeof(res));
 
 
 	ApiFpCcReleaseReqType req = {
@@ -421,7 +421,7 @@ static void release_ind(busmail_t *m) {
 	};
 	
 	printf("API_FP_CC_RELEASE_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)&req, sizeof(req));
+	busmail_send_dect(dect_bus, (uint8_t *)&req, sizeof(req));
 
 }
 
@@ -583,7 +583,7 @@ static void setup_ind(busmail_t *m) {
 	};
 
 	printf("API_FP_CC_SETUP_RES\n");
-	busmail_send(dect_bus, (uint8_t *)&res, sizeof(ApiFpCcSetupResType));
+	busmail_send_dect(dect_bus, (uint8_t *)&res, sizeof(ApiFpCcSetupResType));
 
 
 	/* Call progress state to initiating handset */
@@ -612,7 +612,7 @@ static void setup_ind(busmail_t *m) {
 	memcpy(ra->InfoElement, ie_block, ie_block_len);
 
 	printf("API_FP_CC_SETUP_ACK_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)ra, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
+	busmail_send_dect(dect_bus, (uint8_t *)ra, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
 	free(ra);
 
 
@@ -651,7 +651,7 @@ static void setup_ind(busmail_t *m) {
 	memcpy(req->InfoElement, ie_block, ie_block_len);
 
 	printf("API_FP_CC_SETUP_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)req, sizeof(ApiFpCcSetupReqType) - 1 + ie_block_len);
+	busmail_send_dect(dect_bus, (uint8_t *)req, sizeof(ApiFpCcSetupReqType) - 1 + ie_block_len);
 	free(req);
 
 	printf("\n\n");
@@ -674,7 +674,7 @@ static void pinging_call(int handset) {
 
 	printf("pinging_call\n");
 	printf("API_FP_CC_SETUP_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
+	busmail_send_dect(dect_bus, (uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
 	return;
 }
 
@@ -711,18 +711,6 @@ static void application_frame(packet_t *p) {
 	busmail_t * m = (busmail_t *) &p->data[0];
 	
 	switch (m->task_id) {
-
-	case 0:
-		/* Production test command */
-		if ( client_connected == 1 ) {
-
-			/* Send packets to connected clients */
-			printf("send to client_bus\n");
-			packet_dump(p);
-			eap_send(client_bus, &p->data[3], p->size - 3);
-		}
-		break;
-
 	case 1:
 		/* Application command */
 		switch (m->mail_header) {
@@ -755,7 +743,7 @@ static void application_frame(packet_t *p) {
 			/* Setup terminal id */
 			ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
 						      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
-			busmail_send(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
+			busmail_send_dect(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
 			break;
 
 		case API_FP_FEATURES_CFM:
@@ -764,13 +752,13 @@ static void application_frame(packet_t *p) {
 			/* Start protocol */
 			printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
 			ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
-			busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+			busmail_send_dect(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
 
 			/* Start registration */
 			/* printf("\nWRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n"); */
 			/* ApiFpMmSetRegistrationModeReqType r2 = { .Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ, \ */
 			/* 					.RegistrationEnabled = true, .DeleteLastHandset = false}; */
-			/* busmail_send(dect_bus, (uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType)); */
+			/* busmail_send_dect(dect_bus, (uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType)); */
 			break;
 
 		case API_SCL_STATUS_IND:
