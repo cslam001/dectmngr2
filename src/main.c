@@ -205,6 +205,7 @@ int main(int argc, char * argv[]) {
 	config_t c;
 	config_t *config = &c;
 	uint8_t buf[BUF_SIZE];
+	void (*event_handler) (event_t *e);
 
 
 	/* Init client list */
@@ -274,11 +275,13 @@ int main(int argc, char * argv[]) {
 
 	ev.events = EPOLLIN;
 	ev.data.ptr = listen_stream;
+	
 
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, stream_get_fd(listen_stream), &ev) == -1) {
 		exit_failure("epoll_ctl\n");
 	}
 
+	stream_add_handler(listen_stream, listen_handler);
 
 	/* Check user arguments and init config */
 	if ( check_args(argc, argv, config) < 0 ) {
@@ -305,7 +308,8 @@ int main(int argc, char * argv[]) {
 				
 			} else if (events[i].data.ptr == listen_stream) {
 				
-				listen_handler(listen_stream);
+				event_handler = stream_get_handler(listen_stream);
+				event_handler(listen_stream);
 
 			} else {
 				
