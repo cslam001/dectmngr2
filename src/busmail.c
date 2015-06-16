@@ -305,14 +305,6 @@ static void supervisory_control_frame(void * _self, packet_t *p) {
 
 	printf("rx_seq_r: %d\n", bus->rx_seq_r);
 	printf("pf: %d\n", pf);
-
-	/* Update tx packet counter. For compatability with 
-	   Natalie 12.13, tx_seq_l needs to equal 1, not 0, on wrap. */
-	if ( (bus->rx_seq_r == 0) && (bus->tx_seq_l == 0) ) {
-		printf("TX_SEQ_L++\n");
-		bus->tx_seq_l = 1;
-	}
-
 }
 
 
