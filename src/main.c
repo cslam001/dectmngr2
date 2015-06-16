@@ -51,8 +51,7 @@ void eap(packet_t *p) {
 
 	printf("send to dect_bus\n");
 	//packet_dump(p);
-	busmail_send_addressee(dect_bus, &p->data, p->size);
-	
+	busmail_send_addressee(dect_bus, &p->data, p->size);	
 }
 
 
@@ -60,7 +59,7 @@ int main(int argc, char * argv[]) {
 	
 	struct epoll_event ev, events[MAX_EVENTS];
 	int state = BOOT_STATE;
-	int epoll_fd, nfds, i, count, listen_fd, client_fd, ret;
+	int epoll_fd, nfds, i, count, listen_fd, client_fd, ret, opt = 1;
 	uint8_t inbuf[BUF_SIZE];
 	uint8_t outbuf[BUF_SIZE];
 	void (*state_event_handler)(event_t *e);
@@ -121,9 +120,8 @@ int main(int argc, char * argv[]) {
 		exit_failure("socket");
 	}
 
-	i = 1;
-	if(setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &i, sizeof(i)) == -1) {
-		exit_failure("setsockopt reuse addr");
+	if ( (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &(opt), sizeof(opt))) == -1 ) {
+		exit_failure("setsockopt");
 	}
 
 	if ( (bind(listen_fd, (struct sockaddr *) &my_addr, sizeof(struct sockaddr))) == -1) {
@@ -235,6 +233,8 @@ int main(int argc, char * argv[]) {
 					
 					list_delete(client_list, client_fd);
 					list_each(client_list, list_connected);
+
+					/* Destroy client connection object here */
 
 				} else {
 
