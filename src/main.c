@@ -180,6 +180,9 @@ void listen_handler(void * listen_stream) {
 			exit_failure("epoll_ctl\n");
 		}
 
+		stream_add_handler(client_stream, client_handler);
+
+
 		/* Add client */
 		list_add(client_list, client_fd);
 		list_each(client_list, list_connected);
@@ -248,6 +251,8 @@ int main(int argc, char * argv[]) {
 		exit_failure("epoll_ctl\n");
 	}
 
+	stream_add_handler(dect_stream, dect_handler);
+
 	
 	/* Setup listening socket */
 	memset(&my_addr, 0, sizeof(my_addr));
@@ -304,7 +309,8 @@ int main(int argc, char * argv[]) {
 		for (i = 0; i < nfds; ++i) {
 			if (events[i].data.ptr == dect_stream) {
 				
-				dect_handler(dect_stream);
+				event_handler = stream_get_handler(dect_stream);
+				event_handler(dect_stream);
 				
 			} else if (events[i].data.ptr == listen_stream) {
 				
@@ -314,7 +320,9 @@ int main(int argc, char * argv[]) {
 			} else {
 				
 				client_stream = events[i].data.ptr;
-				client_handler(client_stream);
+				event_handler = stream_get_handler(client_stream);
+				event_handler(client_stream);
+
 			}
 		}
 	}
