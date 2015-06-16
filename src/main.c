@@ -77,7 +77,7 @@ int main(int argc, char * argv[]) {
 	struct sockaddr_in my_addr, peer_addr;
 	socklen_t peer_addr_size;
 	uint8_t buf[BUF_SIZE];
-	void * dect_stream, * listen_stream;
+	void * dect_stream, * listen_stream, * client_stream;
 
 
 	/* Init client list */
@@ -203,11 +203,13 @@ int main(int argc, char * argv[]) {
 
 					printf("accepted connection: %d\n", client_fd);
 
+					client_stream = stream_new(client_fd);
+
 					/* Add new connection to epoll instance */
 					ev.events = EPOLLIN;
-					ev.data.fd = client_fd;
+					ev.data.ptr = client_stream;
 
-					if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &ev) == -1) {
+					if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, stream_get_fd(client_stream), &ev) == -1) {
 						exit_failure("epoll_ctl\n");
 					}
 
@@ -223,7 +225,8 @@ int main(int argc, char * argv[]) {
 				
 			} else {
 				
-				client_fd = events[i].data.fd;
+				client_stream = events[i].data.ptr;
+				client_fd = stream_get_fd(client_stream);
 				
 				/* Client connection */
 				e->incount = recv(client_fd, inbuf, BUF_SIZE, 0);
