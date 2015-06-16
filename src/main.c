@@ -21,6 +21,8 @@
 #include "test.h"
 #include "list.h"
 #include "busmail.h"
+#include "stream.h"
+
 
 config_t c;
 config_t *config = &c;
@@ -75,6 +77,7 @@ int main(int argc, char * argv[]) {
 	struct sockaddr_in my_addr, peer_addr;
 	socklen_t peer_addr_size;
 	uint8_t buf[BUF_SIZE];
+	void * dect_stream;
 
 	/* Init client list */
 	client_list = list_new();
@@ -105,11 +108,14 @@ int main(int argc, char * argv[]) {
 	if (dect_fd == -1) {
 		exit_failure("open\n");
 	}
+	
+	
+	dect_stream = stream_new(dect_fd);
 
 	ev.events = EPOLLIN;
-	ev.data.fd = dect_fd;
+	ev.data.ptr = dect_stream;
 
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, dect_fd, &ev) == -1) {
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, stream_get_fd(dect_stream), &ev) == -1) {
 		exit_failure("epoll_ctl\n");
 	}
 
@@ -164,9 +170,9 @@ int main(int argc, char * argv[]) {
 		}
 
 		for (i = 0; i < nfds; ++i) {
-			if (events[i].data.fd == dect_fd) {
+			if (events[i].data.ptr == dect_stream) {
 
-				e->fd = dect_fd;
+				e->fd = stream_get_fd(dect_stream);
 				e->incount = read(e->fd, e->in, BUF_SIZE);
 				//util_dump(e->in, e->incount, "[READ]");
 				
