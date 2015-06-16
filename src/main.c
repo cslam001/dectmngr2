@@ -77,7 +77,8 @@ int main(int argc, char * argv[]) {
 	struct sockaddr_in my_addr, peer_addr;
 	socklen_t peer_addr_size;
 	uint8_t buf[BUF_SIZE];
-	void * dect_stream;
+	void * dect_stream, * listen_stream;
+
 
 	/* Init client list */
 	client_list = list_new();
@@ -142,11 +143,12 @@ int main(int argc, char * argv[]) {
 		exit_failure("bind");
 	}
 
-	
-	ev.events = EPOLLIN;
-	ev.data.fd = listen_fd;
+	listen_stream = stream_new(listen_fd);
 
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &ev) == -1) {
+	ev.events = EPOLLIN;
+	ev.data.ptr = listen_stream;
+
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, stream_get_fd(listen_stream), &ev) == -1) {
 		exit_failure("epoll_ctl\n");
 	}
 
@@ -192,10 +194,10 @@ int main(int argc, char * argv[]) {
 				memset(e->out, 0, BUF_SIZE);
 				memset(e->in, 0, BUF_SIZE);
 				
-			} else if (events[i].data.fd == listen_fd) {
+			} else if (events[i].data.ptr == listen_stream) {
 
 				peer_addr_size = sizeof(peer_addr);
-				if ( (client_fd = accept(listen_fd, (struct sockaddr *) &peer_addr, &peer_addr_size)) == -1) {
+				if ( (client_fd = accept(stream_get_fd(listen_stream), (struct sockaddr *) &peer_addr, &peer_addr_size)) == -1) {
 					exit_failure("accept");
 				} else {
 
