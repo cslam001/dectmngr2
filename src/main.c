@@ -69,6 +69,39 @@ void eap(packet_t *p) {
 }
 
 
+
+void dect_handler(void * dect_stream) {
+
+	event_t event;
+	event_t *e = &event;
+	uint8_t inbuf[BUF_SIZE];
+	uint8_t outbuf[BUF_SIZE];
+	void (*state_event_handler)(event_t *e);
+
+	e->in = inbuf;
+	e->out = outbuf;
+	e->outcount = 0;
+	e->incount = 0;
+	memset(e->out, 0, BUF_SIZE);
+	memset(e->in, 0, BUF_SIZE);
+
+	e->fd = stream_get_fd(dect_stream);
+	e->incount = read(e->fd, e->in, BUF_SIZE);
+	//util_dump(e->in, e->incount, "[READ]");
+				
+	/* Dispatch to current event handler */
+	state_event_handler = state_get_handler();
+	state_event_handler(e);
+
+	/* Reset event_t */
+	e->outcount = 0;
+	e->incount = 0;
+	memset(e->out, 0, BUF_SIZE);
+	memset(e->in, 0, BUF_SIZE);
+}
+
+
+
 void client_handler(void * client_stream) {
 
 	int client_fd = stream_get_fd(client_stream);
@@ -166,7 +199,6 @@ int main(int argc, char * argv[]) {
 	int nfds, i, count, listen_fd, client_fd, ret, opt = 1;
 	uint8_t inbuf[BUF_SIZE];
 	uint8_t outbuf[BUF_SIZE];
-	void (*state_event_handler)(event_t *e);
 	int dect_fd;
 	event_t event;
 	event_t *e = &event;
@@ -268,26 +300,8 @@ int main(int argc, char * argv[]) {
 
 		for (i = 0; i < nfds; ++i) {
 			if (events[i].data.ptr == dect_stream) {
-
-				e->fd = stream_get_fd(dect_stream);
-				e->incount = read(e->fd, e->in, BUF_SIZE);
-				//util_dump(e->in, e->incount, "[READ]");
 				
-				/* Dispatch to current event handler */
-				state_event_handler = state_get_handler();
-				state_event_handler(e);
-
-				/* Write reply if there is one */
-				if (e->outcount > 0) {
-					util_dump(e->out, e->outcount, "[WRITE]");
-					write(e->fd, e->out, e->outcount);
-				}
-
-				/* Reset event_t */
-				e->outcount = 0;
-				e->incount = 0;
-				memset(e->out, 0, BUF_SIZE);
-				memset(e->in, 0, BUF_SIZE);
+				dect_handler(dect_stream);
 				
 			} else if (events[i].data.ptr == listen_stream) {
 				
