@@ -209,6 +209,7 @@ int main(int argc, char * argv[]) {
 	config_t *config = &c;
 	uint8_t buf[BUF_SIZE];
 	void (*event_handler) (event_t *e);
+	void *stream;
 
 
 	/* Init client list */
@@ -307,22 +308,12 @@ int main(int argc, char * argv[]) {
 		}
 
 		for (i = 0; i < nfds; ++i) {
-			if (events[i].data.ptr == dect_stream) {
-				
-				event_handler = stream_get_handler(dect_stream);
-				event_handler(dect_stream);
-				
-			} else if (events[i].data.ptr == listen_stream) {
-				
-				event_handler = stream_get_handler(listen_stream);
-				event_handler(listen_stream);
+			if (events[i].data.ptr) {
 
-			} else {
-				
-				client_stream = events[i].data.ptr;
-				event_handler = stream_get_handler(client_stream);
-				event_handler(client_stream);
-
+				/* Dispatch event to stream handler */
+				stream = events[i].data.ptr;
+				event_handler = stream_get_handler(stream);
+				event_handler(stream);
 			}
 		}
 	}
