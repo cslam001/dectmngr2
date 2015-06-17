@@ -356,9 +356,6 @@ static void information_frame(void * _self, packet_t *p) {
 	/* Process application frame. The application frame callback will enqueue 
 	   outgoing packets on tx_fifo and directly transmit packages with busmail_send() */
 	if(m->program_id == API_PROG_ID) bus->application_frame(p);
-
-	// Send (sniff) all packets to connected clients
-	if (client_connected == 1) eap_send(client_bus, &p->data, p->size);
 }
 
 

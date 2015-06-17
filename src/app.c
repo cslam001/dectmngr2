@@ -713,15 +713,8 @@ static void application_frame(packet_t *p) {
 	switch (m->task_id) {
 
 	case 0:
-		/* Production test command */
-		if ( client_connected == 1 ) {
-
-			/* Send packets to connected clients */
-			printf("send to client_bus\n");
-			packet_dump(p);
-			eap_send(client_bus, &p->data[3], p->size - 3);
-		}
-		break;
+		// Send (sniff) all packets to connected clients
+		if (client_connected == 1) eap_send(client_bus, &p->data, p->size);
 
 	case 1:
 		/* Application command */
