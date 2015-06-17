@@ -65,7 +65,7 @@ void * busmail_new(int fd, void (*app_handler)(packet_t *));
 int busmail_get(void * _self, packet_t *p);
 void packet_dump(packet_t *p);
 void busmail_dispatch(void * _self);
-void busmail_send_dect(void * _self, uint8_t * data, int size);
+void busmail_send(void * _self, uint8_t * data, int size);
 void busmail_send_addressee(void * _self, uint8_t * data, int size);
 
 #endif /* BUSMAIL_H */

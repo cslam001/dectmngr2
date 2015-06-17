@@ -117,7 +117,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 
 
 
-			busmail_send_addressee(bus, data, sizeof(data));
+			busmail_send(bus, data, sizeof(data));
 		}
 
 		break;
@@ -127,7 +127,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 		printf("Get NVS\n");
 		uint8_t data1[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \
 				   0x00, 0x00, 0x00, 0x00, 0xff};
-		busmail_send_addressee(bus, data1, sizeof(data1));
+		busmail_send(bus, data1, sizeof(data1));
 		break;
 
 	case PT_CMD_GET_NVS:
@@ -166,7 +166,7 @@ static void application_frame(packet_t *p) {
 
 			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
 			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
-			busmail_send_dect(bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
+			busmail_send(bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 		}
 
 		break;
@@ -182,12 +182,12 @@ static void application_frame(packet_t *p) {
 
 		printf("\nWRITE: NvsDefault\n");
 		uint8_t data[] = {0x66, 0xf0, 0x00, 0x00, 0x02, 0x01, 0x01, 0x00, 0x01};
-		busmail_send_addressee(bus, data, sizeof(data));
+		busmail_send(bus, data, sizeof(data));
 
 		/* printf("Get NVS\n"); */
 		/* uint8_t data1[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \ */
 		/* 		   0x00, 0x00, 0x00, 0x00, 0xff}; */
-		/* busmail_send_addressee(data1, sizeof(data1)); */
+		/* busmail_send(data1, sizeof(data1)); */
 		break;
 
 	case API_SCL_STATUS_IND:

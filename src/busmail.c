@@ -227,7 +227,7 @@ static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8
 
 
 // Send a busmail to DECT stack API
-void busmail_send_dect(void * _self, uint8_t * data, int size) {
+void busmail_send(void * _self, uint8_t * data, int size) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);

@@ -736,7 +736,7 @@ static void application_frame(packet_t *p) {
 
 				printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
 				ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
-				busmail_send_dect(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
+				busmail_send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 
 			}
 			break;
