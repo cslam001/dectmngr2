@@ -709,134 +709,130 @@ static void application_frame(packet_t *p) {
 	
 	int i;
 	busmail_t * m = (busmail_t *) &p->data[0];
+
+	// Send (sniff) all packets to connected clients
+	if (client_connected == 1) eap_send(client_bus, &p->data, p->size);
 	
-	switch (m->task_id) {
 
-	case 0:
-		// Send (sniff) all packets to connected clients
-		if (client_connected == 1) eap_send(client_bus, &p->data, p->size);
-
-	case 1:
-		/* Application command */
-		switch (m->mail_header) {
+	/* Application command */
+	switch (m->mail_header) {
 		
-		case API_FP_RESET_IND:
+	case API_FP_RESET_IND:
 
-			printf("API_FP_RESET_IND\n");
+		printf("API_FP_RESET_IND\n");
 		
-			if (reset_ind == 0) {
-				reset_ind = 1;
+		if (reset_ind == 0) {
+			reset_ind = 1;
 
-				printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
-				ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
-				busmail_send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
+			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
+			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
+			busmail_send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 
-			}
-			break;
-
-		case API_PROD_TEST_CFM:
-			printf("API_PROD_TEST_CFM\n");
-			break;
-
-		case RTX_EAP_HW_TEST_CFM:
-			printf("RTX_EAP_HW_TEST_CFM\n");
-			break;
-
-		case API_FP_GET_FW_VERSION_CFM:
-			printf("API_FP_GET_FW_VERSION_CFM\n");
-		
-			/* Setup terminal id */
-			ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
-						      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
-			busmail_send(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
-			break;
-
-		case API_FP_FEATURES_CFM:
-			printf("API_FP_FEATURES_CFM\n");
-
-			/* Start protocol */
-			printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
-			ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
-			busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
-
-			/* Start registration */
-			/* printf("\nWRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n"); */
-			/* ApiFpMmSetRegistrationModeReqType r2 = { .Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ, \ */
-			/* 					.RegistrationEnabled = true, .DeleteLastHandset = false}; */
-			/* busmail_send(dect_bus, (uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType)); */
-			break;
-
-		case API_SCL_STATUS_IND:
-			printf("API_SCL_STATUS_IND\n");
-			break;
-
-		case API_FP_MM_SET_REGISTRATION_MODE_CFM:
-			printf("API_FP_MM_SET_REGISTRATION_MODE_CFM\n");
-			break;
-
-		case API_FP_CC_SETUP_IND:
-			printf("API_FP_CC_SETUP_IND\n");
-			setup_ind(m);
-			break;
-
-		case API_FP_CC_SETUP_REQ:
-			printf("API_FP_CC_SETUP_REQ\n");
-			break;
-
-		case API_FP_CC_RELEASE_IND:
-			printf("API_FP_CC_RELEASE_IND\n");
-			release_ind(m);
-			break;
-
-		case API_FP_CC_RELEASE_CFM:
-			printf("API_FP_CC_RELEASE_CFM\n");
-			release_cfm(m);
-			break;
-
-		case API_FP_CC_SETUP_CFM:
-			printf("API_FP_CC_SETUP_CFM\n");
-			setup_cfm(m);
-			break;
-
-		case API_FP_CC_REJECT_IND:
-			printf("API_FP_CC_REJECT_IND\n");
-			reject_ind(m);
-			break;
-
-		case API_FP_CC_CONNECT_IND:
-			printf("API_FP_CC_CONNECT_IND\n");
-			connect_ind(m);
-			break;
-
-		case API_FP_CC_CONNECT_CFM:
-			printf("API_FP_CC_CONNECT_CFM\n");
-			connect_cfm(m);
-			break;
-
-		case API_FP_CC_ALERT_IND:
-			printf("API_FP_CC_ALERT_IND\n");
-			alert_ind(m);
-			break;
-
-		case API_FP_CC_ALERT_CFM:
-			printf("API_FP_CC_ALERT_CFM\n");
-			alert_cfm(m);
-			break;
-
-		case API_FP_CC_SETUP_ACK_CFM:
-			printf("API_FP_CC_SETUP_ACK_CFM\n");
-			setup_ack_cfm(m);
-			break;
-
-		case API_FP_CC_INFO_IND:
-			printf("API_FP_CC_INFO_IND\n");
-			info_ind(m);
-			break;
-
-		default:
-			printf("Unknown application frame 0x%x\n", m->mail_header);
-			break;
 		}
+		break;
+
+	case API_PROD_TEST_CFM:
+		printf("API_PROD_TEST_CFM\n");
+		break;
+
+	case RTX_EAP_HW_TEST_CFM:
+		printf("RTX_EAP_HW_TEST_CFM\n");
+		break;
+
+	case API_FP_GET_FW_VERSION_CFM:
+		printf("API_FP_GET_FW_VERSION_CFM\n");
+		
+		/* Setup terminal id */
+		ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
+					      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
+		busmail_send(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
+		break;
+
+	case API_FP_FEATURES_CFM:
+		printf("API_FP_FEATURES_CFM\n");
+
+		/* Start protocol */
+		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
+		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
+		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+
+		/* Start registration */
+		/* printf("\nWRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n"); */
+		/* ApiFpMmSetRegistrationModeReqType r2 = { .Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ, \ */
+		/* 					.RegistrationEnabled = true, .DeleteLastHandset = false}; */
+		/* busmail_send(dect_bus, (uint8_t *)&r2, sizeof(ApiFpMmStartProtocolReqType)); */
+		break;
+
+	case API_SCL_STATUS_IND:
+		printf("API_SCL_STATUS_IND\n");
+		break;
+
+	case API_FP_MM_SET_REGISTRATION_MODE_CFM:
+		printf("API_FP_MM_SET_REGISTRATION_MODE_CFM\n");
+		break;
+
+	case API_FP_CC_SETUP_IND:
+		printf("API_FP_CC_SETUP_IND\n");
+		setup_ind(m);
+		break;
+
+	case API_FP_CC_SETUP_REQ:
+		printf("API_FP_CC_SETUP_REQ\n");
+		break;
+
+	case API_FP_CC_RELEASE_IND:
+		printf("API_FP_CC_RELEASE_IND\n");
+		release_ind(m);
+		break;
+
+	case API_FP_CC_RELEASE_CFM:
+		printf("API_FP_CC_RELEASE_CFM\n");
+		release_cfm(m);
+		break;
+
+	case API_FP_CC_SETUP_CFM:
+		printf("API_FP_CC_SETUP_CFM\n");
+		setup_cfm(m);
+		break;
+
+	case API_FP_CC_REJECT_IND:
+		printf("API_FP_CC_REJECT_IND\n");
+		reject_ind(m);
+		break;
+
+	case API_FP_CC_CONNECT_IND:
+		printf("API_FP_CC_CONNECT_IND\n");
+		connect_ind(m);
+		break;
+
+	case API_FP_CC_CONNECT_CFM:
+		printf("API_FP_CC_CONNECT_CFM\n");
+		connect_cfm(m);
+		break;
+
+	case API_FP_CC_ALERT_IND:
+		printf("API_FP_CC_ALERT_IND\n");
+		alert_ind(m);
+		break;
+
+	case API_FP_CC_ALERT_CFM:
+		printf("API_FP_CC_ALERT_CFM\n");
+		alert_cfm(m);
+		break;
+
+	case API_FP_CC_SETUP_ACK_CFM:
+		printf("API_FP_CC_SETUP_ACK_CFM\n");
+		setup_ack_cfm(m);
+		break;
+
+	case API_FP_CC_INFO_IND:
+		printf("API_FP_CC_INFO_IND\n");
+		info_ind(m);
+		break;
+
+	default:
+		printf("Unknown application frame 0x%x\n", m->mail_header);
+		break;
 	}
 }
 
