@@ -244,6 +244,25 @@ void busmail_send(void * _self, uint8_t * data, int size) {
 	free(tx);
 }
 
+// Send a busmail to DECT stack API
+// Allow user to set task id in outgoing frame
+void busmail_send_task(void * _self, uint8_t * data, int size, int task_id) {
+
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
+	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);
+	
+	tx->data = malloc(size);
+	memcpy(tx->data, data, size);
+	tx->task_id = task_id;
+	tx->size = size;
+	
+	//util_dump(tx->data, tx->size, "fifo_add");
+	//fifo_add(tx_fifo, tx);
+       
+	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id, API_PROG_ID);
+	free(tx);
+}
+
 
 /* Send a busmail where the addressee has
  * already been specified by previously
