@@ -713,7 +713,9 @@ static void application_frame(packet_t *p) {
 	// Send (sniff) all packets to connected clients
 	if (client_connected == 1) eap_send(client_bus, &p->data, p->size);
 	
-
+	/* Drop frames we are not interested in */
+	if (m->program_id != API_PROG_ID) return;
+	
 	/* Application command */
 	switch (m->mail_header) {
 		

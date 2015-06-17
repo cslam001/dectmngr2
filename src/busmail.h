@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include "buffer.h"
 
+#define API_PROG_ID 0x00
+#define API_TASK_ID 0x01
+
 #define BUSMAIL_PACKET_HEADER 0x10
 #define BUSMAIL_HEADER_SIZE 3
 #define BUSMAIL_PACKET_OVER_HEAD 4
