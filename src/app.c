@@ -196,7 +196,7 @@ static void connect_ind(busmail_t *m) {
 			    &ie_block_len,
 			    API_IE_CODEC_LIST,
 			    WideBandCodecIe->IeLength,
-			    (rsuint8 *) WideBandCodecIe->IeData);
+			    (rsuint8 *) NarrowBandCodecIe->IeData);
 
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
@@ -643,7 +643,7 @@ static void setup_ind(busmail_t *m) {
 	req->CallReference.Value = 0;
 	req->AudioId.SourceTerminalId = calling_hs;
 	req->AudioId.IntExtAudio = API_IEA_INT;
-	req->BasicService = API_WIDEBAND_SPEECH;
+	req->BasicService = API_BASIC_SPEECH;
 	req->CallClass = API_CC_INTERNAL;
 	req->Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2;
 	req->InfoElementLength = ie_block_len;
