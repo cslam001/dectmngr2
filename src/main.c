@@ -21,6 +21,7 @@
 #include "test.h"
 #include "list.h"
 #include "busmail.h"
+#include "eap.h"
 
 config_t c;
 config_t *config = &c;
@@ -37,7 +38,7 @@ void sighandler(int signum, siginfo_t * info, void * ptr) {
 }
 
 void * client_list;
-void * client_bus;
+void *client_bus;
 int client_connected = 0;
 extern void * dect_bus;
 
@@ -50,12 +51,8 @@ void eap(packet_t *p) {
 	int i;
 
 	printf("send to dect_bus\n");
-	packet_dump(p);
-	
-	busmail_send0(dect_bus, &p->data[3], p->size - 3);
-	
-	/* /\* For RSX *\/ */
-	/* busmail_send_prog(dect_bus, &p->data[3], p->size - 3, 0x81); */
+	//packet_dump(p);
+	busmail_send_addressee(dect_bus, p->data, p->size);	
 }
 
 
@@ -129,11 +126,11 @@ int main(int argc, char * argv[]) {
 	}
 
 	if ( (bind(listen_fd, (struct sockaddr *) &my_addr, sizeof(struct sockaddr))) == -1) {
-		exit_failure("bind");
+		exit_failure("bind listen_fd");
 	}
 	
 	if ( (listen(listen_fd, MAX_LISTENERS)) == -1 ) {
-		exit_failure("bind");
+		exit_failure("listen");
 	}
 
 	
@@ -168,7 +165,7 @@ int main(int argc, char * argv[]) {
 
 				e->fd = dect_fd;
 				e->incount = read(e->fd, e->in, BUF_SIZE);
-				//util_dump(e->in, e->incount, "[READ]");
+				//util_dump(e->in, e->incount, "[READ dect]");
 				
 				/* Dispatch to current event handler */
 				state_event_handler = state_get_handler();
@@ -176,7 +173,7 @@ int main(int argc, char * argv[]) {
 
 				/* Write reply if there is one */
 				if (e->outcount > 0) {
-					util_dump(e->out, e->outcount, "[WRITE]");
+					util_dump(e->out, e->outcount, "[WRITE dect]");
 					write(e->fd, e->out, e->outcount);
 				}
 
@@ -193,7 +190,7 @@ int main(int argc, char * argv[]) {
 					exit_failure("accept");
 				} else {
 
-					printf("accepted connection: %d\n", client_fd);
+					printf("accepted TCP connection: %d\n", client_fd);
 
 					/* Add new connection to epoll instance */
 					ev.events = EPOLLIN;
@@ -243,7 +240,7 @@ int main(int argc, char * argv[]) {
 				} else {
 
 					/* Data is read from client */
-					util_dump(e->in, e->incount, "[CLIENT]");
+					//util_dump(e->in, e->incount, "[CLIENT rd]");
 
 					/* Send packets from clients to dect_bus */
 					eap_write(client_bus, e);

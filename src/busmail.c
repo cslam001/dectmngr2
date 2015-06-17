@@ -14,37 +14,7 @@
 #define BUSMAIL_HEADER_SIZE 3
 #define BUSMAIL_PACKET_OVER_HEAD 4
 #define API_PROG_ID 0x00
-#define API_TEST 0x01
-
-#define PACKET_TYPE_MASK (1 << 7)
-#define INFORMATION_FRAME (0 << 7)
-#define CONTROL_FRAME (1 << 7)
-
-#define CONTROL_FRAME_MASK ((1 << 7) | (1 << 6))
-#define UNNUMBERED_CONTROL_FRAME ((1 << 7) | (1 << 6))
-#define SUPERVISORY_CONTROL_FRAME ((1 << 7) | (0 << 6))
-
-/* Information frame */
-#define TX_SEQ_MASK ((1 << 6) | (1 << 5) | (1 << 4))
-#define TX_SEQ_OFFSET 4
-#define RX_SEQ_MASK  ((1 << 2) | (1 << 1) | (1 << 0))
-#define RX_SEQ_OFFSET 0
-#define PF_MASK ((1 << 3))
-#define PF_OFFSET 3
-
-/* Supervisory control frame */
-#define SUID_MASK ((1 << 5) | (1 << 4))
-#define SUID_RR   ((0 << 1) | (0 << 0))
-#define SUID_REJ  ((0 << 1) | (1 << 0))
-#define SUID_RNR  ((1 << 1) | (0 << 0))
-#define SUID_OFFSET 4
-#define NO_PF 0
-#define PF 1
-
-
-#define POLL_FINAL (1 << 3)
-#define SAMB_POLL_SET 0xc8
-#define SAMB_NO_POLL_SET 0xc0
+#define API_TASK_ID 0x01
 
 
 typedef struct {
@@ -82,6 +52,8 @@ typedef struct {
 /* static int busmail_fd; */
 /* static void (*application_frame) (busmail_t *); */
 extern void * client_list;
+extern void * client_bus;
+extern int client_connected;
 client_packet_t client_p;
 
 
@@ -111,7 +83,7 @@ static uint8_t * make_tx_packet(uint8_t * tx, void * packet, int data_size) {
   /* Calculate checksum over data portion */
   for (i = 0; i < data_size; i++) {
 	  crc += data[i];
-	  tx[3 + i] = data[i];
+	  tx[BUSMAIL_PACKET_OVER_HEAD - 1 + i] = data[i];
   }
 
   
@@ -129,7 +101,7 @@ static send_packet(void * data, int data_size, int fd) {
   uint8_t * tx = malloc(tx_size);
   
   make_tx_packet(tx, data, data_size);
-  util_dump(tx, tx_size, "[WRITE]");
+  util_dump(tx, tx_size, "[WRITE to dect]");
   write(fd, tx, tx_size);
   free(tx);
 }
@@ -208,7 +180,8 @@ static uint8_t make_supervisory_frame(void * _self, uint8_t suid, uint8_t pf) {
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	uint8_t header;
 
-	header = ( (suid << SUID_OFFSET) | (pf << PF_OFFSET) | bus->rx_seq_l );
+	header = SUPERVISORY_CONTROL_FRAME | (suid << SUID_OFFSET) | 
+		(pf << PF_OFFSET) | (bus->rx_seq_l);
 
 	return header;
 }
@@ -242,35 +215,26 @@ static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8
 	r->program_id = prog_id;
 	r->task_id = task_id;
 	memcpy(&(r->mail_header), data, size);
-
-	/* tx_seq_tmp = (r->frame_header & TX_SEQ_MASK) >> TX_SEQ_OFFSET; */
-	/* rx_seq_tmp = (r->frame_header & RX_SEQ_MASK) >> RX_SEQ_OFFSET; */
-
-	printf("BUSMAIL_SEND_INFO\n");
-	printf("tx_seq_l: %d\n", bus->tx_seq_l);
-	printf("rx_seq_l: %d\n", bus->rx_seq_l);
-	printf("pf: %d\n", pf);
-
-	printf("frame_header: %x\n", (r->frame_header));
 	
 	send_packet(r, BUSMAIL_PACKET_OVER_HEAD - 1 + size, bus->fd);
 	free(r);
 	
+	/* For every packet we transmitt we increase
+	 * a sequence number. */
 	bus->tx_seq_l++;
-	if (bus->tx_seq_l == 8) {
-		bus->tx_seq_l = 0;
-	}
+	bus->tx_seq_l &= 7u;							// Wrap to 0 when reaching 8
 }
 
 
-void busmail_send(void * _self, uint8_t * data, int size) {
+// Send a busmail to DECT stack API
+void busmail_send_dect(void * _self, uint8_t * data, int size) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);
 	
 	tx->data = malloc(size);
 	memcpy(tx->data, data, size);
-	tx->task_id = API_TEST;
+	tx->task_id = API_TASK_ID;
 	tx->size = size;
 	
 	//util_dump(tx->data, tx->size, "fifo_add");
@@ -281,37 +245,20 @@ void busmail_send(void * _self, uint8_t * data, int size) {
 }
 
 
-/* Needed for test commands */
-void busmail_send0(void * _self, uint8_t * data, int size) {
+/* Send a busmail where the addressee has
+ * already been specified by previously
+ * received packet. */
+void busmail_send_addressee(void * _self, uint8_t * data, int size) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);
 	
-	tx->data = malloc(size);
-	memcpy(tx->data, data, size);
-	tx->task_id = 0;
-	tx->size = size;
+	tx->data = malloc(size - BUSMAIL_HEADER_SIZE);
+	memcpy(tx->data, data + BUSMAIL_HEADER_SIZE, size - BUSMAIL_HEADER_SIZE);
+	tx->task_id = data[TASK_ID_OFFSET];;
+	tx->size = size - BUSMAIL_HEADER_SIZE;
 
-	//fifo_add(tx_fifo, tx);
-
-	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id, API_PROG_ID);
-	free(tx);
-}
-
-
-void busmail_send_prog(void * _self, uint8_t * data, int size, int prog_id) {
-
-	busmail_connection_t * bus = (busmail_connection_t *) _self;
-	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);
-	
-	tx->data = malloc(size);
-	memcpy(tx->data, data, size);
-	tx->task_id = 0;
-	tx->size = size;
-
-	//fifo_add(tx_fifo, tx);
-
-	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id, prog_id);
+	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id, data[PROG_ID_OFFSET]);
 	free(tx);
 }
 
@@ -324,7 +271,7 @@ void busmail_ack(void * _self) {
 	sh = make_supervisory_frame(bus, SUID_RR, NO_PF);
 	rx_seq_tmp = (sh & RX_SEQ_MASK) >> RX_SEQ_OFFSET;
 	
-	printf("\nWRITE: BUSMAIL_ACK %d\n", rx_seq_tmp);
+	printf("WRITE: BUSMAIL_ACK %d\n", rx_seq_tmp);
 	send_packet(&sh, 1, bus->fd);
 }
 
@@ -339,7 +286,7 @@ static void supervisory_control_frame(void * _self, packet_t *p) {
 	pf = (m->frame_header & PF_MASK) >> PF_OFFSET;
 	suid = (m->frame_header & SUID_MASK) >> SUID_OFFSET;
 
-	packet_dump(p);
+	//packet_dump(p);
 	
 	switch (suid) {
 		
@@ -358,26 +305,9 @@ static void supervisory_control_frame(void * _self, packet_t *p) {
 
 	printf("rx_seq_r: %d\n", bus->rx_seq_r);
 	printf("pf: %d\n", pf);
-
-	/* Update tx packet counter. For compatability with 
-	   Natalie 12.13, tx_seq_l needs to equal 1, not 0, on wrap. */
-	if ( (bus->rx_seq_r == 0) && (bus->tx_seq_l == 0) ) {
-		printf("TX_SEQ_L++\n");
-		bus->tx_seq_l = 1;
-	}
-
 }
 
 
-static void send_to_client(int fd) {
-
-	printf("send_to_client: %d\n", fd);
-	
-	if (send(fd, &client_p, client_p.size, 0) == -1) {
-		perror("send");
-	}
-}
-   	
 static void information_frame(void * _self, packet_t *p) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
@@ -387,42 +317,29 @@ static void information_frame(void * _self, packet_t *p) {
 	int ack = true;
 
 
-	/* Drop unwanted frames */
-	if( m->program_id != API_PROG_ID ) {
-		return;
-	}
-
-	packet_dump(p);
-	
 	/* Update busmail packet counters */
 	bus->tx_seq_r = (m->frame_header & TX_SEQ_MASK) >> TX_SEQ_OFFSET;
 	bus->rx_seq_r = (m->frame_header & RX_SEQ_MASK) >> RX_SEQ_OFFSET;
 	pf = (m->frame_header & PF_MASK) >> PF_OFFSET;
 
-	printf("frame_header: %02x\n", m->frame_header);
-	printf("tx_seq_r: %d\n", bus->tx_seq_r);
-	printf("rx_seq_r: %d\n", bus->rx_seq_r);
-	printf("pf: %d\n", pf);
+	util_dump(p->data, p->size, "[DECT]");
 
-	/* ACK the recieved package */
+	/* Set next packet receive sequence number to
+	 * whatever remote want. We don't implement
+	 * resending (yet) and thus the numbers are
+	 * of minor importance. */
 	bus->rx_seq_l = bus->tx_seq_r + 1;
-	if (bus->rx_seq_l == 8) {
-		bus->rx_seq_l = 0;
-	}
-
-	/* Process application frame. The application frame callback will enqueue 
-	   outgoing packets on tx_fifo and directly transmit packages with busmail_send() */
-	bus->application_frame(p);
-
-	/* Send packet to connected client */
-	/* client_p.type = CLIENT_PKT_TYPE; */
-	/* client_p.size = CLIENT_PKT_HEADER_SIZE + p->size - 3; */
-	/* memcpy(&(client_p.data), &(p->data[3]), p->size - 3); */
-	/* util_dump(&p->data[3], p->size - 3, "[TO CLIENT]"); */
-	/* list_each(client_list, send_to_client); */
+	bus->rx_seq_l &= 7u;							// Wrap to 0 at 8
 
 	/* Always ack with control frame */
 	busmail_ack(bus);
+
+	/* Process application frame. The application frame callback will enqueue 
+	   outgoing packets on tx_fifo and directly transmit packages with busmail_send() */
+	if(m->program_id == API_PROG_ID) bus->application_frame(p);
+
+	// Send (sniff) all packets to connected clients
+	if (client_connected == 1) eap_send(client_bus, &p->data, p->size);
 }
 
 
@@ -495,6 +412,7 @@ int busmail_get(void * _self, packet_t *p) {
 	memcpy(p->data, buf + 3, size);
 	p->size = size;
 
+	util_dump(buf, size + BUSMAIL_PACKET_OVER_HEAD, "[PACKET]");
 	return 0;
 }
 
