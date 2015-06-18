@@ -20,6 +20,7 @@
 #include "list.h"
 #include "busmail.h"
 #include "stream.h"
+#include "event.h"
 
 
 #define MAX_EVENTS 10
@@ -32,13 +33,8 @@ config_t *config = &c;
 int main(int argc, char * argv[]) {
 
 	int epoll_fd, nfds, i;
-	uint8_t inbuf[BUF_SIZE];
-	uint8_t outbuf[BUF_SIZE];
-	event_t event;
-	event_t *e = &event;
-	uint8_t buf[BUF_SIZE];
-	void (*event_handler) (event_t *e);
-	void *stream;
+	void (*stream_handler) (void * stream, void * event);
+	void * stream, * event;
 	struct epoll_event events[MAX_EVENTS];
 
 
@@ -78,12 +74,15 @@ int main(int argc, char * argv[]) {
 				stream = events[i].data.ptr;
 
 				/* Get list of stream handlers */
-				event_handler = stream_get_handler(stream);
+				stream_handler = stream_get_handler(stream);
 
 				/* Read data on fd */
+				event = event_new(stream);
 				
 				/* Dispatch event to all stream handlers */
-				event_handler(stream);
+				stream_handler(stream, event);
+
+				event_destroy(event);
 			}
 		}
 	}
