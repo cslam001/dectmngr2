@@ -383,11 +383,11 @@ static void information_frame(void * _self, packet_t *p) {
 
 
 
-int eap_write(void * _self, event_t * e) {
+int eap_write(void * _self, void * event) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	
-	if ( buffer_write(bus->buf, e->in, e->incount) == 0 ) {
+	if ( buffer_write(bus->buf, event_data(event), event_count(event)) == 0 ) {
 		return -1;
 	}
 	

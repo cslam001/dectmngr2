@@ -37,7 +37,6 @@
 
 buffer_t * buf;
 static int reset_ind = 0;
-extern void * client_bus;
 int client_connected;
 void * dect_bus;
 void * dect_stream, * listen_stream;
@@ -922,8 +921,8 @@ static void client_handler(void * client_stream, void * event) {
 		util_dump(event_data(event), event_count(event), "[CLIENT]");
 
 		/* Send packets from clients to dect_bus */
-		/* eap_write(client_bus, event); */
-		/* eap_dispatch(client_bus); */
+		eap_write(client_bus, event);
+		eap_dispatch(client_bus);
 
 	}
 
@@ -1060,6 +1059,7 @@ void init_app_state(void * event_b, config_t * config) {
 	listen_stream = stream_new(listen_fd);
 	stream_add_handler(listen_stream, listen_handler);
 	event_base_add_stream(event_base, listen_stream);
+
 
 
 	/* Connect and reset dect chip */
