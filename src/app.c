@@ -10,6 +10,7 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <signal.h>
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
@@ -37,13 +38,15 @@
 buffer_t * buf;
 static int reset_ind = 0;
 extern void * client_bus;
-extern int client_connected;
+int client_connected;
 void * dect_bus;
 void * dect_stream, * listen_stream;
 void * client_stream;
 int epoll_fd;
 void * client_list;
 void * client_bus;
+void * client_list;
+struct sigaction act;
 
 
 ApiCallReferenceType incoming_call;
@@ -74,6 +77,12 @@ ApiCodecListType * codecs = NULL;
 
 static void list_connected(int fd) {
 	printf("connected fd:s : %d\n", fd);
+}
+
+
+void sighandler(int signum, siginfo_t * info, void * ptr) {
+
+	printf("Recieved signal %d\n", signum);
 }
 
 
@@ -1043,6 +1052,16 @@ void dect_handler(void * dect_stream) {
 }
 
 
+static void setup_signal_handler(void) {
+
+	/* Setup signal handler. When writing data to a
+	   client that closed the connection we get a 
+	   SIGPIPE. We need to catch it to avoid being killed */
+	memset(&act, 0, sizeof(act));
+	act.sa_sigaction = sighandler;
+	act.sa_flags = SA_SIGINFO;
+	sigaction(SIGPIPE, &act, NULL);
+}
 
 
 void init_app_state(int epoll, config_t * config) {
@@ -1085,6 +1104,9 @@ void init_app_state(int epoll, config_t * config) {
 	/* Init busmail subsystem */
 	dect_bus = busmail_new(dect_fd, application_frame);
 
+
+	/* Init client list */
+	client_list = list_new();
 
 	/* Setup listening socket */
 	listen_fd = setup_listener();

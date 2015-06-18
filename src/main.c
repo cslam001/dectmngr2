@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <signal.h>
+
 
 #include "dect.h"
 #include "tty.h"
@@ -25,54 +25,25 @@
 #define MAX_EVENTS 10
 #define BUF_SIZE 50000
 
-
-/* Global variables */
 config_t c;
 config_t *config = &c;
-struct sigaction act;
-int client_connected = 0;
-extern void * dect_bus;
-struct epoll_event ev, events[MAX_EVENTS];
-int epoll_fd;
-void * client_list;
-
-
-void sighandler(int signum, siginfo_t * info, void * ptr) {
-
-	printf("Recieved signal %d\n", signum);
-}
 
 
 int main(int argc, char * argv[]) {
-	
-	int state = BOOT_STATE;
-	int nfds, i, count, listen_fd, client_fd, ret;
+
+	int epoll_fd, nfds, i;
 	uint8_t inbuf[BUF_SIZE];
 	uint8_t outbuf[BUF_SIZE];
 	event_t event;
 	event_t *e = &event;
-	config_t c;
-	config_t *config = &c;
 	uint8_t buf[BUF_SIZE];
 	void (*event_handler) (event_t *e);
 	void *stream;
+	struct epoll_event events[MAX_EVENTS];
 
 
-	/* Init client list */
-	client_list = list_new();
-
-	e->in = inbuf;
-	e->out = outbuf;
-
+	/* Unbuffered stdout */
 	setbuf(stdout, NULL);
-	
-	/* Setup signal handler. When writing data to a
-	   client that closed the connection we get a 
-	   SIGPIPE. We need to catch it to avoid being killed */
-	memset(&act, 0, sizeof(act));
-	act.sa_sigaction = sighandler;
-	act.sa_flags = SA_SIGINFO;
-	sigaction(SIGPIPE, &act, NULL);
 	
 
 	/* Setup epoll instance */
@@ -103,9 +74,15 @@ int main(int argc, char * argv[]) {
 		for (i = 0; i < nfds; ++i) {
 			if (events[i].data.ptr) {
 
-				/* Dispatch event to stream handler */
+				/* Get stream object */
 				stream = events[i].data.ptr;
+
+				/* Get list of stream handlers */
 				event_handler = stream_get_handler(stream);
+
+				/* Read data on fd */
+				
+				/* Dispatch event to all stream handlers */
 				event_handler(stream);
 			}
 		}
