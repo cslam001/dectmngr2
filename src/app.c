@@ -891,25 +891,16 @@ static void application_frame(packet_t *p) {
 
 
 
-static void client_handler(void * client_stream) {
+static void client_handler(void * client_stream, void * event) {
 
 	int client_fd = stream_get_fd(client_stream);
-	event_t event;
-	event_t *e = &event;
-	uint8_t inbuf[BUF_SIZE];
-	uint8_t outbuf[BUF_SIZE];
-
-	e->in = inbuf;
-	e->out = outbuf;
 
 	/* Client connection */
-	e->incount = recv(client_fd, inbuf, BUF_SIZE, 0);
-
-
-	if ( e->incount == -1 ) {
+	
+	if ( event_count(event) == -1 ) {
 					
 		perror("recv");
-	} else if ( e->incount == 0 ) {
+	} else if ( event_count(event) == 0 ) {
 
 		/* Deregister fd */
 		if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL) == -1) {
@@ -930,24 +921,19 @@ static void client_handler(void * client_stream) {
 	} else {
 
 		/* Data is read from client */
-		util_dump(e->in, e->incount, "[CLIENT]");
+		util_dump(event_data(event), event_count(event), "[CLIENT]");
 
 		/* Send packets from clients to dect_bus */
-		eap_write(client_bus, e);
-		eap_dispatch(client_bus);
+		/* eap_write(client_bus, event); */
+		/* eap_dispatch(client_bus); */
 
-		/* Reset event_t */
-		e->outcount = 0;
-		e->incount = 0;
-		memset(e->out, 0, BUF_SIZE);
-		memset(e->in, 0, BUF_SIZE);
 	}
 
 }
 
 
 
-static void listen_handler(void * listen_stream) {
+static void listen_handler(void * listen_stream, void * event) {
 
 	int client_fd;
 	void * client_stream;
@@ -1021,34 +1007,18 @@ static int setup_listener(void) {
 }
 
 
-void dect_handler(void * dect_stream) {
+void dect_handler(void * dect_stream, void * event) {
 
-	event_t event;
-	event_t *e = &event;
-	uint8_t inbuf[BUF_SIZE];
-	uint8_t outbuf[BUF_SIZE];
-	void (*state_event_handler)(event_t *e);
 
-	e->in = inbuf;
-	e->out = outbuf;
-	e->outcount = 0;
-	e->incount = 0;
-	memset(e->out, 0, BUF_SIZE);
-	memset(e->in, 0, BUF_SIZE);
+	/* Add input to busmail subsystem */
+	if (busmail_write(dect_bus, event) < 0) {
+		printf("busmail buffer full\n");
+	}
+	
 
-	e->fd = stream_get_fd(dect_stream);
-	e->incount = read(e->fd, e->in, BUF_SIZE);
-	//util_dump(e->in, e->incount, "[READ]");
-				
-	/* Dispatch to current event handler */
-	state_event_handler = state_get_handler();
-	state_event_handler(e);
-
-	/* Reset event_t */
-	e->outcount = 0;
-	e->incount = 0;
-	memset(e->out, 0, BUF_SIZE);
-	memset(e->in, 0, BUF_SIZE);
+	/* Process whole packets in buffer. The previously registered
+	   callback will be called for application frames */
+	busmail_dispatch(dect_bus);
 }
 
 
@@ -1125,14 +1095,14 @@ void init_app_state(int epoll, config_t * config) {
 }
 
 
-void handle_app_package(event_t *e) {
+void handle_app_package(void * event) {
 
 	uint8_t header;
 
 	//util_dump(e->in, e->incount, "\n[READ]");
 
 	/* Add input to busmail subsystem */
-	if (busmail_write(dect_bus, e) < 0) {
+	if (busmail_write(dect_bus, event) < 0) {
 		printf("busmail buffer full\n");
 	}
 	

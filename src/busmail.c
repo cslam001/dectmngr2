@@ -427,12 +427,14 @@ static void information_frame(void * _self, packet_t *p) {
 
 
 
-int busmail_write(void * _self, event_t * e) {
+int busmail_write(void * _self, void * event) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	
-	if ( buffer_write(bus->buf, e->in, e->incount) == 0 ) {
-		return -1;
+	if (event_count(event) > 0) {
+		if ( buffer_write(bus->buf, event_data(event), event_count(event)) == 0 ) {
+			return -1;
+		}
 	}
 	
 	return 0;
@@ -454,7 +456,7 @@ int busmail_get(void * _self, packet_t *p) {
 			break;
 		}
 	}
-	
+
 	/* Return if we did not read any data */
 	if (read == 0) {
 		return -1;
@@ -517,7 +519,7 @@ void busmail_dispatch(void * _self) {
 	packet_t packet;
 	packet_t *p = &packet;
 	busmail_t * m;
-	
+
 	/* Process whole packets in buffer */
 	while ( busmail_get(bus, p) == 0) {
 

@@ -6,7 +6,7 @@
 void * stream_new(int fd);
 int stream_get_fd(void * _self);
 void * stream_get_handler(void * _self);
-void * stream_add_handler(void * _self, void (*event_handler)(event_t *e));
+void * stream_add_handler(void * _self, void (*event_handler)(void *stream, void * event));
 
 
 

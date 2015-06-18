@@ -17,7 +17,7 @@ enum states {
 struct state_handler {
 	int state;
 	void (*init_state)(int fd, config_t * c);
-	void (*event_handler)(event_t *e);
+	void (*event_handler)(void * event);
 };
 
 

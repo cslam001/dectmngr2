@@ -73,13 +73,13 @@ int main(int argc, char * argv[]) {
 				/* Get stream object */
 				stream = events[i].data.ptr;
 
-				/* Get list of stream handlers */
+				/* Get stream handler */
 				stream_handler = stream_get_handler(stream);
 
 				/* Read data on fd */
 				event = event_new(stream);
-				
-				/* Dispatch event to all stream handlers */
+
+				/* Dispatch event to stream handler */
 				stream_handler(stream, event);
 
 				event_destroy(event);
