@@ -33,21 +33,13 @@ config_t *config = &c;
 int main(int argc, char * argv[]) {
 
 	int epoll_fd, nfds, i;
-	void (*stream_handler) (void * stream, void * event);
-	void * stream, * event;
-	struct epoll_event events[MAX_EVENTS];
-
+	void * event_base;
 
 	/* Unbuffered stdout */
 	setbuf(stdout, NULL);
 	
-
-	/* Setup epoll instance */
-	epoll_fd = epoll_create(10);
-	if (epoll_fd == -1) {
-		exit_failure("epoll_create\n");
-	}
-
+	event_base = event_base_new(MAX_EVENTS);
+	
 
 	/* Check user arguments and init config */
 	if ( check_args(argc, argv, config) < 0 ) {
@@ -60,32 +52,10 @@ int main(int argc, char * argv[]) {
 		err_exit("No known operating mode selected\n");
 	}
 
-	for(;;) {
-
-		nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
-		if (nfds == -1) {
-			exit_failure("epoll_wait\n");
-		}
-
-		for (i = 0; i < nfds; ++i) {
-			if (events[i].data.ptr) {
-
-				/* Get stream object */
-				stream = events[i].data.ptr;
-
-				/* Get stream handler */
-				stream_handler = stream_get_handler(stream);
-
-				/* Read data on fd */
-				event = event_new(stream);
-
-				/* Dispatch event to stream handler */
-				stream_handler(stream, event);
-
-				event_destroy(event);
-			}
-		}
-	}
+	/* Read incomming events on registered streams
+	   and dispatch them to event handlers. Does 
+	   not return. */
+	event_base_dispatch(event_base);
 	
 	return 0;
 }

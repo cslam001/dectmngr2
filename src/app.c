@@ -46,6 +46,7 @@ int epoll_fd;
 void * client_list;
 void * client_bus;
 void * client_list;
+void * event_base;
 struct sigaction act;
 
 
@@ -902,11 +903,8 @@ static void client_handler(void * client_stream, void * event) {
 		perror("recv");
 	} else if ( event_count(event) == 0 ) {
 
-		/* Deregister fd */
-		if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, NULL) == -1) {
-			exit_failure("epoll_ctl\n");
-		}
-					
+		event_base_delete_stream(event_base, client_stream);
+		
 		/* Client connection closed */
 		printf("client closed connection\n");
 		if (close(client_fd) == -1) {
@@ -939,7 +937,7 @@ static void listen_handler(void * listen_stream, void * event) {
 	void * client_stream;
 	struct sockaddr_in my_addr, peer_addr;
 	socklen_t peer_addr_size;
-	struct epoll_event ev;	
+
 
 	peer_addr_size = sizeof(peer_addr);
 
@@ -954,13 +952,7 @@ static void listen_handler(void * listen_stream, void * event) {
 		stream_add_handler(client_stream, client_handler);
 
 		/* Add client_stream to event dispatcher */
-		ev.events = EPOLLIN;
-		ev.data.ptr = client_stream;
-
-		if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, stream_get_fd(client_stream), &ev) == -1) {
-			exit_failure("epoll_ctl\n");
-		}
-
+		event_base_add_stream(event_base, client_stream);
 
 		/* Add client */
 		list_add(client_list, client_fd);
@@ -1034,42 +1026,27 @@ static void setup_signal_handler(void) {
 }
 
 
-void init_app_state(int epoll, config_t * config) {
+void init_app_state(void * event_b, config_t * config) {
 	
 	int dect_fd, listen_fd;
-	struct epoll_event ev;
 
 	printf("APP_STATE\n");
+	event_base = event_b;
 
-	epoll_fd = epoll;
-
-	/* Setup serial input */
-	dect_fd = open("/dev/ttyS1", O_RDWR);
-	if (dect_fd == -1) {
-		exit_failure("open\n");
-	}
-	
-	dect_stream = stream_new(dect_fd);
-
-	ev.events = EPOLLIN;
-	ev.data.ptr = dect_stream;
-
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, stream_get_fd(dect_stream), &ev) == -1) {
-		exit_failure("epoll_ctl\n");
-	}
-
-	stream_add_handler(dect_stream, dect_handler);
-
+	/* Setup dect tty */
+	dect_fd = tty_open("/dev/ttyS1");
 	tty_set_raw(dect_fd);
 	tty_set_baud(dect_fd, B115200);
+	
 
-	printf("DECT TX TO BRCM RX\n");
-	if(gpio_control(118, 0)) return;
+	/* Register dect stream */
+	dect_stream = stream_new(dect_fd);
+	stream_add_handler(dect_stream, dect_handler);
+	event_base_add_stream(event_base, dect_stream);
 
-	printf("RESET_DECT\n");
-	if(dect_chip_reset()) return;
 
 	dect_conf_init();
+
 
 	/* Init busmail subsystem */
 	dect_bus = busmail_new(dect_fd, application_frame);
@@ -1082,15 +1059,16 @@ void init_app_state(int epoll, config_t * config) {
 	listen_fd = setup_listener();
 	listen_stream = stream_new(listen_fd);
 	stream_add_handler(listen_stream, listen_handler);
+	event_base_add_stream(event_base, listen_stream);
 
-	/* Add listen_stream to event dispatcher */
-	ev.events = EPOLLIN;
-	ev.data.ptr = listen_stream;
 
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, stream_get_fd(listen_stream), &ev) == -1) {
-		exit_failure("epoll_ctl\n");
-	}
-	
+	/* Connect and reset dect chip */
+	printf("DECT TX TO BRCM RX\n");
+	if(gpio_control(118, 0)) return;
+ 	printf("RESET_DECT\n");
+	if(dect_chip_reset()) return;
+
+
 	return;
 }
 
