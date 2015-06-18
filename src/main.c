@@ -32,8 +32,6 @@
 config_t c;
 config_t *config = &c;
 struct sigaction act;
-struct sockaddr_in my_addr, peer_addr;
-socklen_t peer_addr_size;
 void * client_list;
 void * client_bus;
 int client_connected = 0;
@@ -161,6 +159,8 @@ void listen_handler(void * listen_stream) {
 
 	int client_fd;
 	void * client_stream;
+	struct sockaddr_in my_addr, peer_addr;
+	socklen_t peer_addr_size;
 
 	peer_addr_size = sizeof(peer_addr);
 
@@ -195,11 +195,42 @@ void listen_handler(void * listen_stream) {
 }
 
 
+int setup_listener(void) {
+
+	int listen_fd, opt = 1;
+	struct sockaddr_in my_addr, peer_addr;
+	socklen_t peer_addr_size;
+ 
+	memset(&my_addr, 0, sizeof(my_addr));
+	my_addr.sin_family = AF_INET;
+	my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	my_addr.sin_port = htons(10468);
+	
+	if ( (listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ) {
+		exit_failure("socket");
+	}
+
+	if ( (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &(opt), sizeof(opt))) == -1 ) {
+		exit_failure("setsockopt");
+	}
+
+	if ( (bind(listen_fd, (struct sockaddr *) &my_addr, sizeof(struct sockaddr))) == -1) {
+		exit_failure("bind");
+	}
+	
+	if ( (listen(listen_fd, MAX_LISTENERS)) == -1 ) {
+		exit_failure("bind");
+	}
+
+
+	return listen_fd;
+}
+
 
 int main(int argc, char * argv[]) {
 	
 	int state = BOOT_STATE;
-	int nfds, i, count, listen_fd, client_fd, ret, opt = 1;
+	int nfds, i, count, listen_fd, client_fd, ret;
 	uint8_t inbuf[BUF_SIZE];
 	uint8_t outbuf[BUF_SIZE];
 	int dect_fd;
@@ -242,7 +273,6 @@ int main(int argc, char * argv[]) {
 		exit_failure("open\n");
 	}
 	
-	
 	dect_stream = stream_new(dect_fd);
 
 	ev.events = EPOLLIN;
@@ -256,38 +286,19 @@ int main(int argc, char * argv[]) {
 
 	
 	/* Setup listening socket */
-	memset(&my_addr, 0, sizeof(my_addr));
-	my_addr.sin_family = AF_INET;
-	my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	my_addr.sin_port = htons(10468);
-	
-	if ( (listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ) {
-		exit_failure("socket");
-	}
-
-	if ( (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &(opt), sizeof(opt))) == -1 ) {
-		exit_failure("setsockopt");
-	}
-
-	if ( (bind(listen_fd, (struct sockaddr *) &my_addr, sizeof(struct sockaddr))) == -1) {
-		exit_failure("bind");
-	}
-	
-	if ( (listen(listen_fd, MAX_LISTENERS)) == -1 ) {
-		exit_failure("bind");
-	}
-
+	listen_fd = setup_listener();
 	listen_stream = stream_new(listen_fd);
+	stream_add_handler(listen_stream, listen_handler);
 
+	/* Add listen_stream to event dispatcher */
 	ev.events = EPOLLIN;
 	ev.data.ptr = listen_stream;
-	
 
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, stream_get_fd(listen_stream), &ev) == -1) {
 		exit_failure("epoll_ctl\n");
 	}
 
-	stream_add_handler(listen_stream, listen_handler);
+
 
 	/* Check user arguments and init config */
 	if ( check_args(argc, argv, config) < 0 ) {
