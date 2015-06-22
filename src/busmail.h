@@ -26,7 +26,8 @@ typedef struct __attribute__((__packed__))
 
 
 
-void * busmail_new(int fd, void (*app_handler)(packet_t *));
+void * busmail_new(int fd);
+void * busmail_add_handler(void * _self, void (*app_handler)(packet_t *));
 int busmail_get(void * _self, packet_t *p);
 void packet_dump(packet_t *p);
 void busmail_dispatch(void * _self);

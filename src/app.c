@@ -745,11 +745,11 @@ static void fw_version_cfm(busmail_t *m) {
 }
 
 
-static void application_frame(packet_t *p) {
+static void busmail_init(packet_t *p) {
 	
 	int i;
 	busmail_t * m = (busmail_t *) &p->data[0];
-	
+
 	switch (m->task_id) {
 
 	case 0:
@@ -911,7 +911,7 @@ static void client_handler(void * client_stream, void * event) {
 		}
 					
 		list_delete(client_list, client_fd);
-		list_each(client_list, list_connected);
+		//list_each(client_list, list_connected);
 
 		/* Destroy client connection object here */
 
@@ -955,7 +955,7 @@ static void listen_handler(void * listen_stream, void * event) {
 
 		/* Add client */
 		list_add(client_list, client_fd);
-		list_each(client_list, list_connected);
+		//list_each(client_list, list_connected);
 
 		/* Setup client busmail connection */
 		printf("setup client_bus\n");
@@ -1048,7 +1048,11 @@ void init_app_state(void * event_b, config_t * config) {
 
 
 	/* Init busmail subsystem */
-	dect_bus = busmail_new(dect_fd, application_frame);
+	dect_bus = busmail_new(dect_fd);
+
+	/* Add handlers */
+	busmail_add_handler(dect_bus, busmail_init);
+	/* busmail_add_handler(dect_bus, internal_call); */
 
 
 	/* Init client list */

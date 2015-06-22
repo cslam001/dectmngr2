@@ -5,7 +5,7 @@
 typedef struct {
 	void * prev;
 	void * next;
-	int fd;
+	void * p;
 } list_t;
 
 typedef struct {
@@ -27,13 +27,13 @@ void * list_new(void) {
 
 
 /* Objects are added to the end of the list */
-void list_add(void * _self, int fd) {
+void list_add(void * _self, void * p) {
 	
 	list_head_t * head = (list_head_t *) _self;
 	list_t * new_last, * last;
 
 	new_last = (list_t *) calloc(sizeof(list_t), 1);
-	new_last->fd = fd;
+	new_last->p = p;
 
 	if ( head->last ) {
 		
@@ -56,7 +56,7 @@ void list_add(void * _self, int fd) {
 
 
 
-void list_delete(void * _self, int fd) {
+void list_delete(void * _self, void * p) {
 	
 	list_head_t * head = (list_head_t *) _self;
 	int i;
@@ -71,7 +71,7 @@ void list_delete(void * _self, int fd) {
 	/* Loop over all objects in list */
 	for (;;) {
 
-		if ( obj->fd == fd ) {
+		if ( obj->p == p ) {
 			/* We have found our object */
 
 			if ( ! obj->prev && obj->next ) {
@@ -122,10 +122,10 @@ void list_delete(void * _self, int fd) {
 }
 
 
-void list_each(void * _self, void (*fn) (int fd)) {
+void list_call_each(void * _self, void * arg) {
 	
 	list_head_t * head = (list_head_t *) _self;
-	void (*callback)(int fd) = fn;
+	void (*callback)(void * arg);
 	list_t * obj;
 
 	if ( head->count == 0 ) {
@@ -136,7 +136,8 @@ void list_each(void * _self, void (*fn) (int fd)) {
 
 	/* Loop over all objects in list */
 	for (;;) {
-		callback(obj->fd);
+		callback = obj->p;
+		callback(arg);
 		
 		if ( obj->next ) {
 			/* Next object in list */
