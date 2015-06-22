@@ -58,15 +58,8 @@ static void sighandler(int signum, siginfo_t * info, void * ptr) {
 
 static void eap(packet_t *p) {
 	
-	int i;
-
 	printf("send to dect_bus\n");
-	packet_dump(p);
-	
-	busmail_send0(dect_bus, &p->data[3], p->size - 3);
-	
-	/* /\* For RSX *\/ */
-	/* busmail_send_prog(dect_bus, &p->data[3], p->size - 3, 0x81); */
+	busmail_send_addressee(dect_bus, p->data, p->size);
 }
 
 
@@ -75,15 +68,8 @@ static void client_packet_handler(packet_t *p) {
 
 	busmail_t * m = (busmail_t *) &p->data[0];
 
-	/* Production test command */
-	if ( client_connected == 1 ) {
-
-		/* Send packets to connected clients */
-		printf("send to client_bus\n");
-		packet_dump(p);
-		eap_send(client_bus, &p->data[3], p->size - 3);
-	}
-
+	// Send (sniff) all packets to connected clients
+	if (client_connected == 1) eap_send(client_bus, &p->data, p->size);
 }
 
 

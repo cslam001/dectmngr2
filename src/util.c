@@ -46,12 +46,11 @@ void util_dump(unsigned char *buf, int size, char *start) {
 static void print_usage(const char * name) {
 
 	printf("Usage: %s [--app] [--prog] [--nvs]\n", name);
-	printf("\t\t[--test=<enable|disable>] [--help]\n\n", name);
+	printf("\t[--help]\n\n", name);
 
 	printf("\tapp\t: Start in application mode\n");
 	printf("\tprog\t: Program DECT flash chip\n");
 	printf("\tnvs\t: Configure DECT chip\n");
-	printf("\ttest\t: Enable/disable test mode\n");
 	printf("\thelp\t: print this help and exit\n\n");
 }
 
@@ -66,7 +65,6 @@ int check_args(int argc, char * argv[], config_t * c) {
 		{"prog", no_argument, NULL, 'p'},
 		{"app", no_argument, NULL, 'a'},
 		{"nvs", no_argument, NULL, 'n'},
-		{"test", required_argument, NULL, 't'},
 		{NULL, 0, NULL, 0}
 	};
 
@@ -89,29 +87,6 @@ int check_args(int argc, char * argv[], config_t * c) {
 			c->mode = PROG_MODE;
 			break;
 
-		case 't':
-			c->mode = TEST_MODE;
-			printf("option: %s\n", optarg);
-			
-			/* Parse test options */
-			if ( strncmp("enable", optarg, 6) == 0){
-				
-				/* Quick fix */
-				c->test_enable = true;
-
-			} else if ( strncmp("disable", optarg, 7) == 0) {
-
-				/* Quick fix */
-				c->test_enable = false;
-
-			} else {
-				printf("Bad test option: %s\n", optarg);
-				print_usage(argv[0]);
-				return -1;
-			}
-
-			break;
-			
 		case 'h':
 			print_usage(argv[0]);
 			return -1;
@@ -143,8 +118,8 @@ int initial_transition(config_t * config, int dect_fd) {
 	if (config->mode == PROG_MODE) {
 
 		/* Program new firmware */
-		state_add_handler(boot_state, dect_fd);
-		state_transition(BOOT_STATE);
+		/* state_add_handler(boot_state, dect_fd); */
+		/* state_transition(BOOT_STATE); */
 
 	} else if (config->mode == NVS_MODE) {
 
@@ -157,12 +132,6 @@ int initial_transition(config_t * config, int dect_fd) {
 		/* Radio on, start regmode */
 		state_add_handler(app_state, dect_fd);
 		state_transition(APP_STATE);
-
-	} else if (config->mode == TEST_MODE) {
-
-		/* Toggle TBR6 mode */
-		state_add_handler(test_state, dect_fd);
-		state_transition(TEST_STATE);
 
 	} else {
 		return -1;

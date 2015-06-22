@@ -212,22 +212,18 @@ void init_nvs_state(int dect_fd, config_t * config) {
 
 	
 	/* Init busmail subsystem */
-	bus = busmail_new(dect_fd, application_frame);
+	bus = busmail_new(dect_fd);
 }
 
 
-void handle_nvs_package(event_t *e) {
+void handle_nvs_package(void * stream, void * event) {
 
 	uint8_t header;
-	packet_t packet;
-	packet_t *p = &packet;
-	p->fd = e->fd;
-	p->size = 0;
 
 	//util_dump(e->in, e->incount, "\n[READ]");
 
 	/* Add input to busmail subsystem */
-	if (busmail_write(bus, e) < 0) {
+	if (busmail_write(bus, event) < 0) {
 		printf("busmail buffer full\n");
 	}
 	
