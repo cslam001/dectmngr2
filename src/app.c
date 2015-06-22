@@ -755,8 +755,106 @@ static void internal_call_handler(packet_t *p) {
 	switch (m->mail_header) {
 
 	case API_FP_CC_SETUP_IND:
-		printf("API_FP_CC_SETUP_IND\n");
 		setup_ind(m);
+		break;
+
+	case API_FP_CC_RELEASE_IND:
+		release_ind(m);
+		break;
+
+	case API_FP_CC_RELEASE_CFM:
+		release_cfm(m);
+		break;
+
+	case API_FP_CC_SETUP_CFM:
+		setup_cfm(m);
+		break;
+
+	case API_FP_CC_REJECT_IND:
+		reject_ind(m);
+		break;
+
+	case API_FP_CC_CONNECT_IND:
+		connect_ind(m);
+		break;
+
+	case API_FP_CC_CONNECT_CFM:
+		connect_cfm(m);
+		break;
+
+	case API_FP_CC_ALERT_IND:
+		alert_ind(m);
+		break;
+
+	case API_FP_CC_ALERT_CFM:
+		alert_cfm(m);
+		break;
+
+	case API_FP_CC_SETUP_ACK_CFM:
+		setup_ack_cfm(m);
+		break;
+
+	case API_FP_CC_INFO_IND:
+		info_ind(m);
+		break;
+	}
+}
+
+
+static void client_packet_handler(packet_t *p) {
+
+	busmail_t * m = (busmail_t *) &p->data[0];
+
+
+	/* Production test command */
+	if ( client_connected == 1 ) {
+
+		/* Send packets to connected clients */
+		printf("send to client_bus\n");
+		packet_dump(p);
+		eap_send(client_bus, &p->data[3], p->size - 3);
+	}
+
+}
+
+
+static void api_packet_parser(packet_t *p) {
+
+	busmail_t * m = (busmail_t *) &p->data[0];
+
+	/* Application command */
+	switch (m->mail_header) {
+
+	case API_FP_RESET_IND:
+		printf("API_FP_RESET_IND\n");
+		break;
+
+	case API_PROD_TEST_CFM:
+		printf("API_PROD_TEST_CFM\n");
+		break;
+
+	case RTX_EAP_HW_TEST_CFM:
+		printf("RTX_EAP_HW_TEST_CFM\n");
+		break;
+
+	case API_FP_GET_FW_VERSION_CFM:
+		printf("API_FP_GET_FW_VERSION_CFM\n");
+		break;
+	
+	case API_FP_FEATURES_CFM:
+		printf("API_FP_FEATURES_CFM\n");
+		break;
+
+	case API_SCL_STATUS_IND:
+		printf("API_SCL_STATUS_IND\n");
+		break;
+
+	case API_FP_MM_SET_REGISTRATION_MODE_CFM:
+		printf("API_FP_MM_SET_REGISTRATION_MODE_CFM\n");
+		break;
+
+	case API_FP_CC_SETUP_IND:
+		printf("API_FP_CC_SETUP_IND\n");
 		break;
 
 	case API_FP_CC_SETUP_REQ:
@@ -765,52 +863,46 @@ static void internal_call_handler(packet_t *p) {
 
 	case API_FP_CC_RELEASE_IND:
 		printf("API_FP_CC_RELEASE_IND\n");
-		release_ind(m);
 		break;
 
 	case API_FP_CC_RELEASE_CFM:
 		printf("API_FP_CC_RELEASE_CFM\n");
-		release_cfm(m);
 		break;
 
 	case API_FP_CC_SETUP_CFM:
 		printf("API_FP_CC_SETUP_CFM\n");
-		setup_cfm(m);
 		break;
 
 	case API_FP_CC_REJECT_IND:
 		printf("API_FP_CC_REJECT_IND\n");
-		reject_ind(m);
 		break;
 
 	case API_FP_CC_CONNECT_IND:
 		printf("API_FP_CC_CONNECT_IND\n");
-		connect_ind(m);
 		break;
-
+		
 	case API_FP_CC_CONNECT_CFM:
 		printf("API_FP_CC_CONNECT_CFM\n");
-		connect_cfm(m);
 		break;
-
+		
 	case API_FP_CC_ALERT_IND:
 		printf("API_FP_CC_ALERT_IND\n");
-		alert_ind(m);
 		break;
-
+		
 	case API_FP_CC_ALERT_CFM:
 		printf("API_FP_CC_ALERT_CFM\n");
-		alert_cfm(m);
 		break;
-
+		
 	case API_FP_CC_SETUP_ACK_CFM:
 		printf("API_FP_CC_SETUP_ACK_CFM\n");
-		setup_ack_cfm(m);
 		break;
-
+		
 	case API_FP_CC_INFO_IND:
 		printf("API_FP_CC_INFO_IND\n");
-		info_ind(m);
+		break;
+
+	default:
+		printf("unknown application frame\n");
 		break;
 	}
 }
@@ -821,78 +913,43 @@ static void busmail_init_handler(packet_t *p) {
 	int i;
 	busmail_t * m = (busmail_t *) &p->data[0];
 
-	switch (m->task_id) {
 
-	case 0:
+	if (m->task_id != 1) return;
+	
+	/* Application command */
+	switch (m->mail_header) {
+		
+	case API_FP_RESET_IND:
+		
+		if (reset_ind == 0) {
+			reset_ind = 1;
 
-		/* Production test command */
-		if ( client_connected == 1 ) {
+			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
+			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
+			busmail_send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 
-			/* Send packets to connected clients */
-			printf("send to client_bus\n");
-			packet_dump(p);
-			eap_send(client_bus, &p->data[3], p->size - 3);
+		} else {
+
 		}
+
 		break;
 
-	case 1:
+	case API_FP_GET_FW_VERSION_CFM:
+		/* Setup terminal id */
+		printf("\nWRITE: API_FP_FEATURES_REQ\n");
+		ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
+					      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
+	
+		busmail_send(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
+		break;
 
-		/* Application command */
-		switch (m->mail_header) {
-		
-		case API_FP_RESET_IND:
+	case API_FP_FEATURES_CFM:
 
-			printf("API_FP_RESET_IND\n");
-		
-			if (reset_ind == 0) {
-				reset_ind = 1;
-
-				printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
-				ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
-				busmail_send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
-
-			} else {
-
-			}
-
-			break;
-
-		case API_PROD_TEST_CFM:
-			printf("API_PROD_TEST_CFM\n");
-			break;
-
-		case RTX_EAP_HW_TEST_CFM:
-			printf("RTX_EAP_HW_TEST_CFM\n");
-			break;
-
-		case API_FP_GET_FW_VERSION_CFM:
-			printf("API_FP_GET_FW_VERSION_CFM\n");
-		
-			/* Setup terminal id */
-			ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
-						      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
-			busmail_send(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
-			break;
-
-		case API_FP_FEATURES_CFM:
-			printf("API_FP_FEATURES_CFM\n");
-
-			/* Start protocol */
-			printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
-			ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
-			busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
-			break;
-
-		case API_SCL_STATUS_IND:
-			printf("API_SCL_STATUS_IND\n");
-			break;
-
-		case API_FP_MM_SET_REGISTRATION_MODE_CFM:
-			printf("API_FP_MM_SET_REGISTRATION_MODE_CFM\n");
-			break;
-
-
-		}
+		/* Start protocol */
+		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
+		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
+		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+		break;
 	}
 }
 
@@ -1059,7 +1116,10 @@ void init_app_state(void * event_b, config_t * config) {
 
 	/* Add handlers */
 	busmail_add_handler(dect_bus, busmail_init_handler);
+	busmail_add_handler(dect_bus, api_packet_parser);
 	busmail_add_handler(dect_bus, internal_call_handler);
+	busmail_add_handler(dect_bus, client_packet_handler);
+
 
 
 	/* Init client list */
