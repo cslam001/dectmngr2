@@ -40,7 +40,7 @@
 buffer_t * buf;
 int client_connected;
 void * dect_bus;
-void * dect_stream, * listen_stream;
+void * dect_stream, * listen_stream, * debug_stream, * proxy_stream;
 void * client_stream;
 int epoll_fd;
 void * client_list;
@@ -50,21 +50,13 @@ void * event_base;
 struct sigaction act;
 
 
-
-static void list_connected(int fd) {
-	printf("connected fd:s : %d\n", fd);
-}
-
-
-void sighandler(int signum, siginfo_t * info, void * ptr) {
+static void sighandler(int signum, siginfo_t * info, void * ptr) {
 
 	printf("Recieved signal %d\n", signum);
 }
 
 
-
-
-void eap(packet_t *p) {
+static void eap(packet_t *p) {
 	
 	int i;
 
@@ -82,7 +74,6 @@ void eap(packet_t *p) {
 static void client_packet_handler(packet_t *p) {
 
 	busmail_t * m = (busmail_t *) &p->data[0];
-
 
 	/* Production test command */
 	if ( client_connected == 1 ) {
@@ -116,7 +107,6 @@ static void client_handler(void * client_stream, void * event) {
 		}
 					
 		list_delete(client_list, client_fd);
-		//list_each(client_list, list_connected);
 
 		/* Destroy client connection object here */
 
@@ -134,6 +124,24 @@ static void client_handler(void * client_stream, void * event) {
 }
 
 
+static void setup_signal_handler(void) {
+
+	/* Setup signal handler. When writing data to a
+	   client that closed the connection we get a 
+	   SIGPIPE. We need to catch it to avoid being killed */
+	memset(&act, 0, sizeof(act));
+	act.sa_sigaction = sighandler;
+	act.sa_flags = SA_SIGINFO;
+	sigaction(SIGPIPE, &act, NULL);
+}
+
+
+static void client_init(void) {
+	
+	setup_signal_handler();
+	client_list = list_new();
+	busmail_add_handler(dect_bus, client_packet_handler);
+}
 
 static void listen_handler(void * listen_stream, void * event) {
 
@@ -171,7 +179,7 @@ static void listen_handler(void * listen_stream, void * event) {
 
 
 
-static int setup_listener(void) {
+static int setup_listener(uint16_t port, uint32_t type) {
 
 	int listen_fd, opt = 1;
 	struct sockaddr_in my_addr, peer_addr;
@@ -179,8 +187,8 @@ static int setup_listener(void) {
  
 	memset(&my_addr, 0, sizeof(my_addr));
 	my_addr.sin_family = AF_INET;
-	my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	my_addr.sin_port = htons(10468);
+	my_addr.sin_addr.s_addr = htonl(type);
+	my_addr.sin_port = htons(port);
 	
 	if ( (listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ) {
 		exit_failure("socket");
@@ -218,21 +226,11 @@ void dect_handler(void * dect_stream, void * event) {
 }
 
 
-static void setup_signal_handler(void) {
-
-	/* Setup signal handler. When writing data to a
-	   client that closed the connection we get a 
-	   SIGPIPE. We need to catch it to avoid being killed */
-	memset(&act, 0, sizeof(act));
-	act.sa_sigaction = sighandler;
-	act.sa_flags = SA_SIGINFO;
-	sigaction(SIGPIPE, &act, NULL);
-}
 
 
 void init_app_state(void * base, config_t * config) {
 	
-	int dect_fd, listen_fd;
+	int dect_fd, debug_fd, proxy_fd;
 
 	printf("APP_STATE\n");
 	event_base = base;
@@ -241,13 +239,11 @@ void init_app_state(void * base, config_t * config) {
 	dect_fd = tty_open("/dev/ttyS1");
 	tty_set_raw(dect_fd);
 	tty_set_baud(dect_fd, B115200);
-	
 
 	/* Register dect stream */
 	dect_stream = stream_new(dect_fd);
 	stream_add_handler(dect_stream, dect_handler);
 	event_base_add_stream(event_base, dect_stream);
-
 
 	/* Init busmail subsystem */
 	dect_bus = busmail_new(dect_fd);
@@ -258,18 +254,20 @@ void init_app_state(void * base, config_t * config) {
 	api_parser_init(dect_bus);
 	internal_call_init(dect_bus);
 
-	busmail_add_handler(dect_bus, client_packet_handler);
-	
+	/* Init client subsystem */
+	client_init();
 
-	/* Init client list */
-	client_list = list_new();
+	/* Setup debug socket */
+	debug_fd = setup_listener(10468, INADDR_ANY);
+	debug_stream = stream_new(debug_fd);
+	stream_add_handler(debug_stream, listen_handler);
+	event_base_add_stream(event_base, debug_stream);
 
-	/* Setup listening socket */
-	listen_fd = setup_listener();
-	listen_stream = stream_new(listen_fd);
-	stream_add_handler(listen_stream, listen_handler);
-	event_base_add_stream(event_base, listen_stream);
-
+	/* Setup proxy socket */
+	proxy_fd = setup_listener(7777, INADDR_LOOPBACK);
+	proxy_stream = stream_new(proxy_fd);
+	stream_add_handler(proxy_stream, listen_handler);
+	event_base_add_stream(event_base, proxy_stream);
 
 	/* Connect and reset dect chip */
 	printf("DECT TX TO BRCM RX\n");
