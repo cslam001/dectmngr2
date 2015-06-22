@@ -92,7 +92,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 
 
 			
-			busmail_send0(bus, data, sizeof(data));
+			busmail_send_addressee(bus, data, sizeof(data));
 		}
 
 		break;
@@ -102,7 +102,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 		printf("Get NVS\n");
 		uint8_t data1[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \
 				   0x00, 0x00, 0x00, 0x00, 0xff};
-		busmail_send0(bus, data1, sizeof(data1));
+		busmail_send_addressee(bus, data1, sizeof(data1));
 		break;
 
 	case PT_CMD_GET_NVS:
@@ -173,7 +173,7 @@ static void application_frame(packet_t *p) {
 					  0x80, 0x00, 0x00, 0x00, \ 
 					  0x01, \
 					  0x01 };
-			busmail_send0(bus, enable, sizeof(enable));
+			busmail_send_addressee(bus, enable, sizeof(enable));
 		} else {
 
 			uint8_t disable[] = {0x66, 0xf0,		  \
@@ -182,7 +182,7 @@ static void application_frame(packet_t *p) {
 					  0x80, 0x00, 0x00, 0x00, \ 
 					  0x01, \
 					  0x00 };
-			busmail_send0(bus, disable, sizeof(disable));
+			busmail_send_addressee(bus, disable, sizeof(disable));
 
 
 		}

@@ -117,7 +117,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 
 
 
-			busmail_send0(bus, data, sizeof(data));
+			busmail_send_task(bus, data, sizeof(data), 0);
 		}
 
 		break;
@@ -127,7 +127,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 		printf("Get NVS\n");
 		uint8_t data1[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \
 				   0x00, 0x00, 0x00, 0x00, 0xff};
-		busmail_send0(bus, data1, sizeof(data1));
+		busmail_send_task(bus, data1, sizeof(data1), 0);
 		break;
 
 	case PT_CMD_GET_NVS:
@@ -182,12 +182,12 @@ static void application_frame(packet_t *p) {
 
 		printf("\nWRITE: NvsDefault\n");
 		uint8_t data[] = {0x66, 0xf0, 0x00, 0x00, 0x02, 0x01, 0x01, 0x00, 0x01};
-		busmail_send0(bus, data, sizeof(data));
+		busmail_send_task(bus, data, sizeof(data), 0);
 
 		/* printf("Get NVS\n"); */
 		/* uint8_t data1[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \ */
 		/* 		   0x00, 0x00, 0x00, 0x00, 0xff}; */
-		/* busmail_send0(data1, sizeof(data1)); */
+		/* busmail_send_task(data1, sizeof(data1), 0); */
 		break;
 
 	case API_SCL_STATUS_IND:

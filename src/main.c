@@ -40,7 +40,6 @@ int main(int argc, char * argv[]) {
 	
 	event_base = event_base_new(MAX_EVENTS);
 	
-
 	/* Check user arguments and init config */
 	if ( check_args(argc, argv, config) < 0 ) {
 		exit(EXIT_FAILURE);

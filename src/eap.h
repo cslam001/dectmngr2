@@ -21,11 +21,8 @@
 
 
 
-void * eap_new(int fd, void (*app_handler)(packet_t *));
-int eap_get(void * _self, packet_t *p);
-void packet_dump(packet_t *p);
+void* eap_new(int fd, void (*app_handler)(packet_t *));
 void eap_dispatch(void * _self);
-void eap_send0(void * _self, uint8_t * data, int size);
 void eap_send(void * _self, uint8_t * data, int size);
 
 #endif /* EAP_H */
