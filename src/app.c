@@ -281,32 +281,9 @@ void init_app_state(void * base, config_t * config) {
 }
 
 
-void handle_app_package(void * event) {
-
-	uint8_t header;
-
-	//util_dump(e->in, e->incount, "\n[READ]");
-
-	/* Add input to busmail subsystem */
-	if (busmail_write(dect_bus, event) < 0) {
-		printf("busmail buffer full\n");
-	}
-	
-	/* Process whole packets in buffer. The previously registered
-	   callback will be called for application frames */
-	busmail_dispatch(dect_bus);
-
-	return;
-}
-
-
-
-
-
 struct state_handler app_handler = {
 	.state = APP_STATE,
 	.init_state = init_app_state,
-	.event_handler = handle_app_package,
 };
 
 struct state_handler * app_state = &app_handler;
