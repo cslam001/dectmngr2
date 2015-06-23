@@ -1,3 +1,3 @@
 
-extern struct state_handler * app_state;
+void app_init(void * base, config_t * config);
 

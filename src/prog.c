@@ -134,8 +134,8 @@ void boot_handler(void * stream, void * event) {
 			send_ack(in);
 
 			/* make this prettier */
-			/* state_add_handler(preloader_state, e->fd); */
-			/* state_transition(PRELOADER_STATE); */
+			state_add_handler(preloader_state, dect_fd);
+			state_transition(PRELOADER_STATE);
 
 		} else {
 			printf("Unknown boot packet: %x\n", in[0]);
@@ -145,10 +145,10 @@ void boot_handler(void * stream, void * event) {
 }
 
 
-void init_boot_state(void * event_base, config_t * config) {
+void prog_init(void * event_base, config_t * config) {
 	
 	void * boot_stream;
-	printf("BOOT_STATE\n");
+	printf("prog_init\n");
 
 	/* Setup dect tty */
 	dect_fd = tty_open("/dev/ttyS1");
@@ -176,13 +176,3 @@ void init_boot_state(void * event_base, config_t * config) {
 
 
 
-
-
-
-
-struct state_handler boot_state_handler = {
-	.state = BOOT_STATE,
-	.init_state = init_boot_state,
-};
-
-struct state_handler * boot_state = &boot_state_handler;

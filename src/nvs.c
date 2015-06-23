@@ -197,23 +197,6 @@ static void application_frame(packet_t *p) {
 }
 
 
-void init_nvs_state(int dect_fd, config_t * config) {
-	
-	printf("NVS_STATE\n");
-
-	tty_set_raw(dect_fd);
-	tty_set_baud(dect_fd, B115200);
-
-	printf("DECT TX TO BRCM RX\n");
-	if(gpio_control(118, 0)) return;
-
-	printf("RESET_DECT\n");
-	if(dect_chip_reset()) return;
-
-	
-	/* Init busmail subsystem */
-	bus = busmail_new(dect_fd);
-}
 
 
 void handle_nvs_package(void * stream, void * event) {
@@ -236,12 +219,22 @@ void handle_nvs_package(void * stream, void * event) {
 
 
 
+void nvs_init(void * event_base, config_t * config) {
+	
+	printf("NVS_STATE\n");
+
+	/* tty_set_raw(dect_fd); */
+	/* tty_set_baud(dect_fd, B115200); */
+
+	/* printf("DECT TX TO BRCM RX\n"); */
+	/* if(gpio_control(118, 0)) return; */
+
+	/* printf("RESET_DECT\n"); */
+	/* if(dect_chip_reset()) return; */
+
+	
+	/* Init busmail subsystem */
+	/* bus = busmail_new(dect_fd); */
+}
 
 
-struct state_handler nvs_handler = {
-	.state = NVS_STATE,
-	.init_state = init_nvs_state,
-	.event_handler = handle_nvs_package,
-};
-
-struct state_handler * nvs_state = &nvs_handler;

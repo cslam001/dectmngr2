@@ -112,35 +112,6 @@ int check_args(int argc, char * argv[], config_t * c) {
 }
 
 
-
-int initial_transition(config_t * config, int dect_fd) {
-
-	if (config->mode == PROG_MODE) {
-
-		/* Program new firmware */
-		state_add_handler(boot_state, dect_fd);
-		state_transition(BOOT_STATE);
-
-	} else if (config->mode == NVS_MODE) {
-
-		/* Firmware written, setup NVS */
-		state_add_handler(nvs_state, dect_fd);
-		state_transition(NVS_STATE);
-
-	} else if (config->mode == APP_MODE) {
-
-		/* Radio on, start regmode */
-		state_add_handler(app_state, dect_fd);
-		state_transition(APP_STATE);
-
-	} else {
-		return -1;
-	}
-	
-	return 0;
-}
-
-
 int gpio_control(int gpio, int state) {
 	BOARD_IOCTL_PARMS IoctlParms;
 	IoctlParms.string = 0;

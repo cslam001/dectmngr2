@@ -214,7 +214,7 @@ void dect_handler(void * dect_stream, void * event) {
 
 
 
-void init_app_state(void * base, config_t * config) {
+void app_init(void * base, config_t * config) {
 	
 	int dect_fd, debug_fd, proxy_fd;
 
@@ -265,9 +265,3 @@ void init_app_state(void * base, config_t * config) {
 }
 
 
-struct state_handler app_handler = {
-	.state = APP_STATE,
-	.init_state = init_app_state,
-};
-
-struct state_handler * app_state = &app_handler;
