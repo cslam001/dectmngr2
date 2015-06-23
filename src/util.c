@@ -118,8 +118,8 @@ int initial_transition(config_t * config, int dect_fd) {
 	if (config->mode == PROG_MODE) {
 
 		/* Program new firmware */
-		/* state_add_handler(boot_state, dect_fd); */
-		/* state_transition(BOOT_STATE); */
+		state_add_handler(boot_state, dect_fd);
+		state_transition(BOOT_STATE);
 
 	} else if (config->mode == NVS_MODE) {
 

@@ -20,7 +20,7 @@ endif
 
 
 
-dectmngr2: tty.o error.o main.o state.o util.o Crc.o app.o buffer.o busmail.o nvs.o fifo.o list.o eap.o stream.o event.o event_base.o internal_call.o connection_init.o api_parser.o
+dectmngr2: boot.o tty.o error.o main.o state.o util.o Crc.o app.o buffer.o busmail.o nvs.o fifo.o list.o eap.o stream.o event.o event_base.o internal_call.o connection_init.o api_parser.o
 	$(CC) $(INCLUDE_PATHS) -o $@ $^
 
 

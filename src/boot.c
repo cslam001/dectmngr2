@@ -33,6 +33,7 @@ static struct bin_img preloader;
 static struct bin_img *pr = &preloader;
 
 
+int dect_fd;
 
 
 
@@ -72,42 +73,93 @@ static void calculate_checksum(void) {
 }
 
 
-static void send_size(event_t *e) {
+static void send_size(uint8_t * in) {
 
 
 	/* Reply */
-	e->out[0] = SOH;
-	e->out[1] = pr->size_lsb;
-	e->out[2] = pr->size_msb;
-	e->outcount = 3;
+	/* e->out[0] = SOH; */
+	/* e->out[1] = pr->size_lsb; */
+	/* e->out[2] = pr->size_msb; */
+	/* e->outcount = 3; */
 
 	printf("SOH\n");
 
 }
 
 
-static void send_preloader(event_t *e) {
+static void send_preloader(uint8_t * in) {
   
 	printf("WRITE_PRELOADER\n");
-	write(e->fd, pr->img, pr->size);
+	/* write(e->fd, pr->img, pr->size); */
 }
 
-static void send_ack(event_t *e) {
+static void send_ack(uint8_t * in) {
 
 	uint8_t c[3];
 
 	c[0] = ACK;
 
 	util_dump(c, 1, "[WRITE]");
-	write(e->fd, c, 1);
+	//	write(e->fd, c, 1);
 }
 
 
+void boot_handler(void * stream, void * event) {
 
-void init_boot_state(int dect_fd, config_t * config) {
+	uint8_t * in = (uint8_t *) event_data(event);
 	
+	switch (in[0]) {
+
+	case SOH:
+		printf("SOH\n");
+		break;
+	case STX:
+		printf("STX\n");
+		send_size(in);
+		break;
+	case ETX:
+		printf("ETX\n");
+		break;
+	case ACK:
+		printf("ACK\n");
+		send_preloader(in);
+		break;
+	case NACK:
+		printf("NACK\n\n");
+		break;
+	default:
+		if (in[0] == pr->checksum) {
+			printf("Checksum ok!\n");
+			
+			send_ack(in);
+
+			/* make this prettier */
+			/* state_add_handler(preloader_state, e->fd); */
+			/* state_transition(PRELOADER_STATE); */
+
+		} else {
+			printf("Unknown boot packet: %x\n", in[0]);
+		}
+		break;
+	}
+}
+
+
+void init_boot_state(void * event_base, config_t * config) {
+	
+	void * boot_stream;
 	printf("BOOT_STATE\n");
+
+	/* Setup dect tty */
+	dect_fd = tty_open("/dev/ttyS1");
+	tty_set_raw(dect_fd);
+	tty_set_baud(dect_fd, B19200);
 	
+	/* Register dect stream */
+	boot_stream = (void *) stream_new(dect_fd);
+	stream_add_handler(boot_stream, boot_handler);
+	event_base_add_stream(event_base, boot_stream);
+
 	read_preloader();
 	calculate_checksum();
 	
@@ -119,49 +171,6 @@ void init_boot_state(int dect_fd, config_t * config) {
 
 	printf("DECT TX TO BRCM RX\n");
 	if(gpio_control(118, 0)) return;
-	
-	tty_set_raw(dect_fd);
-	tty_set_baud(dect_fd, B19200);
-}
-
-
-void handle_boot_package(event_t *e) {
-
-	
-	switch (e->in[0]) {
-
-	case SOH:
-		printf("SOH\n");
-		break;
-	case STX:
-		printf("STX\n");
-		send_size(e);
-		break;
-	case ETX:
-		printf("ETX\n");
-		break;
-	case ACK:
-		printf("ACK\n");
-		send_preloader(e);
-		break;
-	case NACK:
-		printf("NACK\n\n");
-		break;
-	default:
-		if (e->in[0] == pr->checksum) {
-			printf("Checksum ok!\n");
-			
-			send_ack(e);
-
-			/* make this prettier */
-			state_add_handler(preloader_state, e->fd);
-			state_transition(PRELOADER_STATE);
-
-		} else {
-			printf("Unknown boot packet: %x\n", e->in[0]);
-		}
-		break;
-	}
 
 }
 
@@ -169,10 +178,11 @@ void handle_boot_package(event_t *e) {
 
 
 
-struct state_handler boot_handler = {
+
+
+struct state_handler boot_state_handler = {
 	.state = BOOT_STATE,
 	.init_state = init_boot_state,
-	.event_handler = handle_boot_package,
 };
 
-struct state_handler * boot_state = &boot_handler;
+struct state_handler * boot_state = &boot_state_handler;
