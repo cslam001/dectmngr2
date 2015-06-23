@@ -46,3 +46,13 @@ void * stream_add_handler(void * _self, void (*event_handler)(void *stream, void
 }
 
 
+void * stream_remove_handler(void * _self, void (*event_handler)(void *stream, void * event)) {
+	
+	stream_t * s = (stream_t *) _self;
+	
+	s->event_handler = NULL;
+	
+	return;
+}
+
+

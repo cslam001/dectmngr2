@@ -147,7 +147,7 @@ static void set_baudrate(uint8_t * in) {
 
 
 
-void handle_preloader_package(void * stream, void * event) {
+void preloader_handler(void * stream, void * event) {
 
 	uint8_t * in = (uint8_t *) event_data(event);
 	
@@ -182,11 +182,13 @@ void handle_preloader_package(void * stream, void * event) {
 
 
 
-void init_preloader_state(void * event_base, config_t * config) {
+void preloader_init(void * stream) {
 	
 	uint8_t c = PRELOADER_START;
 	
-	printf("PRELOADER_STATE\n");
+	printf("preloader_init\n");
+	stream_add_handler(stream, preloader_handler);
+	dect_fd = stream_get_fd(stream);
 
 	read_flashloader();
 	calculate_checksum();
@@ -198,9 +200,3 @@ void init_preloader_state(void * event_base, config_t * config) {
 }
 
 
-struct state_handler preloader_state_handler = {
-	.state = PRELOADER_STATE,
-	.init_state = init_preloader_state,
-};
-
-struct state_handler * preloader_state = &preloader_state_handler;

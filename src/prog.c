@@ -132,10 +132,10 @@ void boot_handler(void * stream, void * event) {
 			printf("Checksum ok!\n");
 			
 			send_ack(in);
-
-			/* make this prettier */
-			state_add_handler(preloader_state, dect_fd);
-			state_transition(PRELOADER_STATE);
+			
+			/* Transition to preloader state */
+			boot_exit(stream);
+			preloader_init(stream);
 
 		} else {
 			printf("Unknown boot packet: %x\n", in[0]);
@@ -145,20 +145,10 @@ void boot_handler(void * stream, void * event) {
 }
 
 
-void prog_init(void * event_base, config_t * config) {
-	
-	void * boot_stream;
-	printf("prog_init\n");
+void boot_init(void * stream) {
 
-	/* Setup dect tty */
-	dect_fd = tty_open("/dev/ttyS1");
-	tty_set_raw(dect_fd);
-	tty_set_baud(dect_fd, B19200);
-	
-	/* Register dect stream */
-	boot_stream = (void *) stream_new(dect_fd);
-	stream_add_handler(boot_stream, boot_handler);
-	event_base_add_stream(event_base, boot_stream);
+	printf("boot_init\n");
+	stream_add_handler(stream, boot_handler);
 
 	read_preloader();
 	calculate_checksum();
@@ -171,7 +161,33 @@ void prog_init(void * event_base, config_t * config) {
 
 	printf("DECT TX TO BRCM RX\n");
 	if(gpio_control(118, 0)) return;
+	
+}
 
+
+void boot_exit(void * stream) {
+
+	printf("boot_exit\n");
+	stream_remove_handler(stream, boot_handler);
+}
+
+
+void prog_init(void * event_base, config_t * config) {
+	
+	void * stream;
+	printf("prog_init\n");
+
+	/* Setup dect tty */
+	dect_fd = tty_open("/dev/ttyS1");
+	tty_set_raw(dect_fd);
+	tty_set_baud(dect_fd, B19200);
+	
+	/* Register dect stream with event base */
+	stream = (void *) stream_new(dect_fd);
+	event_base_add_stream(event_base, stream);
+
+	/* Init boot state */
+	boot_init(stream);
 }
 
 
