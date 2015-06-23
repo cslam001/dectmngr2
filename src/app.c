@@ -218,7 +218,7 @@ void app_init(void * base, config_t * config) {
 	
 	int dect_fd, debug_fd, proxy_fd;
 
-	printf("APP_STATE\n");
+	printf("app_init\n");
 	event_base = base;
 
 	/* Setup dect tty */
