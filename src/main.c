@@ -14,7 +14,6 @@
 #include "state.h"
 #include "util.h"
 
-#include "test.h"
 #include "list.h"
 #include "busmail.h"
 #include "stream.h"

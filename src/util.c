@@ -15,7 +15,6 @@
 #include "app.h"
 #include "nvs.h"
 #include "boot.h"
-#include "test.h"
 #include <board.h>
 
 
