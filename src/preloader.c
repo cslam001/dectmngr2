@@ -169,9 +169,10 @@ void preloader_handler(void * stream, void * event) {
 		if (in[0] == pr->checksum) {
 			printf("Checksum ok!\n");
 			
-			/* make this prettier */
-			/* state_add_handler(flashloader_state, dect_fd); */
-			/* state_transition(FLASHLOADER_STATE); */
+			/* Transition to flashloader state */
+			preloader_exit(stream);
+			flashloader_init(stream);
+			
 		} else {
 			printf("Unknown preloader packet: %x\n", in[0]);
 		}
@@ -181,6 +182,11 @@ void preloader_handler(void * stream, void * event) {
 }
 
 
+void preloader_exit(void * stream) {
+
+	printf("preloader_exit\n");
+	stream_remove_handler(stream, preloader_handler);
+}
 
 void preloader_init(void * stream) {
 	
