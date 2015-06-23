@@ -682,7 +682,6 @@ void flashloader_handler(void * stream, void * event) {
 }
 
 
-
 void flashloader_init(void * stream) {
 	
 	printf("flashloader_init\n");
