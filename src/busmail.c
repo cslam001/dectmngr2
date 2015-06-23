@@ -36,7 +36,7 @@ typedef struct {
 	uint8_t rx_seq_r;
 	void * tx_fifo;
 	buffer_t * buf;
-	void (*application_frame) (packet_t *);
+	void * application_handlers;
 } busmail_connection_t;
 
 
@@ -49,6 +49,11 @@ extern void * client_bus;
 extern int client_connected;
 client_packet_t client_p;
 
+
+static void packet_dispatch(void * packet) {
+	
+}
+			    
 
 static void reset_counters(void * _self) {
 
@@ -348,17 +353,19 @@ static void information_frame(void * _self, packet_t *p) {
 
 	/* Process application frame. The application frame callback will enqueue 
 	   outgoing packets on tx_fifo and directly transmit packages with busmail_send() */
-	bus->application_frame(p);
+	list_call_each(bus->application_handlers, p);
 }
 
 
 
-int busmail_write(void * _self, event_t * e) {
+int busmail_write(void * _self, void * event) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	
-	if ( buffer_write(bus->buf, e->in, e->incount) == 0 ) {
-		return -1;
+	if (event_count(event) > 0) {
+		if ( buffer_write(bus->buf, event_data(event), event_count(event)) == 0 ) {
+			return -1;
+		}
 	}
 	
 	return 0;
@@ -380,7 +387,7 @@ int busmail_get(void * _self, packet_t *p) {
 			break;
 		}
 	}
-	
+
 	/* Return if we did not read any data */
 	if (read == 0) {
 		return -1;
@@ -444,7 +451,7 @@ void busmail_dispatch(void * _self) {
 	packet_t packet;
 	packet_t *p = &packet;
 	busmail_t * m;
-	
+
 	/* Process whole packets in buffer */
 	while ( busmail_get(bus, p) == 0) {
 
@@ -481,18 +488,22 @@ void busmail_dispatch(void * _self) {
 }
 
 
+void * busmail_add_handler(void * _self , void (*app_handler)(packet_t *)) {
 
-void * busmail_new(int fd, void (*app_handler)(packet_t *)) {
+	busmail_connection_t * bus = (busmail_connection_t *) _self;
+
+	list_add(bus->application_handlers, app_handler);
+}
+
+
+void * busmail_new(int fd) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) calloc(sizeof(busmail_connection_t), 1);
 
 	bus->fd = fd;
-	bus->application_frame = app_handler;
+	bus->application_handlers = list_new();
 	bus->tx_fifo = fifo_new();
 	bus->buf = buffer_new(500);
-	//bus->name = malloc(strlen(name));
-
-	reset_counters(bus);
 
 	return bus;
 }

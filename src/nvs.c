@@ -35,6 +35,8 @@
 buffer_t * buf;
 static int reset_ind = 0;
 void * bus;
+void * dect_stream, * dect_bus;
+int dect_fd;
 
 typedef struct __attribute__((__packed__))
 {
@@ -117,7 +119,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 
 
 
-			busmail_send_task(bus, data, sizeof(data), 0);
+			busmail_send_task(dect_bus, data, sizeof(data), 0);
 		}
 
 		break;
@@ -127,7 +129,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 		printf("Get NVS\n");
 		uint8_t data1[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \
 				   0x00, 0x00, 0x00, 0x00, 0xff};
-		busmail_send_task(bus, data1, sizeof(data1), 0);
+		busmail_send_task(dect_bus, data1, sizeof(data1), 0);
 		break;
 
 	case PT_CMD_GET_NVS:
@@ -143,7 +145,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 		printf("0x%02x ", m->mail_data[HEADER_OFFSET + 0x80]);
 		printf("\n");
 		
-		busmail_ack(bus);
+		busmail_ack(dect_bus);
 		exit(0);
 		break;
 	}
@@ -151,7 +153,7 @@ static void rtx_eap_hw_test_cfm(busmail_t *m) {
 }
 
 
-static void application_frame(packet_t *p) {
+void rfpi_handler(packet_t *p) {
 	
 	int i;
 	busmail_t * m = (busmail_t *) &p->data[0];
@@ -159,30 +161,27 @@ static void application_frame(packet_t *p) {
 	switch (m->mail_header) {
 		
 	case API_FP_RESET_IND:
-		printf("API_FP_RESET_IND\n");
 
 		if (reset_ind == 0) {
 			reset_ind = 1;
 
 			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
 			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
-			busmail_send(bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
+			busmail_send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 		}
 
 		break;
 
 	case RTX_EAP_HW_TEST_CFM:
-		printf("RTX_EAP_HW_TEST_CFM\n");
 		rtx_eap_hw_test_cfm(m);
 		break;
 
 	case API_FP_GET_FW_VERSION_CFM:
-		printf("API_FP_GET_FW_VERSION_CFM\n");
 		fw_version_cfm(m);
 
 		printf("\nWRITE: NvsDefault\n");
 		uint8_t data[] = {0x66, 0xf0, 0x00, 0x00, 0x02, 0x01, 0x01, 0x00, 0x01};
-		busmail_send_task(bus, data, sizeof(data), 0);
+		busmail_send_task(dect_bus, data, sizeof(data), 0);
 
 		/* printf("Get NVS\n"); */
 		/* uint8_t data1[] = {0x66, 0xf0, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, \ */
@@ -190,62 +189,66 @@ static void application_frame(packet_t *p) {
 		/* busmail_send_task(data1, sizeof(data1), 0); */
 		break;
 
-	case API_SCL_STATUS_IND:
-		printf("API_SCL_STATUS_IND\n");
-		break;
 	}
 }
 
 
-void init_nvs_state(int dect_fd, config_t * config) {
-	
-	printf("NVS_STATE\n");
-
-	tty_set_raw(dect_fd);
-	tty_set_baud(dect_fd, B115200);
-
-	printf("DECT TX TO BRCM RX\n");
-	if(gpio_control(118, 0)) return;
-
-	printf("RESET_DECT\n");
-	if(dect_chip_reset()) return;
-
-	
-	/* Init busmail subsystem */
-	bus = busmail_new(dect_fd, application_frame);
-}
 
 
-void handle_nvs_package(event_t *e) {
+void nvs_handler(void * stream, void * event) {
 
 	uint8_t header;
-	packet_t packet;
-	packet_t *p = &packet;
-	p->fd = e->fd;
-	p->size = 0;
 
 	//util_dump(e->in, e->incount, "\n[READ]");
 
 	/* Add input to busmail subsystem */
-	if (busmail_write(bus, e) < 0) {
+	if (busmail_write(dect_bus, event) < 0) {
 		printf("busmail buffer full\n");
 	}
 	
 	/* Process whole packets in buffer. The previously registered
 	   callback will be called for application frames */
-	busmail_dispatch(bus);
+	busmail_dispatch(dect_bus);
 
 	return;
 }
 
 
+void rfpi_init(void * bus) {
+
+	printf("rfpi_init\n");
+	busmail_add_handler(bus, rfpi_handler);
+}
+
+void nvs_init(void * event_base, config_t * config) {
+	
+	printf("nvs_init\n");
+
+	/* Setup dect tty */
+	dect_fd = tty_open("/dev/ttyS1");
+	tty_set_raw(dect_fd);
+	tty_set_baud(dect_fd, B115200);
+
+	/* Register dect stream */
+	dect_stream = stream_new(dect_fd);
+	stream_add_handler(dect_stream, nvs_handler);
+	event_base_add_stream(event_base, dect_stream);
+
+	/* Init busmail subsystem */
+	dect_bus = busmail_new(dect_fd);
+
+	/* Initialize submodules. The submodules will bind 
+	   application frame handlers to the dect_bus */
+	//connection_init(dect_bus);
+	api_parser_init(dect_bus);
+	rfpi_init(dect_bus);
+	
+
+	/* Connect and reset dect chip */
+	printf("DECT TX TO BRCM RX\n");
+	if(gpio_control(118, 0)) return;
+ 	printf("RESET_DECT\n");
+	if(dect_chip_reset()) return;
+}
 
 
-
-struct state_handler nvs_handler = {
-	.state = NVS_STATE,
-	.init_state = init_nvs_state,
-	.event_handler = handle_nvs_package,
-};
-
-struct state_handler * nvs_state = &nvs_handler;

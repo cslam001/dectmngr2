@@ -32,7 +32,7 @@
 #define CHIP_ERASE_CMD 0x10
 
 
-
+static int dect_fd;
 
 typedef struct __attribute__((__packed__))
 {
@@ -182,49 +182,6 @@ static uint8_t * make_tx_packet(uint8_t * tx, void * packet, int data_size) {
 }
 
 
-static int inspect_rx(event_t *e) {
-	
-	uint32_t data_size = 0, i;
-	uint16_t crc = 0, crc_calc = 0;
-	
-	/* Check header */
-	if (e->in[0] != UART_PACKET_HEADER) {
-		printf("Drop packet: no header\n");
-		return -1;
-	}
-
-	/* Check size */
-	if (e->incount < PACKET_OVER_HEAD) {
-		printf("Drop packet: packet size smaller then PACKET_OVER_HEAD %d < %d\n",
-		       e->incount, PACKET_OVER_HEAD);
-		return -1;
-	}
-
-	/* Do we have a full packet? */
-	data_size = (((uint32_t) e->in[2] << 8) | e->in[1]);
-	if (e->incount < (data_size + PACKET_OVER_HEAD)) {
-		printf("Drop packet: not a full packet incount: %d < packet size: %d\n",
-		       e->incount, data_size + PACKET_OVER_HEAD);
-		return -1;
-	}
-	
-	/* Read packet checksum */
-	crc = (( ((uint16_t) e->in[e->incount - 1]) << 8) | e->in[e->incount - 2]);
-
-	/* Calculate checksum over data portion */
-	for (i = 0; i < data_size; i++) {
-		crc_calc = UpdateCrc(e->in[i + 3], crc_calc);
-	}
-
-	if (crc != crc_calc) {
-		printf("Drop packet: bad packet checksum: %x != %x\n", crc, crc_calc);
-		return -1;
-	}
-
-	return 0;
-}
-
-
 static send_packet(void * data, int data_size, int fd) {
 
   int tx_size = data_size + PACKET_OVER_HEAD;
@@ -259,8 +216,6 @@ static void read_flashloader(void) {
 }
 
 
-
-
 static void calculate_checksum(void) {
   
 	uint32_t crc=0;
@@ -274,35 +229,6 @@ static void calculate_checksum(void) {
 	printf("checksum: %x\n", pr->checksum);
 }
 
-
-static void send_size(event_t *e) {
-
-	uint8_t c[2];
-
-	/* Reply */
-	c[0] = pr->size_msb;
-	c[1] = pr->size_lsb;
-
-	util_dump(c, 2, "[WRITE]");
-	write(e->fd, c, 2);
-}
-
-
-static void send_flashloader(event_t *e) {
-  
-	/* memcpy(e->out, pr->img, pr->size); */
-	/* e->outcount = pr->size; */
-
-	util_dump(pr->img, pr->size, "[WRITE]");
-	write(e->fd, pr->img, pr->size);
-
-}
-
-static void send_start(event_t *e) {
-  
-	e->out[0] = 1;
-	e->outcount = 1;
-}
 
 static void sw_version_req(int fd) {
   
@@ -333,7 +259,7 @@ static void qspi_flash_type_req(packet_t *p) {
 	r->Primitive = READ_PROPRIETARY_DATA_REQ;
 	r->RequestID = 0;
 
-	send_packet(r, sizeof(ReadProprietaryDataReqType), p->fd);
+	send_packet(r, sizeof(ReadProprietaryDataReqType), dect_fd);
 	free(r);
 
 }
@@ -366,7 +292,7 @@ static void config_target(packet_t *p) {
 	r->OffsetAddress = 0xf0000;
 	r->Config = QSPI_FLASH_CONFIG;
 
-	send_packet(r, sizeof(write_config_req_t), p->fd);
+	send_packet(r, sizeof(write_config_req_t), dect_fd);
 	free(r);
 }
 
@@ -433,7 +359,7 @@ static void erase_flash_req(packet_t *p, int address) {
 	m->Address = address;
 	m->EraseCommand = CHIP_ERASE_CMD;
 
-	send_packet(m, sizeof(erase_flash_req_t), p->fd);
+	send_packet(m, sizeof(erase_flash_req_t), dect_fd);
 	free(m);
 }
 
@@ -536,7 +462,7 @@ static void prog_flash_req(packet_t *p, int offset) {
 	/* printf("Address: 0x%x\n", p->Address); */
 	/* printf("Length: 0x%x\n", p->Length); */
 	
-	send_packet_quiet(m, sizeof(prog_flash_t) + data_size - 2, p->fd);
+	send_packet_quiet(m, sizeof(prog_flash_t) + data_size - 2, dect_fd);
 	free(m);
 
 }
@@ -561,7 +487,7 @@ static void calc_crc32_req(packet_t *p) {
 	printf("m->Address: %x\n", m->Address);
 	printf("m->Length: %x\n", m->Length);
 
-	send_packet(m, sizeof(calc_crc32_req_t), p->fd);
+	send_packet(m, sizeof(calc_crc32_req_t), dect_fd);
 	free(m);
 
 }
@@ -620,17 +546,6 @@ static void prog_flash_cfm(packet_t *p) {
 
 
 
-void init_flashloader_state(int dect_fd, config_t * config) {
-	
-	printf("FLASHLOADER_STATE\n");
-	
-	usleep(300*1000);
-	sw_version_req(dect_fd);
-	read_firmware();
-	calculate_checksum();
-
-	buf = buffer_new(5000);
-}
 
 
 
@@ -748,28 +663,38 @@ int flashpacket_get(packet_t *p, buffer_t *b) {
 
 
 
-void handle_flashloader_package(event_t *e) {
+void flashloader_handler(void * stream, void * event) {
 
-	uint8_t header;
 	packet_t packet;
 	packet_t *p = &packet;
-	p->fd = e->fd;
-	p->size = 0;
 
 	//util_dump(e->in, e->incount, "\n[READ]");
 
 	/* Add input to buffer */
-	if (buffer_write(buf, e->in, e->incount) == 0) {
+	if (buffer_write(buf, event_data(event), event_count(event)) == 0) {
 		printf("buffer full\n");
 	}
 	
-	//buffer_dump(buf);
-	
 	/* Process whole packets in buffer */
-
 	while(flashpacket_get(p, buf) == 0) {
 		flashloader_dispatch(p);
 	}
+}
+
+
+void flashloader_init(void * stream) {
+	
+	printf("flashloader_init\n");
+
+	dect_fd = stream_get_fd(stream);
+	stream_add_handler(stream, flashloader_handler);
+
+	usleep(300*1000);
+	sw_version_req(dect_fd);
+	read_firmware();
+	calculate_checksum();
+
+	buf = buffer_new(5000);
 }
 
 
@@ -777,13 +702,3 @@ void handle_flashloader_package(event_t *e) {
 
 
 
-
-
-
-struct state_handler flashloader_handler = {
-	.state = FLASHLOADER_STATE,
-	.init_state = init_flashloader_state,
-	.event_handler = handle_flashloader_package,
-};
-
-struct state_handler * flashloader_state = &flashloader_handler;

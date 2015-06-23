@@ -53,3 +53,13 @@ int tty_set_baud(int fd, int baud)
 }
 
 
+int tty_open(const char * s) {
+
+	int fd = open("/dev/ttyS1", O_RDWR);
+
+	if (fd == -1) {
+		exit_failure("open\n");
+	}
+
+	return fd;
+}
