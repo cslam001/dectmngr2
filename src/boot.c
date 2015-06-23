@@ -75,22 +75,22 @@ static void calculate_checksum(void) {
 
 static void send_size(uint8_t * in) {
 
-
+	uint8_t r[3];
 	/* Reply */
-	/* e->out[0] = SOH; */
-	/* e->out[1] = pr->size_lsb; */
-	/* e->out[2] = pr->size_msb; */
-	/* e->outcount = 3; */
+	r[0] = SOH;
+	r[1] = pr->size_lsb;
+	r[2] = pr->size_msb;
 
 	printf("SOH\n");
-
+	util_dump(r, 3, "[WRITE]");
+	write(dect_fd, r, 3);
 }
 
 
 static void send_preloader(uint8_t * in) {
   
 	printf("WRITE_PRELOADER\n");
-	/* write(e->fd, pr->img, pr->size); */
+	write(dect_fd, pr->img, pr->size);
 }
 
 static void send_ack(uint8_t * in) {
@@ -100,7 +100,7 @@ static void send_ack(uint8_t * in) {
 	c[0] = ACK;
 
 	util_dump(c, 1, "[WRITE]");
-	//	write(e->fd, c, 1);
+	write(dect_fd, c, 1);
 }
 
 
