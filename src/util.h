@@ -2,7 +2,7 @@
 #define UTIL_H
 
 #include <stdint.h>
-
+#include <Api/RsStandard.h>
 
 struct bin_img {
 	uint8_t *img;
@@ -24,6 +24,6 @@ int check_args(int argc, char * argv[], config_t * c);
 int initial_transition(config_t * config, int dect_fd);
 int gpio_control(int gpio, int state);
 int dect_chip_reset(void);
-
+void print_status(RsStatusType s);
 
 #endif /* UTIL_H */

@@ -17,6 +17,28 @@
 #include "boot.h"
 #include <board.h>
 
+#include <Api/RsStandard.h>
+
+void print_status(RsStatusType s) {
+
+	switch (s) {
+		
+	case RSS_SUCCESS:
+		printf("RSS_SUCCESS\n");
+		break;
+
+	case RSS_NOT_SUPPORTED:
+		printf("RSS_NOT_SUPPORTED\n");
+		break;
+
+	case RSS_BAD_ARGUMENTS:
+		printf("RSS_BAD_ARGUMENTS\n");
+		break;
+		
+	default:
+		printf("STATUS: %x\n", s);
+	}
+}
 
 
 void util_dump(unsigned char *buf, int size, char *start) {

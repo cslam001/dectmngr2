@@ -236,9 +236,9 @@ void app_init(void * base, config_t * config) {
 
 	/* Initialize submodules. The submodules will bind 
 	   application frame handlers to the dect_bus */
-	connection_init(dect_bus);
 	api_parser_init(dect_bus);
-	internal_call_init(dect_bus);
+	connection_init(dect_bus);
+	//internal_call_init(dect_bus);
 
 	/* Init client subsystem */
 	client_init();

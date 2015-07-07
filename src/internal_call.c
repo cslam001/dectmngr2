@@ -41,28 +41,6 @@ ApiCodecListType * codecs = NULL;
 void * dect_bus;
 
 
-static void print_status(RsStatusType s) {
-
-	switch (s) {
-		
-	case RSS_SUCCESS:
-		printf("RSS_SUCCESS\n");
-		break;
-
-	case RSS_NOT_SUPPORTED:
-		printf("RSS_NOT_SUPPORTED\n");
-		break;
-
-	case RSS_BAD_ARGUMENTS:
-		printf("RSS_BAD_ARGUMENTS\n");
-		break;
-		
-	default:
-		printf("STATUS: %x\n", s);
-	}
-}
-
-
 static ApiSystemCallIdType * get_system_call_id(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
 
 	ApiInfoElementType * info;

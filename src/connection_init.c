@@ -1,15 +1,21 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "busmail.h"
+#include "util.h"
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
 #include <Api/FpCc/ApiFpCc.h>
 #include <Api/FpMm/ApiFpMm.h>
 #include <Api/ProdTest/ApiProdTest.h>
+#include <Api/FpAudio/ApiFpAudio.h>
 #include <Api/RsStandard.h>
+
+#define TRUE 1
+#define FALSE 0
 
 static int reset_ind = 0;
 void * dect_bus;
@@ -43,7 +49,6 @@ static void connection_init_handler(packet_t *p) {
 	int i;
 	busmail_t * m = (busmail_t *) &p->data[0];
 
-
 	if (m->task_id != 1) return;
 	
 	/* Application command */
@@ -74,6 +79,33 @@ static void connection_init_handler(packet_t *p) {
 		break;
 
 	case API_FP_FEATURES_CFM:
+		;
+
+		/* Init PCM bus */
+		printf("\nWRITE: API_FP_INIT_PCM_REQ\n");
+		ApiFpInitPcmReqType pcm_req =  { .Primitive = API_FP_INIT_PCM_REQ,
+						 .PcmEnable = 0x1,
+						 .IsMaster = 0x0,
+						 .DoClockSync = 0x1,
+						 .PcmFscFreq = AP_FSC_FREQ_8KHZ,  // PCM FS 16/8 Khz select (1 - 16Khz, 0 - 8Khz)
+						 .PcmFscLength = AP_FSC_LENGTH_NORMAL,
+						 .PcmFscStartAligned = 0x0,
+						 .PcmClk = 0x0,    /* Ignored if device is slave */
+						 .PcmClkOnRising = 0x0,
+						 .PcmClksPerBit = 0x1,
+						 .PcmFscInvert = 0x0,
+						 .PcmCh0Delay = 0x0,
+						 .PcmDoutIsOpenDrain = 0x1, /* Must be 1 if mult. devices on bus */
+						 .PcmIsOpenDrain = 0x0,  /* 0 == Normal mode */
+		};
+		busmail_send(dect_bus, (uint8_t *)&pcm_req, sizeof(ApiFpInitPcmReqType));
+		break;
+
+	case API_FP_INIT_PCM_CFM:
+		
+		;
+		ApiFpInitPcmCfmType * p = (ApiFpInitPcmCfmType *) &m->mail_header;
+		print_status(p->Status);
 
 		/* Start protocol */
 		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
