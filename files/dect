@@ -1,0 +1,16 @@
+#!/bin/sh /etc/rc.common
+#
+# Copyright (C) 2009 OpenWrt.org
+#
+
+START=70
+
+
+
+start() {
+	dectmngr2 --app > /tmp/log/dectmngr2 2>&1 &
+}
+
+boot() {
+	start
+}
