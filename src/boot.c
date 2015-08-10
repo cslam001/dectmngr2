@@ -2,8 +2,10 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <fcntl.h>
 
 #include "dect.h"
 #include "boot.h"
@@ -134,8 +136,39 @@ void boot_handler(void * stream, void * event) {
 
 
 void boot_init(void * stream) {
+#define GPIO_PHYS_BASE     0xfffe8000	/* gpio registers rounded down to page size */
+#define GPIO_PHYS_OFFS     0x100	// offset from rounded down page size
+#define LOAD_MUX_REG_CMD   0x21u
+
+volatile uint32_t *io_base;
+int fdmem;
 
 	printf("boot_init\n");
+
+fdmem = open ("/dev/mem", O_RDWR | O_SYNC);
+if(fdmem == -1) {
+	perror("ronny open");
+	exit(1);
+}
+io_base = mmap (NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_LOCKED, fdmem, GPIO_PHYS_BASE);
+if(io_base == MAP_FAILED) {
+	perror("ronny mmap");
+	exit(1);
+}
+// Set GPIO6 as UART2 output
+printf("ronny conf uart\n");
+io_base[(GPIO_PHYS_OFFS + 0x3c) / sizeof(uint32_t)] = 0;		// MSB
+io_base[(GPIO_PHYS_OFFS + 0x40) / sizeof(uint32_t)] = (1u << 12) + 6u;	// LSB
+io_base[(GPIO_PHYS_OFFS + 0x44) / sizeof(uint32_t)] = LOAD_MUX_REG_CMD;	// Port command
+io_base[(GPIO_PHYS_OFFS + 0x3c) / sizeof(uint32_t)] = 0;		// MSB
+io_base[(GPIO_PHYS_OFFS + 0x40) / sizeof(uint32_t)] = (1u << 12) + 5u;	// LSB
+io_base[(GPIO_PHYS_OFFS + 0x44) / sizeof(uint32_t)] = LOAD_MUX_REG_CMD;	// Port command
+printf("ronny conf dect reset\n");
+io_base[(GPIO_PHYS_OFFS + 0x3c) / sizeof(uint32_t)] = 0;		// MSB
+io_base[(GPIO_PHYS_OFFS + 0x40) / sizeof(uint32_t)] = (5u << 12) + 3u;	// LSB
+io_base[(GPIO_PHYS_OFFS + 0x44) / sizeof(uint32_t)] = LOAD_MUX_REG_CMD;	// Port command
+munmap(io_base, 0x1000);
+close(fdmem);
 	stream_add_handler(stream, boot_handler);
 	dect_fd = stream_get_fd(stream);
 

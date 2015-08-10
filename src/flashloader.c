@@ -313,7 +313,8 @@ static void read_firmware(void) {
 	struct stat s;
 
 	fd = open("/etc/dect/target.bin", O_RDONLY);
-	if (fd == -1) {
+	if (fd == -1 && errno == ENOENT) fd = open("target.bin", O_RDONLY);	// Try current directory too
+	if (fd == -1){
 		perror("open");
 		exit(EXIT_FAILURE);
 	}
