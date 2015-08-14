@@ -17,11 +17,17 @@ endif
 	$(CC) -c $(CFLAGS) $(INCLUDE_PATHS) -o $@ $<
 
 
+# Ability to build without ubus etc. for Sercomm
+CFLAGS += -DWITH_UBUS
+LIBS += -lubox -lubus -lblobmsg_json -ljson-c
+dectmngr2: ubus.o
 
 
-
-dectmngr2: prog.o boot.o preloader.o flashloader.o tty.o error.o main.o state.o util.o Crc.o app.o buffer.o busmail.o nvs.o fifo.o list.o eap.o stream.o event.o event_base.o internal_call.o connection_init.o api_parser.o
-	$(CC) $(INCLUDE_PATHS) -o $@ $^
+dectmngr2: prog.o boot.o preloader.o flashloader.o tty.o
+dectmngr2: error.o main.o state.o util.o Crc.o app.o buffer.o
+dectmngr2: busmail.o nvs.o fifo.o list.o eap.o stream.o event.o
+dectmngr2: event_base.o internal_call.o connection_init.o api_parser.o
+	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -o $@ $^ $(LIBS)
 
 
 clean:

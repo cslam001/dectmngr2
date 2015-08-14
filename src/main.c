@@ -23,6 +23,10 @@
 #include "app.h"
 #include "nvs.h"
 
+#ifdef WITH_UBUS
+#include "ubus.h"
+#endif
+
 
 #define MAX_EVENTS 10
 
@@ -54,6 +58,9 @@ int main(int argc, char * argv[]) {
 		break;
 	case APP_MODE:
 		app_init(event_base, config);
+#ifdef WITH_UBUS
+		ubus_init(event_base, config);
+#endif
 		break;
 	default:
 		err_exit("No known operating mode selected\n");
