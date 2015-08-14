@@ -20,6 +20,7 @@
 #include "boot.h"
 #include "util.h"
 #include "preloader.h"
+#include "stream.h"
 
 
 static uint8_t FlashLoader441[] =
@@ -193,7 +194,7 @@ void preloader_init(void * stream) {
 	uint8_t c = PRELOADER_START;
 	
 	printf("preloader_init\n");
-	stream_add_handler(stream, preloader_handler);
+	stream_add_handler(stream, MAX_EVENT_SIZE, preloader_handler);
 	dect_fd = stream_get_fd(stream);
 
 	read_flashloader();

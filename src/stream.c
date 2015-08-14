@@ -5,18 +5,13 @@
 
 
 
-typedef struct {
-	int fd;
-	void (*event_handler)(void *e);
-} stream_t;
-
 void * stream_new(int fd) {
 	
 	stream_t * s = (stream_t *) calloc( sizeof(stream_t), 1);
 	
 	s->fd = fd;
 
-	return s;
+	return (void*) s;
 }
 
 
@@ -36,10 +31,18 @@ void * stream_get_handler(void * _self) {
 }
 
 
-void * stream_add_handler(void * _self, void (*event_handler)(void *stream, void * event)) {
+
+// Register a handler for events arriving through
+// a stream.
+// Args: _self         = Pointer to a stream allocated with stream_new()
+//       maxEventSize  = Size of events the event handler can cope
+//       event_handler = Function pointer to callback
+void * stream_add_handler(void * _self, int maxEventSize, void (*event_handler)(void *stream, void * event)) {
 	
 	stream_t * s = (stream_t *) _self;
-	
+
+	s->maxEventSize = maxEventSize;	
+	if(s->maxEventSize > MAX_EVENT_SIZE) s->maxEventSize = MAX_EVENT_SIZE; 
 	s->event_handler = event_handler;
 	
 	return;

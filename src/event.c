@@ -5,8 +5,6 @@
 #include "stream.h"
 #include "error.h"
 
-#define BUF_SIZE 5000
-
 
 typedef struct event {
 	uint8_t *in;
@@ -14,15 +12,17 @@ typedef struct event {
 } event_t;
 
 
-void * event_new(void * stream) {
+void * event_new(stream_t *stream) {
 	
 	event_t * e = (event_t *) calloc(sizeof(event_t), 1);
 	if (!e) err_exit("calloc");
+
+	if(stream->maxEventSize > 0) {	
+		e->in = (uint8_t *) calloc(stream->maxEventSize, 1);
+		if (!e->in) err_exit("calloc");
 	
-	e->in = (uint8_t *) calloc(BUF_SIZE, 1);
-	if (!e->in) err_exit("calloc");
-	
-	e->count = read(stream_get_fd(stream), e->in, BUF_SIZE);
+		e->count = read(stream_get_fd(stream), e->in, stream->maxEventSize);
+	}
 
 	return e;
 }

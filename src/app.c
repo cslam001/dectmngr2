@@ -30,6 +30,7 @@
 #include "buffer.h"
 #include "busmail.h"
 #include "eap.h"
+#include "stream.h"
 
 #include "internal_call.h"
 
@@ -147,7 +148,7 @@ static void listen_handler(void * listen_stream, void * event) {
 
 		/* Setup stream object */
 		client_stream = stream_new(client_fd);
-		stream_add_handler(client_stream, client_handler);
+		stream_add_handler(client_stream, MAX_EVENT_SIZE, client_handler);
 
 		/* Add client_stream to event dispatcher */
 		event_base_add_stream(event_base, client_stream);
@@ -228,7 +229,7 @@ void app_init(void * base, config_t * config) {
 
 	/* Register dect stream */
 	dect_stream = stream_new(dect_fd);
-	stream_add_handler(dect_stream, dect_handler);
+	stream_add_handler(dect_stream, MAX_EVENT_SIZE, dect_handler);
 	event_base_add_stream(event_base, dect_stream);
 
 	/* Init busmail subsystem */
@@ -236,9 +237,9 @@ void app_init(void * base, config_t * config) {
 
 	/* Initialize submodules. The submodules will bind 
 	   application frame handlers to the dect_bus */
-	api_parser_init(dect_bus);
 	connection_init(dect_bus);
-	//internal_call_init(dect_bus);
+	api_parser_init(dect_bus);
+	internal_call_init(dect_bus);
 
 	/* Init client subsystem */
 	client_init();
@@ -246,13 +247,13 @@ void app_init(void * base, config_t * config) {
 	/* Setup debug socket */
 	debug_fd = setup_listener(10468, INADDR_ANY);
 	debug_stream = stream_new(debug_fd);
-	stream_add_handler(debug_stream, listen_handler);
+	stream_add_handler(debug_stream, MAX_EVENT_SIZE, listen_handler);
 	event_base_add_stream(event_base, debug_stream);
 
 	/* Setup proxy socket */
 	proxy_fd = setup_listener(7777, INADDR_LOOPBACK);
 	proxy_stream = stream_new(proxy_fd);
-	stream_add_handler(proxy_stream, listen_handler);
+	stream_add_handler(proxy_stream, MAX_EVENT_SIZE, listen_handler);
 	event_base_add_stream(event_base, proxy_stream);
 
 	/* Connect and reset dect chip */

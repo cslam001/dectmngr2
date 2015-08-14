@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -8,6 +9,7 @@
 #include "dect.h"
 #include "boot.h"
 #include "util.h"
+#include "stream.h"
 
 static uint8_t PreBootPrgm441_20MHz[] =
 	{
@@ -23,6 +25,8 @@ static struct bin_img *pr = &preloader;
 
 static int dect_fd;
 
+
+void boot_exit(void * stream);
 
 
 static void read_preloader(void) {
@@ -136,7 +140,7 @@ void boot_handler(void * stream, void * event) {
 void boot_init(void * stream) {
 
 	printf("boot_init\n");
-	stream_add_handler(stream, boot_handler);
+	stream_add_handler(stream, MAX_EVENT_SIZE, boot_handler);
 	dect_fd = stream_get_fd(stream);
 
 	read_preloader();

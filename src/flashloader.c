@@ -22,6 +22,7 @@
 #include "buffer.h"
 #include "preloader.h"
 #include "busmail.h"
+#include "stream.h"
 
 #include "MRtxDef.h"
 #include "MailDef.h"
@@ -687,7 +688,7 @@ void flashloader_init(void * stream) {
 	printf("flashloader_init\n");
 
 	dect_fd = stream_get_fd(stream);
-	stream_add_handler(stream, flashloader_handler);
+	stream_add_handler(stream, MAX_EVENT_SIZE, flashloader_handler);
 
 	usleep(300*1000);
 	sw_version_req(dect_fd);

@@ -22,7 +22,7 @@
 #include "util.h"
 #include "buffer.h"
 #include "busmail.h"
-
+#include "stream.h"
 
 #define PT_CMD_SET_ID 0x001B
 #define PT_CMD_GET_ID 0x001C
@@ -231,7 +231,7 @@ void nvs_init(void * event_base, config_t * config) {
 
 	/* Register dect stream */
 	dect_stream = stream_new(dect_fd);
-	stream_add_handler(dect_stream, nvs_handler);
+	stream_add_handler(dect_stream, MAX_EVENT_SIZE, nvs_handler);
 	event_base_add_stream(event_base, dect_stream);
 
 	/* Init busmail subsystem */
