@@ -8,7 +8,7 @@
 #include <libubox/blobmsg_json.h>
 #include <json-c/json_object.h>
 #include <json-c/json_util.h>
-
+#include <json-c/json_tokener.h>
 #include "util.h"
 #include "error.h"
 #include "stream.h"
@@ -35,6 +35,12 @@ static void ubus_event_handler(struct ubus_context *ctx,
 		switch(json_object_get_type(val)) {										// Primitive type of value for key?
 			case json_type_string:
 			printf("Got string: %s\n", json_object_get_string(val));
+			if(strncmp(json_object_get_string(val), "on", sizeof("on")) == 0) {
+				connection_set_state(1);
+			}
+			else if(strncmp(json_object_get_string(val), "off", sizeof("off")) == 0) {
+				connection_set_state(0);
+			}
 			break;
 	
 			case json_type_boolean:

@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "connection_init.h"
 #include "busmail.h"
 #include "util.h"
 
@@ -20,6 +21,11 @@
 static int reset_ind = 0;
 void * dect_bus;
 
+
+
+
+
+//-------------------------------------------------------------
 static void fw_version_cfm(busmail_t *m) {
 
 	ApiFpGetFwVersionCfmType * p = (ApiFpGetFwVersionCfmType *) &m->mail_header;
@@ -44,6 +50,8 @@ static void fw_version_cfm(busmail_t *m) {
 }
 
 
+
+//-------------------------------------------------------------
 static void connection_init_handler(packet_t *p) {
 	
 	int i;
@@ -108,16 +116,35 @@ static void connection_init_handler(packet_t *p) {
 		print_status(p->Status);
 
 		/* Start protocol */
-		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
-		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
-		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+		connection_set_state(1);
 		break;
 	}
 }
 
 
+
+//-------------------------------------------------------------
 void connection_init(void * bus) {
 
 	dect_bus = bus;
 	busmail_add_handler(bus, connection_init_handler);
 }
+
+
+
+//-------------------------------------------------------------
+/* Start or stop protocol (the DECT radio) */
+int connection_set_state(int onoff) {
+	if(onoff) {
+		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
+		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
+		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+	}
+	else {
+		ApiFpMmStopProtocolReqType r = { .Primitive = API_FP_MM_STOP_PROTOCOL_REQ, };
+		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStopProtocolReqType));
+	}
+
+	return 0;
+}
+
