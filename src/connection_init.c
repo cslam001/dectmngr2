@@ -63,7 +63,6 @@ static void connection_init_handler(packet_t *p) {
 	switch (m->mail_header) {
 		
 	case API_FP_RESET_IND:
-		
 		if (reset_ind == 0) {
 			reset_ind = 1;
 
@@ -71,27 +70,25 @@ static void connection_init_handler(packet_t *p) {
 			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
 			busmail_send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 
-		} else {
-
 		}
-
 		break;
 
 	case API_FP_GET_FW_VERSION_CFM:
-		/* Setup terminal id */
-		printf("\nWRITE: API_FP_FEATURES_REQ\n");
-		ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
-					      .ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
+		{
+			/* Setup terminal id */
+			printf("\nWRITE: API_FP_FEATURES_REQ\n");
+			ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
+				.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
 	
-		busmail_send(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
+			busmail_send(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
+		}
 		break;
 
 	case API_FP_FEATURES_CFM:
-		;
-
-		/* Init PCM bus */
-		printf("\nWRITE: API_FP_INIT_PCM_REQ\n");
-		ApiFpInitPcmReqType pcm_req =  { .Primitive = API_FP_INIT_PCM_REQ,
+		{
+			/* Init PCM bus */
+			printf("\nWRITE: API_FP_INIT_PCM_REQ\n");
+			ApiFpInitPcmReqType pcm_req =  { .Primitive = API_FP_INIT_PCM_REQ,
 						 .PcmEnable = 0x1,
 						 .IsMaster = 0x0,
 						 .DoClockSync = 0x1,
@@ -105,19 +102,27 @@ static void connection_init_handler(packet_t *p) {
 						 .PcmCh0Delay = 0x0,
 						 .PcmDoutIsOpenDrain = 0x1, /* Must be 1 if mult. devices on bus */
 						 .PcmIsOpenDrain = 0x0,  /* 0 == Normal mode */
-		};
-		busmail_send(dect_bus, (uint8_t *)&pcm_req, sizeof(ApiFpInitPcmReqType));
+			};
+			busmail_send(dect_bus, (uint8_t *)&pcm_req, sizeof(ApiFpInitPcmReqType));
+		}
 		break;
 
 	case API_FP_INIT_PCM_CFM:
-		
-		;
-		ApiFpInitPcmCfmType * p = (ApiFpInitPcmCfmType *) &m->mail_header;
-		print_status(p->Status);
+		{
+			ApiFpInitPcmCfmType * resp = (ApiFpInitPcmCfmType *) &m->mail_header;
+			print_status(resp->Status);
 
-		/* Start protocol */
-		connection_set_state(1);
+			/* Start protocol */
+			connection_set_radio(1);
+		}
 		break;
+
+	case API_FP_MM_SET_REGISTRATION_MODE_CFM:
+		{
+			ApiFpMmSetRegistrationModeCfmType *resp =
+				(ApiFpMmSetRegistrationModeCfmType*) &m->mail_header;
+			print_status(resp->Status);
+		}
 	}
 }
 
@@ -134,7 +139,7 @@ void connection_init(void * bus) {
 
 //-------------------------------------------------------------
 /* Start or stop protocol (the DECT radio) */
-int connection_set_state(int onoff) {
+int connection_set_radio(int onoff) {
 	if(onoff) {
 		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
 		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
@@ -144,6 +149,28 @@ int connection_set_state(int onoff) {
 		ApiFpMmStopProtocolReqType r = { .Primitive = API_FP_MM_STOP_PROTOCOL_REQ, };
 		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStopProtocolReqType));
 	}
+
+	return 0;
+}
+
+
+
+//-------------------------------------------------------------
+// Enable registration of phones
+int connection_set_registration(int onoff) {
+	ApiFpMmSetRegistrationModeReqType m = {
+		.Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ,
+		.DeleteLastHandset = true
+	};
+
+	if(onoff) {
+		m.RegistrationEnabled = true;
+	}
+	else {
+		m.RegistrationEnabled = false;
+	}
+
+	busmail_send(dect_bus, (uint8_t *)&m, sizeof(ApiFpMmSetRegistrationModeReqType));
 
 	return 0;
 }
