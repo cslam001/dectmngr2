@@ -6,6 +6,7 @@
 #include "connection_init.h"
 #include "busmail.h"
 #include "util.h"
+#include "ubus.h"
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
@@ -18,10 +19,24 @@
 #define TRUE 1
 #define FALSE 0
 
+enum remote_bool_t {
+	UNKNOWN,
+	PENDING_ACTIVE,										// We have sent a request to activate something
+	ACTIVE,												// Confirmed response, it's active
+	PENDING_INACTIVE,
+	INACTIVE,
+};
+
+
+struct connection_t {
+	enum remote_bool_t registration;
+	enum remote_bool_t radio;
+};
+
+
 static int reset_ind = 0;
 void * dect_bus;
-
-
+struct connection_t connection;
 
 
 
@@ -65,6 +80,8 @@ static void connection_init_handler(packet_t *p) {
 	case API_FP_RESET_IND:
 		if (reset_ind == 0) {
 			reset_ind = 1;
+			connection.radio = INACTIVE;
+			ubus_send_string("radio", ubusStrInActive);
 
 			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
 			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
@@ -112,6 +129,8 @@ static void connection_init_handler(packet_t *p) {
 			ApiFpInitPcmCfmType * resp = (ApiFpInitPcmCfmType *) &m->mail_header;
 			print_status(resp->Status);
 
+			ubus_send_string("dectmngr", ubusStrActive);
+
 			/* Start protocol */
 			connection_set_radio(1);
 		}
@@ -122,7 +141,36 @@ static void connection_init_handler(packet_t *p) {
 			ApiFpMmSetRegistrationModeCfmType *resp =
 				(ApiFpMmSetRegistrationModeCfmType*) &m->mail_header;
 			print_status(resp->Status);
+
+			if(resp->Status == RSS_SUCCESS) {
+				if(connection.registration == PENDING_ACTIVE) {
+					connection.registration = ACTIVE;
+					ubus_send_string("registration", ubusStrActive);
+				}
+				else if(connection.registration == PENDING_INACTIVE) {
+						connection.registration = INACTIVE;
+						ubus_send_string("registration", ubusStrInActive);
+				}
+			}
 		}
+		break;
+
+	case API_FP_MM_REGISTRATION_COMPLETE_IND:
+		{
+			ApiFpMmRegistrationCompleteIndType *resp = 
+				(ApiFpMmRegistrationCompleteIndType*) &m->mail_header;
+			ubus_send_string("registration", "newphone");
+			connection_set_registration(0);
+		}
+		break;
+
+	case API_FP_MM_HANDSET_PRESENT_IND:
+		{
+			ApiFpMmHandsetPresentIndType *resp =
+				(ApiFpMmHandsetPresentIndType*) &m->mail_header;
+			ubus_send_string("handset", "present");
+		}
+		break;
 	}
 }
 
@@ -144,10 +192,15 @@ int connection_set_radio(int onoff) {
 		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
 		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
 		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+		connection.radio = ACTIVE;												// No confirmation is replied
+		ubus_send_string("radio", ubusStrActive);
+
 	}
 	else {
 		ApiFpMmStopProtocolReqType r = { .Primitive = API_FP_MM_STOP_PROTOCOL_REQ, };
 		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStopProtocolReqType));
+		connection.radio = INACTIVE;											// No confirmation is replied
+		ubus_send_string("radio", ubusStrInActive);
 	}
 
 	return 0;
@@ -165,9 +218,11 @@ int connection_set_registration(int onoff) {
 
 	if(onoff) {
 		m.RegistrationEnabled = true;
+		connection.registration = PENDING_ACTIVE;
 	}
 	else {
 		m.RegistrationEnabled = false;
+		connection.registration = PENDING_INACTIVE;
 	}
 
 	busmail_send(dect_bus, (uint8_t *)&m, sizeof(ApiFpMmSetRegistrationModeReqType));

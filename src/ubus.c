@@ -14,12 +14,43 @@
 #include "stream.h"
 #include "event_base.h"
 
+static const char ubusSenderId[] = "dect";										// The UBUS type we transmitt
 
 static struct ubus_context *ubusContext;
 static void *ubus_stream;
 static void *event_base;
-static struct ubus_event_handler listener;
+static struct ubus_event_handler listener;										// Event handler registration
 
+
+
+//-------------------------------------------------------------
+// Send a public ubus string event
+int ubus_send_string(const char *msgKey, const char *msgVal)
+{
+	struct json_object *jsonObj, *jsonVal;
+	struct blob_buf blob;
+	int res = 0;
+
+	memset(&blob, 0, sizeof(blob));
+	if(blob_buf_init(&blob, 0)) return -1;
+
+	jsonVal = json_object_new_string(msgVal);
+	jsonObj = json_object_new_object();
+	json_object_object_add(jsonObj, msgKey, jsonVal);
+
+	if(!blobmsg_add_object(&blob, jsonObj)) {
+		res = -1;
+	}
+	else if(ubus_send_event(ubusContext, ubusSenderId, blob.head) != UBUS_STATUS_OK) {
+		printf("Error sending ubus message %s\n", 
+			json_object_to_json_string(jsonObj));
+			res = -1;
+	}
+
+	json_object_put(jsonObj);
+	blob_buf_free(&blob);
+	return res;
+}
 
 
 
