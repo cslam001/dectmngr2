@@ -14,7 +14,48 @@
 #include "stream.h"
 #include "event_base.h"
 
+enum {
+	RADIO_STATE,
+	RADIO_BRIGHTNESS,
+	__RADIO_MAX
+};
+
+static int ubus_status_method(struct ubus_context *ubus_ctx, struct ubus_object *obj,
+		struct ubus_request_data *req, const char *method, struct blob_attr *msg);
+
+
+
+//-------------------------------------------------------------
 static const char ubusSenderId[] = "dect";										// The UBUS type we transmitt
+const char ubusStrActive[] = "active";
+const char ubusStrInActive[] = "inactive";
+
+static const struct blobmsg_policy ubus_policy[] = {
+	[RADIO_STATE] = { .name = "state", .type = BLOBMSG_TYPE_STRING },
+	[RADIO_BRIGHTNESS] = { .name = "brightness", .type = BLOBMSG_TYPE_INT32 },
+};
+
+/*static const struct ubus_method ubusMethods =
+	UBUS_METHOD("status", ubus_status_method, ubus_policy);*/
+static const struct ubus_method ubusMethods = {
+	.name = "status",
+	.handler = ubus_status_method,
+	.policy = ubus_policy,
+	.n_policy = 2,
+};
+
+static struct ubus_object_type fooType = {
+	.methods = &ubusMethods,
+	.n_methods = 1
+};
+
+static struct ubus_object fooObjs = {
+	.name = ubusSenderId,
+	.type = &fooType,
+	.methods = &ubusMethods,
+	.n_methods = 1
+};
+
 
 static struct ubus_context *ubusContext;
 static void *ubus_stream;
@@ -24,7 +65,7 @@ static struct ubus_event_handler listener;										// Event handler registratio
 
 
 //-------------------------------------------------------------
-// Send a public ubus string event
+// We transmitt a public ubus string event
 int ubus_send_string(const char *msgKey, const char *msgVal)
 {
 	struct json_object *jsonObj, *jsonVal;
@@ -55,6 +96,8 @@ int ubus_send_string(const char *msgKey, const char *msgVal)
 
 
 //-------------------------------------------------------------
+// Subevent handler for
+// ubus send dect '{ "registration": "off" }'
 static int ubus_event_registration(struct json_object *val)
 {
 	switch(json_object_get_type(val)) {											// Primitive type of value for key?
@@ -86,6 +129,8 @@ static int ubus_event_registration(struct json_object *val)
 
 
 //-------------------------------------------------------------
+// Subevent handler for
+// ubus send dect '{ "radio": "off" }'
 static int ubus_event_radio(struct json_object *val)
 {
 	switch(json_object_get_type(val)) {											// Primitive type of value for key?
@@ -129,7 +174,7 @@ static void ubus_event_handler(struct ubus_context *ctx,
 	obj = json_tokener_parse(json);												// JSON to C-struct
 	res = 0;
 
-	if(json_object_object_get_ex(obj, "radio", &val)) {							// Contains key?
+	if(json_object_object_get_ex(obj, "radio", &val)) {							// Contains this key?
 		res = ubus_event_radio(val);
 	}
 	else if(json_object_object_get_ex(obj, "registration", &val)) {
@@ -151,6 +196,41 @@ void ubus_fd_handler(void * dect_stream, void * event) {
 
 
 //-------------------------------------------------------------
+// RPC handler for ubus "calls"
+static int ubus_status_method(struct ubus_context *ubus_ctx, struct ubus_object *obj,
+		struct ubus_request_data *req, const char *method, struct blob_attr *msg)
+{
+	struct blob_attr *tagBin[__RADIO_MAX];
+	char* state;
+	int *number;
+
+	// Tokenize message into an array
+	if(blobmsg_parse(ubus_policy, ARRAY_SIZE(ubus_policy), tagBin, 
+			blob_data(msg), blob_len(msg))) {
+		return UBUS_STATUS_INVALID_ARGUMENT;
+	}
+
+	// Handle RPC:
+	// ubus call dect status '{ "state": "abc" }'
+	if (tagBin[RADIO_STATE]) {
+		state = blobmsg_get_string(tagBin[RADIO_STATE]);
+		printf("ronny state %s\n", state);
+	}
+
+	// Handle RPC:
+	// ubus call dect status '{ "brightness": 123 }'
+	if (tagBin[RADIO_BRIGHTNESS]) {
+		number = blobmsg_get_u32(tagBin[RADIO_BRIGHTNESS]);
+		printf("ronny number %d\n", number);
+	}
+
+	return UBUS_STATUS_OK;
+}
+
+
+
+
+//-------------------------------------------------------------
 void ubus_init(void * base, config_t * config) {	
 	int dect_fd, debug_fd, proxy_fd;
 
@@ -160,17 +240,24 @@ void ubus_init(void * base, config_t * config) {
 	ubusContext = ubus_connect(NULL);
 	if (!ubusContext) exit_failure("Failed to connect to ubus");
 
-	// Listsen for data on ubus socket
+	// Listen for data on ubus socket in our main event loop
 	ubus_stream = stream_new(ubusContext->sock.fd);
 	stream_add_handler(ubus_stream, 0, ubus_fd_handler);
 	event_base_add_stream(event_base, ubus_stream);
 
-	// Invoke our handler when ubus events arrive
+	// Invoke our event handler when ubus events arrive
 	memset(&listener, 0, sizeof(listener));
 	listener.cb = ubus_event_handler;
-	if(ubus_register_event_handler(ubusContext, &listener, "dect")) {
+	if(ubus_register_event_handler(ubusContext, &listener, "dect") != 
+			UBUS_STATUS_OK) {
 		exit_failure("Error registering ubus event handler");
 	}
+
+	// Invoke our RPC handler when ubus "calls" arrive
+	if(ubus_add_object(ubusContext, &fooObjs) != UBUS_STATUS_OK) {
+		exit_failure("Error registering ubus object");
+	}		
+
 
 	return;
 }

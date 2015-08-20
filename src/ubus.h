@@ -5,8 +5,8 @@
 #include "util.h"
 
 
-const char ubusStrActive[] = "active";
-const char ubusStrInActive[] = "inactive";
+extern const char ubusStrActive[];
+extern const char ubusStrInActive[];
 
 
 int ubus_send_string(const char *msgKey, const char *msgVal);
