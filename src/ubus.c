@@ -38,6 +38,8 @@ static int ubus_method_handset(struct ubus_context *ubus_ctx, struct ubus_object
 static const char ubusSenderId[] = "dect";										// The UBUS type we transmitt
 const char ubusStrActive[] = "active";											// The "bool" we transmitt for service is on/enabled/operational
 const char ubusStrInActive[] = "inactive";
+const char strOn[] = "on";
+const char strOff[] = "off";
 
 
 static const struct blobmsg_policy ubusStateKeys[] = {							// ubus RPC "state" arguments (keys and values)
@@ -117,10 +119,10 @@ static int ubus_event_registration(struct json_object *val)
 {
 	switch(json_object_get_type(val)) {											// Primitive type of value for key?
 		case json_type_string:
-			if(strncmp(json_object_get_string(val), "on", sizeof("on")) == 0) {
+			if(strncmp(json_object_get_string(val), strOn, sizeof(strOn)) == 0) {
 				connection_set_registration(1);
 			}
-			else if(strncmp(json_object_get_string(val), "off", sizeof("off")) == 0) {
+			else if(strncmp(json_object_get_string(val), strOff, sizeof(strOff)) == 0) {
 				connection_set_registration(0);
 			}
 			break;
@@ -150,10 +152,10 @@ static int ubus_event_radio(struct json_object *val)
 {
 	switch(json_object_get_type(val)) {											// Primitive type of value for key?
 		case json_type_string:
-			if(strncmp(json_object_get_string(val), "on", sizeof("on")) == 0) {
+			if(strncmp(json_object_get_string(val), strOn, sizeof(strOn)) == 0) {
 				connection_set_radio(1);
 			}
-			else if(strncmp(json_object_get_string(val), "off", sizeof("off")) == 0) {
+			else if(strncmp(json_object_get_string(val), strOff, sizeof(strOff)) == 0) {
 				connection_set_radio(0);
 			}
 			break;
@@ -240,7 +242,7 @@ static int ubus_method_state(struct ubus_context *ubus_ctx, struct ubus_object *
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
 {
 	struct blob_attr **keys;
-	const char *radioVal;
+	const char *strVal;
 	int numVal;
 	int res;
 
@@ -251,8 +253,25 @@ static int ubus_method_state(struct ubus_context *ubus_ctx, struct ubus_object *
 	// Handle RPC:
 	// ubus call dect state '{ "radio": "on" }'
 	if(keys[STATE_RADIO]) {
-		radioVal = blobmsg_get_string(keys[STATE_RADIO]);
-		printf("ronny state radio %s\n", radioVal);
+		strVal = blobmsg_get_string(keys[STATE_RADIO]);
+		if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
+			connection_set_radio(1);
+		}
+		else if(strncmp(strVal, strOff, sizeof(strOff)) == 0) {
+			connection_set_radio(0);
+		}
+	}
+
+	// Handle RPC:
+	// ubus call dect state '{ "registration": "on" }'
+	if(keys[STATE_REGISTRATION]) {
+		strVal = blobmsg_get_string(keys[STATE_REGISTRATION]);
+		if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
+			connection_set_registration(1);
+		}
+		else if(strncmp(strVal, strOff, sizeof(strOff)) == 0) {
+			connection_set_registration(0);
+		}
 	}
 
 	// Handle RPC:
