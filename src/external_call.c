@@ -42,6 +42,28 @@ ApiCodecListType * codecs = NULL;
 void * dect_bus;
 
 
+static void print_status(RsStatusType s) {
+
+	switch (s) {
+		
+	case RSS_SUCCESS:
+		printf("RSS_SUCCESS\n");
+		break;
+
+	case RSS_NOT_SUPPORTED:
+		printf("RSS_NOT_SUPPORTED\n");
+		break;
+
+	case RSS_BAD_ARGUMENTS:
+		printf("RSS_BAD_ARGUMENTS\n");
+		break;
+		
+	default:
+		printf("STATUS: %x\n", s);
+	}
+}
+
+
 static ApiSystemCallIdType * get_system_call_id(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
 
 	ApiInfoElementType * info;
@@ -395,9 +417,10 @@ static void setup_ind(busmail_t *m) {
 	ApiMultikeyPadType * keypad_entr = NULL;
         unsigned char keypad_len;
 	ApiCallStatusType call_status;
-	int i, called_hs, calling_hs;
+	int i, called_hs, calling_hs, endpt_id;
 	ApiInfoElementType * ie_block = NULL;
 	rsuint16 ie_block_len = 0;
+	char endpt[15];
 
 
 	printf("CallReference: %x\n", p->CallReference);
@@ -407,106 +430,26 @@ static void setup_ind(busmail_t *m) {
 	printf("CallClass: %d\n", p->CallClass);
 	
 	incoming_call = p->CallReference;
-	
-	if ( p->TerminalId == 1 ) {
-		calling_hs = 1;
-		called_hs = 2;
-	} else {
-		calling_hs = 2;
-		called_hs = 1; 
-	}
-	
-	if ( p->InfoElementLength > 0 ) {
-		internal_call = get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
-		printf("internal_call: %x\n", internal_call->ApiSystemCallId);
+	calling_hs = p->TerminalId;
+	endpt_id = calling_hs - 1;
 
-		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
-	}
+	sprintf(endpt, "%d", endpt_id);
+	printf("\n\nBARF\n\n");
 
-		
 
 	/* Reply to initiating handset */
 	ApiFpCcSetupResType res = {
 		.Primitive = API_FP_CC_SETUP_RES,
 		.CallReference = incoming_call,
 		.Status = RSS_SUCCESS,
-		.AudioId.IntExtAudio = API_IEA_INT,
-		.AudioId.SourceTerminalId = called_hs,
+		.AudioId.IntExtAudio = API_IEA_EXT,
+		.AudioId.AudioEndPointId = endpt_id,
 	};
 
 	printf("API_FP_CC_SETUP_RES\n");
 	busmail_send(dect_bus, (uint8_t *)&res, sizeof(ApiFpCcSetupResType));
-
-
-	/* Call progress state to initiating handset */
-	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
-	call_status.CallStatusValue.State = API_CSS_CALL_SETUP_ACK;
 	
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_SYSTEM_CALL_ID,
-			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) internal_call);
-
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_CALL_STATUS,
-			    sizeof(ApiCallStatusType),
-			    (rsuint8 *) &call_status);
-
-
-	ApiFpCcSetupAckReqType * ra = (ApiFpCcSetupAckReqType *) malloc(sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
-	ra->Primitive = API_FP_CC_SETUP_ACK_REQ;
-	ra->CallReference = incoming_call;
-	ra->Signal = API_CC_SIGNAL_TONES_OFF;
-	ra->ProgressInd = API_IN_BAND_NOT_AVAILABLE;
-	
-	memcpy(ra->InfoElement, ie_block, ie_block_len);
-
-	printf("API_FP_CC_SETUP_ACK_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)ra, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
-	free(ra);
-
-
-	/* Connection request to dialed handset */
-	ie_block = NULL;
-	ie_block_len = 0;
-
-	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
-	call_status.CallStatusValue.State = API_CSS_CALL_SETUP;
-	
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_SYSTEM_CALL_ID,
-			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) internal_call);
-
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_CALL_STATUS,
-			    sizeof(ApiCallStatusType),
-			    (rsuint8 *) &call_status);
-
-
-	ApiFpCcSetupReqType * req = (ApiFpCcSetupReqType *) malloc(sizeof(ApiFpCcSetupReqType) - 1 + ie_block_len);
-
-	req->Primitive = API_FP_CC_SETUP_REQ;
-	req->TerminalId = called_hs;
-	req->CallReference.Value = 0;
-	req->AudioId.SourceTerminalId = calling_hs;
-	req->AudioId.IntExtAudio = API_IEA_INT;
-	req->BasicService = API_WIDEBAND_SPEECH;
-	req->CallClass = API_CC_INTERNAL;
-	req->Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2;
-	req->InfoElementLength = ie_block_len;
-
-	memcpy(req->InfoElement, ie_block, ie_block_len);
-
-	printf("API_FP_CC_SETUP_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)req, sizeof(ApiFpCcSetupReqType) - 1 + ie_block_len);
-	free(req);
-
-	printf("\n\n");
+	ubus_send_string_api("dect.api.setup_ind", "endpt", endpt);
 	return;
 }
 
@@ -534,7 +477,7 @@ static void pinging_call(int handset) {
 
 
 
-void internal_call_handler(packet_t *p) {
+void external_call_handler(packet_t *p) {
 	
 	busmail_t * m = (busmail_t *) &p->data[0];
 
@@ -590,10 +533,10 @@ void internal_call_handler(packet_t *p) {
 }
 
 
-void internal_call_init(void * bus) {
+void external_call_init(void * bus) {
 	
 	dect_bus = bus;
 
 	dect_codec_init();
-	busmail_add_handler(bus, internal_call_handler);
+	busmail_add_handler(bus, external_call_handler);
 }
