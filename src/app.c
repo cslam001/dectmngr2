@@ -30,8 +30,10 @@
 #include "buffer.h"
 #include "busmail.h"
 #include "eap.h"
+#include "event.h"
+#include "list.h"
 #include "stream.h"
-
+#include "handset.h"
 #include "internal_call.h"
 
 
@@ -70,7 +72,7 @@ static void client_packet_handler(packet_t *p) {
 	busmail_t * m = (busmail_t *) &p->data[0];
 
 	// Send (sniff) all packets to connected clients
-	if (client_connected == 1) eap_send(client_bus, &p->data, p->size);
+	if (client_connected == 1) eap_send(client_bus, p->data, p->size);
 }
 
 
@@ -240,6 +242,7 @@ void app_init(void * base, config_t * config) {
 	connection_init(dect_bus);
 	api_parser_init(dect_bus);
 	internal_call_init(dect_bus);
+	handset_init(dect_bus);
 
 	/* Init client subsystem */
 	client_init();

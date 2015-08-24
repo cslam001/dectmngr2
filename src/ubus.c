@@ -9,10 +9,12 @@
 #include <json-c/json_object.h>
 #include <json-c/json_util.h>
 #include <json-c/json_tokener.h>
+
 #include "util.h"
 #include "error.h"
 #include "stream.h"
 #include "event_base.h"
+#include "handset.h"
 
 
 //-------------------------------------------------------------
@@ -304,6 +306,7 @@ static int ubus_method_handset(struct ubus_context *ubus_ctx, struct ubus_object
 	// ubus call dect handset '{ "list": "" }'
 	if(keys[HANDSET_LIST]) {
 		printf("ronny handset list\n");
+		list_handsets();
 	}
 
 	// ubus call dect handset '{ "delete": "" }'

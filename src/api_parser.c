@@ -98,7 +98,6 @@ static void api_parser_handler(packet_t *p) {
 		break;
 
 	default:
-		printf("unknown application frame\n");
 		break;
 	}
 }
