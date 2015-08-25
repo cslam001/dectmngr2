@@ -10,11 +10,11 @@
 #include <json-c/json_util.h>
 #include <json-c/json_tokener.h>
 
+#include "ubus.h"
 #include "util.h"
 #include "error.h"
 #include "stream.h"
 #include "event_base.h"
-#include "handset.h"
 
 
 //-------------------------------------------------------------
@@ -29,9 +29,9 @@ enum {
 	HANDSET_DELETE,
 };
 
-static int ubus_method_state(struct ubus_context *ubus_ctx, struct ubus_object *obj,
+static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg);
-static int ubus_method_handset(struct ubus_context *ubus_ctx, struct ubus_object *obj,
+static int ubus_request_handset(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg);
 
 
@@ -58,8 +58,8 @@ static const struct blobmsg_policy ubusHandsetKeys[] = {						// ubus RPC "hands
 
 
 static const struct ubus_method ubusMethods[] = {								// ubus RPC methods
-	UBUS_METHOD("state", ubus_method_state, ubusStateKeys),
-	UBUS_METHOD("handset", ubus_method_handset, ubusHandsetKeys),
+	UBUS_METHOD("state", ubus_request_state, ubusStateKeys),
+	UBUS_METHOD("handset", ubus_request_handset, ubusHandsetKeys),
 };
 
 
@@ -80,7 +80,7 @@ static struct ubus_context *ubusContext;
 static void *ubus_stream;
 static void *event_base;
 static struct ubus_event_handler listener;										// Event handler registration
-
+static struct querier_t querier;												// Handle to deferred RPC request
 
 
 //-------------------------------------------------------------
@@ -110,6 +110,96 @@ int ubus_send_string(const char *msgKey, const char *msgVal)
 	json_object_put(jsonObj);
 	blob_buf_free(&blob);
 	return res;
+}
+
+
+
+//-------------------------------------------------------------
+// Send a busy reply that "we can't handle caller
+// request at the moment. Please retry later."
+static int ubus_reply_busy(struct ubus_context *ubus_ctx, struct ubus_object *obj,
+		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
+{
+	struct blob_buf isBusyMsg;
+
+	memset(&isBusyMsg, 0, sizeof(isBusyMsg));
+	if(blobmsg_buf_init(&isBusyMsg)) return -1;
+
+	blobmsg_add_u32(&isBusyMsg, "errno", EBUSY);
+	blobmsg_add_string(&isBusyMsg, "errstr", strerror(EBUSY));
+	blobmsg_add_string(&isBusyMsg, "method", methodName);
+	blobmsg_add_blob(&isBusyMsg, msg);
+
+	ubus_send_reply(ubus_ctx, req, isBusyMsg.head);
+	blob_buf_free(&isBusyMsg);
+
+	return 0;
+}
+
+
+
+//-------------------------------------------------------------
+// Send a list of registered phones as reply
+int ubus_reply_handset_list(int retErrno, const struct handsets_t const *handsets)
+{
+	struct blob_buf blob;
+	void *list1, *tbl, *list2;
+	int i;
+
+	if(!querier.inUse) return -1;
+
+	memset(&blob, 0, sizeof(blob));
+	if(blobmsg_buf_init(&blob)) return -1;
+
+	list1 = blobmsg_open_array(&blob, "handsets");
+	for(i = 0; i < handsets->termCount; i++) {
+		tbl = blobmsg_open_table(&blob, NULL);
+		blobmsg_add_u32(&blob, "id", handsets->terminal[i].id);
+		blobmsg_add_u8(&blob, "pinging", handsets->terminal[i].pinging);
+
+		list2 = blobmsg_open_array(&blob, "ipui");
+		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[0]);
+		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[1]);
+		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[2]);
+		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[3]);
+		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[4]);
+		blobmsg_close_table(&blob, list2);
+		blobmsg_close_table(&blob, tbl);
+	}
+	blobmsg_close_table(&blob, list1);
+
+	// Add returncode
+	blobmsg_add_u32(&blob, "errno", retErrno);
+	blobmsg_add_string(&blob, "errstr", strerror(retErrno));
+
+	ubus_send_reply(querier.ubus_ctx, &querier.req, blob.head);
+	blob_buf_free(&blob);
+
+	/* Convert return code from callee
+	 * to a UBUS status equivalent. */
+	retErrno = (retErrno ? UBUS_STATUS_UNKNOWN_ERROR : UBUS_STATUS_OK);
+
+	ubus_complete_deferred_request(querier.ubus_ctx, &querier.req, retErrno);
+	querier.inUse = 0;
+}
+
+
+
+//-------------------------------------------------------------
+// Are we ready for another deferred request? We can only handle
+// one at a time. Check for a possible previous timeout and discard
+// the previous if so to free resources.
+static void perhaps_reply_deferred_timeout(void) {
+	struct timespec now;
+
+	if(!querier.inUse) return;
+	if(clock_gettime(CLOCK_MONOTONIC, &now)) return;
+
+	if(now.tv_sec - querier.timeStamp.tv_sec > 4) {
+		ubus_complete_deferred_request(querier.ubus_ctx, &querier.req, 
+			UBUS_STATUS_TIMEOUT);
+		querier.inUse = 0;
+	}
 }
 
 
@@ -240,7 +330,7 @@ static int keyTokenize(struct ubus_object *obj, const char *methodName,
 
 //-------------------------------------------------------------
 // RPC handler for ubus call dect state '{....}'
-static int ubus_method_state(struct ubus_context *ubus_ctx, struct ubus_object *obj,
+static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
 {
 	struct blob_attr **keys;
@@ -292,7 +382,7 @@ out:
 
 //-------------------------------------------------------------
 // RPC handler for ubus call dect handset '{....}'
-static int ubus_method_handset(struct ubus_context *ubus_ctx, struct ubus_object *obj,
+static int ubus_request_handset(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
 {
 	struct blob_attr **keys;
@@ -302,11 +392,27 @@ static int ubus_method_handset(struct ubus_context *ubus_ctx, struct ubus_object
 	res = keyTokenize(obj, methodName, msg, &keys);
 	if(res != UBUS_STATUS_OK) goto out;
 
+	// Are we ready for another deferred request?
+	perhaps_reply_deferred_timeout();
+	if(querier.inUse) {
+		ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
+		res = UBUS_STATUS_NO_DATA;
+		goto out;
+	}
+
 	// Handle RPC:
 	// ubus call dect handset '{ "list": "" }'
 	if(keys[HANDSET_LIST]) {
-		printf("ronny handset list\n");
-		list_handsets();
+		if(list_handsets()) {
+			ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
+			res = UBUS_STATUS_NO_DATA;
+		}
+		else {
+			querier.inUse = 1;
+			querier.ubus_ctx = ubus_ctx;
+			clock_gettime(CLOCK_MONOTONIC, &querier.timeStamp);
+			ubus_defer_request(ubus_ctx, req, &querier.req);
+		}
 	}
 
 	// ubus call dect handset '{ "delete": "" }'
@@ -327,6 +433,7 @@ void ubus_init(void * base, config_t * config) {
 
 	printf("ubus init\n");
 	event_base = base;
+	memset(&querier, 0, sizeof(querier));
 
 	ubusContext = ubus_connect(NULL);
 	if(!ubusContext) exit_failure("Failed to connect to ubus");
@@ -348,9 +455,6 @@ void ubus_init(void * base, config_t * config) {
 	if(ubus_add_object(ubusContext, &rpcObj) != UBUS_STATUS_OK) {
 		exit_failure("Error registering ubus object");
 	}		
-
-
-	return;
 }
 
 

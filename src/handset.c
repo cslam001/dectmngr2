@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "handset.h"
 #include "busmail.h"
 #include "util.h"
 #include "ubus.h"
@@ -17,23 +18,9 @@
 #include <Api/FpAudio/ApiFpAudio.h>
 #include <Api/RsStandard.h>
 
-#define MAX_NR_HANDSETS 20
 
 
-struct terminal_t {
-	uint8_t pinging;
-	ApiTerminalIdType id;
-	uint8_t ipui[5];
-};
-
-
-struct handsets_t {
-	int termCount;											// Number of terminals registered
-	struct terminal_t terminal[MAX_NR_HANDSETS];
-};
-
-
-struct handsets_t handsets;
+static struct handsets_t handsets;
 
 
 
@@ -80,6 +67,7 @@ static void got_handset_ipui(busmail_t *m)
 	i++;
 	if(i >= handsets.termCount) {
 //		perhaps_disable_protocol();
+		ubus_reply_handset_list(0, &handsets);
 	}
 	else {
 		get_handset_ipui(handsets.terminal[i].id);
@@ -89,7 +77,7 @@ static void got_handset_ipui(busmail_t *m)
 
 
 //-------------------------------------------------------------
-void list_handsets(void)
+int list_handsets(void)
 {
 	ApiFpMmGetRegistrationCountReqType m = {
 		.Primitive = API_FP_MM_GET_REGISTRATION_COUNT_REQ,
@@ -97,6 +85,8 @@ void list_handsets(void)
 	};
 
 	busmail_send(dect_bus, (uint8_t*) &m, sizeof(m));
+
+	return 0;
 }
 
 
