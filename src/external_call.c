@@ -8,38 +8,30 @@
 #include <Api/FpCc/ApiFpCc.h>
 #include <Api/FpMm/ApiFpMm.h>
 #include <Api/ProdTest/ApiProdTest.h>
+#include <Api/FpAudio/ApiFpAudio.h>
 #include <Api/RsStandard.h>
 
 #include "busmail.h"
 #include "natalie_utils.h"
 
-ApiCallReferenceType incoming_call;
-ApiCallReferenceType outgoing_call;
-ApiSystemCallIdType * internal_call;
+/* Module scope variables */
+static ApiCallReferenceType incoming_call;
+static ApiCallReferenceType outgoing_call;
+static ApiSystemCallIdType * external_call;
+static ApiSystemCallIdType * internal_call;
+static char nbwbCodecList[NBWB_CODECLIST_LENGTH]={0x01, 0x02, 0x03, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x04};
+static char nbCodecList[]={0x01, 0x01, 0x02, 0x00, 0x00, 0x04};
+static char wbCodecList[]={0x01, 0x01, 0x03, 0x00, 0x00, 0x01};
+static rsuint8 NarrowCodecArr[30];
+static rsuint8 WideCodecArr[30];
+static ApiInfoElementType * NarrowBandCodecIe = (ApiInfoElementType*) NarrowCodecArr;
+static const rsuint16 NarrowBandCodecIeLen = (RSOFFSETOF(ApiInfoElementType, IeData) + 6);
+static ApiInfoElementType * WideBandCodecIe = (ApiInfoElementType*) WideCodecArr;
+static const rsuint16 WideBandCodecIeLen = (RSOFFSETOF(ApiInfoElementType, IeData) + 6);
+static ApiCodecListType * codecs = NULL;
+static void * dect_bus;
 
-#ifndef RSOFFSETOF
-/*! \def RSOFFSETOF(type, field)                                                                                                                        
- * Computes the byte offset of \a field from the beginning of \a type. */
-#define RSOFFSETOF(type, field) ((size_t)(&((type*)0)->field))
-#endif
 
-#define SINGLE_CODECLIST_LENGTH         (sizeof(ApiCodecListType))
-#define NBWB_CODECLIST_LENGTH           (SINGLE_CODECLIST_LENGTH + sizeof(ApiCodecInfoType))
-
-/* Codecs */
-char nbwbCodecList[NBWB_CODECLIST_LENGTH]={0x01, 0x02, 0x03, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x04};
-char nbCodecList[]={0x01, 0x01, 0x02, 0x00, 0x00, 0x04};
-char wbCodecList[]={0x01, 0x01, 0x03, 0x00, 0x00, 0x01};
-rsuint8 NarrowCodecArr[30];
-rsuint8 WideCodecArr[30];
-ApiInfoElementType * NarrowBandCodecIe = (ApiInfoElementType*) NarrowCodecArr;
-const rsuint16 NarrowBandCodecIeLen = (RSOFFSETOF(ApiInfoElementType, IeData) + 6);
-ApiInfoElementType * WideBandCodecIe = (ApiInfoElementType*) WideCodecArr;
-const rsuint16 WideBandCodecIeLen = (RSOFFSETOF(ApiInfoElementType, IeData) + 6);
-
-ApiCodecListType * codecs = NULL;
-
-void * dect_bus;
 
 
 static void print_status(RsStatusType s) {
@@ -376,14 +368,6 @@ static void release_ind(busmail_t *m) {
 	printf("CallReference: %x\n", p->CallReference);
 	printf("Reason: %x\n", p->Reason);
 	
-	if ( p->CallReference.Value == incoming_call.Value ) {
-		terminate_call = outgoing_call;
-	} else {
-		terminate_call = incoming_call;
-	}
-
-	printf("CallReference: %x\n", p->CallReference);
-
 	ApiFpCcReleaseResType res = {
 		.Primitive = API_FP_CC_RELEASE_RES,
 		.CallReference = p->CallReference,
@@ -394,17 +378,7 @@ static void release_ind(busmail_t *m) {
 	printf("API_FP_CC_RELEASE_RES\n");
 	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
 
-
-	ApiFpCcReleaseReqType req = {
-		.Primitive = API_FP_CC_RELEASE_REQ,
-		.CallReference = terminate_call,
-		.Reason = API_RR_NORMAL,
-		.InfoElementLength = 0,
-	};
-	
-	printf("API_FP_CC_RELEASE_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)&req, sizeof(req));
-
+	//ubus_send_string_api("dect.api.release_ind", "terminal", endpt);
 }
 
 
@@ -420,7 +394,7 @@ static void setup_ind(busmail_t *m) {
 	int i, called_hs, calling_hs, endpt_id;
 	ApiInfoElementType * ie_block = NULL;
 	rsuint16 ie_block_len = 0;
-	char endpt[15];
+	char terminal[15];
 
 
 	printf("CallReference: %x\n", p->CallReference);
@@ -429,18 +403,23 @@ static void setup_ind(busmail_t *m) {
 	printf("BasicService: %d\n", p->BasicService);
 	printf("CallClass: %d\n", p->CallClass);
 	
-	incoming_call = p->CallReference;
-	calling_hs = p->TerminalId;
-	endpt_id = calling_hs - 1;
+	outgoing_call = p->CallReference;
+	endpt_id = p->TerminalId - 1;
+	sprintf(terminal, "%d", p->TerminalId);
 
-	sprintf(endpt, "%d", endpt_id);
-	printf("\n\nBARF\n\n");
+	/* Parse attached infoelements */
+	if ( p->InfoElementLength > 0 ) {
+		external_call = get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+		printf("external_call: %x\n", external_call->ApiSystemCallId);
+
+		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+	}
 
 
 	/* Reply to initiating handset */
 	ApiFpCcSetupResType res = {
 		.Primitive = API_FP_CC_SETUP_RES,
-		.CallReference = incoming_call,
+		.CallReference = outgoing_call,
 		.Status = RSS_SUCCESS,
 		.AudioId.IntExtAudio = API_IEA_EXT,
 		.AudioId.AudioEndPointId = endpt_id,
@@ -448,8 +427,48 @@ static void setup_ind(busmail_t *m) {
 
 	printf("API_FP_CC_SETUP_RES\n");
 	busmail_send(dect_bus, (uint8_t *)&res, sizeof(ApiFpCcSetupResType));
+
+
+	/* Notify Asterisk of offhook event */
+	ubus_send_string_api("dect.api.setup_ind", "terminal", terminal);
+
+	ApiFpSetAudioFormatReqType aud_req = {
+		.Primitive = API_FP_SET_AUDIO_FORMAT_REQ,
+		.DestinationId = endpt_id,
+		.AudioDataFormat = AP_DATA_FORMAT_LINEAR_8kHz,
+	};
 	
-	ubus_send_string_api("dect.api.setup_ind", "endpt", endpt);
+	printf("API_FP_SET_AUDIO_FORMAT_REQ\n");
+	busmail_send(dect_bus, (uint8_t *)&aud_req, sizeof(ApiFpCcSetupResType));
+	
+	/* /\* Call progress state to initiating handset *\/ */
+	/* call_status.CallStatusSubId = API_SUB_CALL_STATUS; */
+	/* call_status.CallStatusValue.State = API_CSS_CALL_SETUP_ACK; */
+	
+	/* ApiBuildInfoElement(&ie_block, */
+	/* 		    &ie_block_len, */
+	/* 		    API_IE_SYSTEM_CALL_ID, */
+	/* 		    sizeof(ApiSystemCallIdType), */
+	/* 		    (rsuint8 *) external_call); */
+
+	/* ApiBuildInfoElement(&ie_block, */
+	/* 		    &ie_block_len, */
+	/* 		    API_IE_CALL_STATUS, */
+	/* 		    sizeof(ApiCallStatusType), */
+	/* 		    (rsuint8 *) &call_status); */
+
+
+	/* ApiFpCcSetupAckReqType * ra = (ApiFpCcSetupAckReqType *) malloc(sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len); */
+	/* ra->Primitive = API_FP_CC_SETUP_ACK_REQ; */
+	/* ra->CallReference = outgoing_call; */
+	/* ra->Signal = API_CC_SIGNAL_DIAL_TONE_ON; */
+	
+	/* memcpy(ra->InfoElement, ie_block, ie_block_len); */
+
+	/* printf("API_FP_CC_SETUP_ACK_REQ\n"); */
+	/* busmail_send(dect_bus, (uint8_t *)ra, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len); */
+	/* free(ra); */
+
 	return;
 }
 

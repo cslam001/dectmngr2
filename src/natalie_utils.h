@@ -25,3 +25,6 @@ void ApiBuildInfoElement(ApiInfoElementType **IeBlockPtr,
  * Computes the byte offset of \a field from the beginning of \a type. */
 #define RSOFFSETOF(type, field) ((size_t)(&((type*)0)->field))
 #endif
+
+#define SINGLE_CODECLIST_LENGTH         (sizeof(ApiCodecListType))
+#define NBWB_CODECLIST_LENGTH           (SINGLE_CODECLIST_LENGTH + sizeof(ApiCodecInfoType))

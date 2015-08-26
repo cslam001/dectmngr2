@@ -97,6 +97,10 @@ static void api_parser_handler(packet_t *p) {
 		printf("API_FP_INIT_PCM_CFM\n");
 		break;
 
+	case API_FP_SET_AUDIO_FORMAT_CFM:
+		printf("API_FP_SET_AUDIO_FORMAT_CFM\n");
+		break;
+
 	default:
 		printf("unknown application frame\n");
 		break;
