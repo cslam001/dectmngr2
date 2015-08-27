@@ -437,7 +437,7 @@ static void setup_ind(busmail_t *m) {
 	ApiMultikeyPadType * keypad_entr = NULL;
         unsigned char keypad_len;
 	ApiCallStatusType call_status;
-	int i, called_hs, calling_hs;
+	int i, called_hs, calling_hs, endpt;
 	ApiInfoElementType * ie_block = NULL;
 	rsuint16 ie_block_len = 0;
 
@@ -449,6 +449,7 @@ static void setup_ind(busmail_t *m) {
 	printf("CallClass: %d\n", p->CallClass);
 	
 	incoming_call = p->CallReference;
+	endpt = p->TerminalId - 1;
 	
 	if ( p->TerminalId == 1 ) {
 		calling_hs = 1;
@@ -472,8 +473,8 @@ static void setup_ind(busmail_t *m) {
 		.Primitive = API_FP_CC_SETUP_RES,
 		.CallReference = incoming_call,
 		.Status = RSS_SUCCESS,
-		.AudioId.IntExtAudio = API_IEA_INT,
-		.AudioId.SourceTerminalId = called_hs,
+		.AudioId.IntExtAudio = API_IEA_EXT,
+		.AudioId.AudioEndPointId = endpt,
 	};
 
 	printf("API_FP_CC_SETUP_RES\n");
