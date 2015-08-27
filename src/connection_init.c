@@ -156,20 +156,7 @@ static void connection_init_handler(packet_t *p) {
 		break;
 
 	case API_FP_MM_REGISTRATION_COMPLETE_IND:
-		{
-			ApiFpMmRegistrationCompleteIndType *resp = 
-				(ApiFpMmRegistrationCompleteIndType*) &m->mail_header;
-			ubus_send_string("registration", "newphone");
-			connection_set_registration(0);
-		}
-		break;
-
-	case API_FP_MM_HANDSET_PRESENT_IND:
-		{
-			ApiFpMmHandsetPresentIndType *resp =
-				(ApiFpMmHandsetPresentIndType*) &m->mail_header;
-			ubus_send_string("handset", "present");
-		}
+		connection_set_registration(0);
 		break;
 	}
 }

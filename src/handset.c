@@ -27,6 +27,7 @@ static struct handsets_t handsets;
 
 
 //-------------------------------------------------------------
+// Query stack for one registered handset IPUI
 static void get_handset_ipui(int handsetId)
 {
 	ApiFpMmGetHandsetIpuiReqType m = {
@@ -40,6 +41,8 @@ static void get_handset_ipui(int handsetId)
 
 
 //-------------------------------------------------------------
+// Dect stack responded with the IPUI
+// of one registered handset.
 static void got_handset_ipui(busmail_t *m)
 {
 	ApiFpMmGetHandsetIpuiCfmType *resp;
@@ -48,16 +51,15 @@ static void got_handset_ipui(busmail_t *m)
 	resp = (ApiFpMmGetHandsetIpuiCfmType*) &m->mail_header;
 
 	// Sanity check
-	if(resp->Status != RSS_SUCCESS) return;
-	if(resp->TerminalId > handsets.termCount) return;
-	printf("ipui for %d\n", resp->TerminalId);
+	if(resp->Status != RSS_SUCCESS) {
+		printf("Error; %s() status %d\n", __func__, resp->Status);
+		return;
+	}
 
 	/* Search for the handset ID in an our list
 	 * for the terminal we just got the ipui for. */
-	for(i = 0; i < handsets.termCount &&
+	for(i = 0; i < MAX_NR_HANDSETS &&
 			handsets.terminal[i].id != resp->TerminalId; i++);
-	if(i == handsets.termCount) return;
-
 
 	memcpy(handsets.terminal[i].ipui, resp->IPUI,
 		sizeof(handsets.terminal[0].ipui));
@@ -77,6 +79,7 @@ static void got_handset_ipui(busmail_t *m)
 
 
 //-------------------------------------------------------------
+// Query Dect stack for what handsets are registered
 int list_handsets(void)
 {
 	ApiFpMmGetRegistrationCountReqType m = {
@@ -92,6 +95,8 @@ int list_handsets(void)
 
 
 //-------------------------------------------------------------
+// Dect stack responded whith current
+// number of registered handsets.
 static void got_registration_count(busmail_t *m)
 {
 	ApiFpMmGetRegistrationCountCfmType *resp;
@@ -100,9 +105,11 @@ static void got_registration_count(busmail_t *m)
 	resp = (ApiFpMmGetRegistrationCountCfmType*) &m->mail_header;
 	
 	// Sanity check
-	if(resp->Status != RSS_SUCCESS) return;
+	if(resp->Status != RSS_SUCCESS) {
+		printf("Error; %s() status %d\n", __func__, resp->Status);
+		return;
+	}
 	if(resp->TerminalIdCount > resp->MaxNoHandsets) return;
-	printf("Max Number of Handset allowed: %d\n", resp->MaxNoHandsets);
 
 	handsets.termCount = resp->TerminalIdCount;
 	memset(handsets.terminal, 0, sizeof(struct terminal_t) * MAX_NR_HANDSETS);
@@ -118,29 +125,44 @@ static void got_registration_count(busmail_t *m)
 	}
 	else {
 		//perhaps_disable_protocol();
+		ubus_reply_handset_list(0, &handsets);
 	}
 }
 
 
 
 //-------------------------------------------------------------
+// Delete a registered handset from Dect stack
+int delete_handset(int id) {  
+	ApiFpMmDeleteRegistrationReqType m = {
+		.Primitive = API_FP_MM_DELETE_REGISTRATION_REQ,
+		.TerminalId = id
+	};
+
+	busmail_send(dect_bus, (uint8_t*) &m, sizeof(m));
+
+	return 0;
+}
+
+
+
+
+//-------------------------------------------------------------
+// Handle PP events such as registration
 static void handset_handler(packet_t *p)
 {
 	
 	int i;
 	busmail_t * m = (busmail_t *) &p->data[0];
+	ApiFpMmGetIdCfmType *resp1 = (ApiFpMmGetIdCfmType*) &m->mail_header;		// For gett in "Status" of those structs who has it
 
 	if (m->task_id != 1) return;
 	
 	/* Application command */
 	switch (m->mail_header) {
 		case API_FP_MM_HANDSET_PRESENT_IND:
-		{
-			ApiFpMmHandsetPresentIndType *resp =
-				(ApiFpMmHandsetPresentIndType*) &m->mail_header;
 			ubus_send_string("handset", "present");
-		}
-		break;
+			break;
 
 		case API_FP_MM_GET_REGISTRATION_COUNT_CFM:
 			got_registration_count(m);
@@ -150,6 +172,17 @@ static void handset_handler(packet_t *p)
 			got_handset_ipui(m);
 			break;
 
+		case API_FP_MM_REGISTRATION_COMPLETE_IND:
+			if(resp1->Status == RSS_SUCCESS) {
+				ubus_send_string("handset", "add");
+			}
+			break;
+
+		case API_FP_MM_DELETE_REGISTRATION_CFM:
+			if(resp1->Status == RSS_SUCCESS) {
+				ubus_send_string("handset", "remove");
+			}
+			break;
 	}
 }
 

@@ -22,6 +22,7 @@ struct handsets_t {
 
 //-------------------------------------------------------------
 int list_handsets(void);
+int delete_handset(int id);
 void handset_init(void *bus);
 
 

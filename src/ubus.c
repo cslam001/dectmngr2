@@ -53,7 +53,7 @@ static const struct blobmsg_policy ubusStateKeys[] = {							// ubus RPC "state"
 
 static const struct blobmsg_policy ubusHandsetKeys[] = {						// ubus RPC "handset" arguments (keys and values)
 	[HANDSET_LIST] = { .name = "list", .type = BLOBMSG_TYPE_STRING },
-	[HANDSET_DELETE] = { .name = "delete", .type = BLOBMSG_TYPE_STRING },
+	[HANDSET_DELETE] = { .name = "delete", .type = BLOBMSG_TYPE_INT32 },
 };
 
 
@@ -417,7 +417,7 @@ static int ubus_request_handset(struct ubus_context *ubus_ctx, struct ubus_objec
 
 	// ubus call dect handset '{ "delete": "" }'
 	if(keys[HANDSET_DELETE]) {
-		printf("ronny handset delete\n");
+		delete_handset(blobmsg_get_u32(keys[HANDSET_DELETE]));
 	}
 
 out:
