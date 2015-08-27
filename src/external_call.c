@@ -18,7 +18,7 @@
 static ApiCallReferenceType incoming_call;
 static ApiCallReferenceType outgoing_call;
 static ApiSystemCallIdType * external_call;
-static ApiSystemCallIdType * internal_call;
+static ApiSystemCallIdType * system_call_id;
 static ApiLineIdValueType * outgoing_line_id;
 static char nbwbCodecList[NBWB_CODECLIST_LENGTH]={0x01, 0x02, 0x03, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x04};
 static char nbCodecList[]={0x01, 0x01, 0x02, 0x00, 0x00, 0x04};
@@ -171,7 +171,7 @@ static void connect_ind(busmail_t *m) {
 
 	printf("CallReference: %x\n", p->CallReference);
 	printf("p->InfoElementLength: %d\n", p->InfoElementLength);
-	printf("internal_call: %x\n", internal_call->ApiSystemCallId);
+	printf("internal_call: %x\n", system_call_id->ApiSystemCallId);
 
 	if (p->InfoElementLength > 0) {
 		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
@@ -197,7 +197,7 @@ static void connect_ind(busmail_t *m) {
 			    &ie_block_len,
 			    API_IE_SYSTEM_CALL_ID,
 			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) internal_call);
+			    (rsuint8 *) system_call_id);
 
 	
 	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len));
@@ -451,17 +451,9 @@ static void setup_ind(busmail_t *m) {
 	incoming_call = p->CallReference;
 	endpt = p->TerminalId - 1;
 	
-	if ( p->TerminalId == 1 ) {
-		calling_hs = 1;
-		called_hs = 2;
-	} else {
-		calling_hs = 2;
-		called_hs = 1; 
-	}
-	
 	if ( p->InfoElementLength > 0 ) {
-		internal_call = get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
-		printf("internal_call: %x\n", internal_call->ApiSystemCallId);
+		system_call_id = get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+		printf("internal_call: %x\n", system_call_id->ApiSystemCallId);
 
 		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 	}
@@ -489,7 +481,7 @@ static void setup_ind(busmail_t *m) {
 			    &ie_block_len,
 			    API_IE_SYSTEM_CALL_ID,
 			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) internal_call);
+			    (rsuint8 *) system_call_id);
 
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
@@ -568,15 +560,15 @@ static void setup_ind_b(busmail_t *m) {
 	/* Notify Asterisk of offhook event */
 	ubus_send_string_api("dect.api.setup_ind", "terminal", terminal);
 
-	/* ApiFpSetAudioFormatReqType aud_req = { */
-	/* 	.Primitive = API_FP_SET_AUDIO_FORMAT_REQ, */
-	/* 	.DestinationId = endpt_id, */
-	/* 	//.AudioDataFormat = AP_DATA_FORMAT_LINEAR_8kHz, */
-	/* 	.AudioDataFormat = AP_DATA_FORMAT_NONE, */
-	/* }; */
+	ApiFpSetAudioFormatReqType aud_req = {
+		.Primitive = API_FP_SET_AUDIO_FORMAT_REQ,
+		.DestinationId = endpt_id,
+		.AudioDataFormat = AP_DATA_FORMAT_LINEAR_8kHz,
+		.AudioDataFormat = AP_DATA_FORMAT_NONE,
+	};
 	
-	/* printf("API_FP_SET_AUDIO_FORMAT_REQ\n"); */
-	/* busmail_send(dect_bus, (uint8_t *)&aud_req, sizeof(ApiFpCcSetupResType)); */
+	printf("API_FP_SET_AUDIO_FORMAT_REQ\n");
+	busmail_send(dect_bus, (uint8_t *)&aud_req, sizeof(ApiFpCcSetupResType));
 
 
 	ie_block_len = 0;
