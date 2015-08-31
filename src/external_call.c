@@ -326,12 +326,12 @@ static void info_ind(busmail_t *m) {
 	rsuint16 ie_block_len = 0;
 	ApiInfoElementType * ie_block = NULL;
 	ApiCallStatusType call_status;
+	const char term[15];
 
-	printf("\n\nINFO IND\n\n");
 	printf("CallReference: %x\n", p->CallReference);
-	printf("Terminal: %x\n", p->CallReference.Instance.Host);
-	
-	ubus_send_string_api("dect.api.info_ind", "terminal", p->CallReference.Instance.Host);
+
+	snprintf(term, 15, "%d", p->CallReference.Instance.Host);
+	ubus_send_string_api("dect.api.info_ind", "terminal", term);
 }
 
 
@@ -360,16 +360,18 @@ static void audio_format_cfm(busmail_t *m) {
 			    sizeof(ApiCallStatusType),
 			    (rsuint8 *) &call_status);
 
-	
+
 	ApiFpCcSetupAckReqType * ra = (ApiFpCcSetupAckReqType *) malloc(sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
 	ra->Primitive = API_FP_CC_SETUP_ACK_REQ;
 	ra->CallReference = incoming_call;
-	ra->Signal = API_CC_SIGNAL_TONES_OFF;
+	ra->Signal = API_CC_SIGNAL_DIAL_TONE_ON;
 	ra->ProgressInd = API_IN_BAND_NOT_AVAILABLE;
-	
+
+	ra->InfoElementLength = ie_block_len;
 	memcpy(ra->InfoElement, ie_block, ie_block_len);
 	
 	printf("API_FP_CC_SETUP_ACK_REQ\n");
+	
 	busmail_send(dect_bus, (uint8_t *)ra, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
 	free(ra);
 
@@ -403,6 +405,7 @@ static void release_ind(busmail_t *m) {
 	
 	ApiFpCcReleaseIndType * p = (ApiFpCcReleaseIndType *) &m->mail_header;
 	ApiCallReferenceType terminate_call;
+	const char term[15];
 
 	printf("CallReference: %x\n", p->CallReference);
 	printf("Reason: %x\n", p->Reason);
@@ -417,7 +420,10 @@ static void release_ind(busmail_t *m) {
 	printf("API_FP_CC_RELEASE_RES\n");
 	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
 
-	//ubus_send_string_api("dect.api.release_ind", "terminal", endpt);
+	snprintf(term, 15, "%d", p->CallReference.Instance.Host);
+	ubus_send_string_api("dect.api.info_ind", "terminal", term);
+
+	ubus_send_string_api("dect.api.release_ind", "terminal", term);
 }
 
 
@@ -436,7 +442,7 @@ static void setup_ind(busmail_t *m) {
 	ApiInfoElementType * ie_block = NULL;
 	rsuint16 ie_block_len = 0;
 	ApiAudioEndPointIdType endpt;
-
+	const char term[15];
 
 	printf("CallReference: %x\n", p->CallReference);
 	printf("TerminalIdInitiating: %d\n", p->TerminalId);
@@ -447,6 +453,9 @@ static void setup_ind(busmail_t *m) {
 	incoming_call = p->CallReference;
 	incoming_call.Instance.Host = p->TerminalId;
 
+	snprintf(term, 15, "%d", p->TerminalId);
+	ubus_send_string_api("dect.api.setup_ind", "terminal", term);
+
 	endpt = p->TerminalId - 1;
 	
 	if ( p->InfoElementLength > 0 ) {
@@ -455,7 +464,6 @@ static void setup_ind(busmail_t *m) {
 
 		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 	}
-
 		
 
 	/* Reply to initiating handset */
