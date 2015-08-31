@@ -564,11 +564,10 @@ static void setup_ind_b(busmail_t *m) {
 		.Primitive = API_FP_SET_AUDIO_FORMAT_REQ,
 		.DestinationId = endpt_id,
 		.AudioDataFormat = AP_DATA_FORMAT_LINEAR_8kHz,
-		.AudioDataFormat = AP_DATA_FORMAT_NONE,
 	};
 	
 	printf("API_FP_SET_AUDIO_FORMAT_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)&aud_req, sizeof(ApiFpCcSetupResType));
+	busmail_send(dect_bus, (uint8_t *)&aud_req, sizeof(ApiFpSetAudioFormatReqType));
 
 
 	ie_block_len = 0;
