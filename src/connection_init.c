@@ -2,11 +2,15 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <fcntl.h>
+#include <sys/timerfd.h>
 
 #include "connection_init.h"
 #include "busmail.h"
 #include "util.h"
 #include "ubus.h"
+#include "error.h"
+#include "stream.h"
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
@@ -37,6 +41,8 @@ struct connection_t {
 static int reset_ind = 0;
 void * dect_bus;
 struct connection_t connection;
+static int timer_fd;
+static void *timer_stream;
 
 
 
@@ -168,6 +174,15 @@ void connection_init(void * bus) {
 
 	dect_bus = bus;
 	busmail_add_handler(bus, connection_init_handler);
+
+	timer_fd = timerfd_create(CLOCK_MONOTONIC, O_NONBLOCK);
+	if(timer_fd == -1) {
+		exit_failure("Error creating handset timer");
+	}
+
+//	timer_stream = stream_new(timer_fd);
+//	stream_add_handler(timer_stream, 0, timer_handler);
+//	event_base_add_stream(timer_stream);
 }
 
 

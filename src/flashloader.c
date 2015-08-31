@@ -23,6 +23,10 @@
 #include "preloader.h"
 #include "busmail.h"
 #include "stream.h"
+#include "preloader.h"
+#include "flashloader.h"
+#include "Crc.h"
+#include "event.h"
 
 #include "MRtxDef.h"
 #include "MailDef.h"
@@ -183,7 +187,7 @@ static uint8_t * make_tx_packet(uint8_t * tx, void * packet, int data_size) {
 }
 
 
-static send_packet(void * data, int data_size, int fd) {
+static void send_packet(void * data, int data_size, int fd) {
 
   int tx_size = data_size + PACKET_OVER_HEAD;
   uint8_t * tx = malloc(tx_size);
@@ -194,7 +198,7 @@ static send_packet(void * data, int data_size, int fd) {
   free(tx);
 }
 
-static send_packet_quiet(void * data, int data_size, int fd) {
+static void send_packet_quiet(void * data, int data_size, int fd) {
 
   int tx_size = data_size + PACKET_OVER_HEAD;
   uint8_t * tx = malloc(tx_size);

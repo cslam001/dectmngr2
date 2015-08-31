@@ -102,6 +102,8 @@ $Archive:   J:/sw/Tools/FlashLoader/FL7/Projects/Tg/SC14441/Preloader/vcs/Preloa
 /****************************************************************************
 *                             Function prototypes                            
 ****************************************************************************/
+void preloader_init(void *stream);
+void preloader_exit(void *stream);
 
 #endif
 

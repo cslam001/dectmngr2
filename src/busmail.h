@@ -65,10 +65,11 @@ typedef struct __attribute__((__packed__))
 
 
 void * busmail_new(int fd);
-void * busmail_add_handler(void * _self, void (*app_handler)(packet_t *));
+void busmail_add_handler(void * _self, void (*app_handler)(packet_t *));
 int busmail_get(void * _self, packet_t *p);
 void packet_dump(packet_t *p);
 void busmail_dispatch(void * _self);
+void busmail_ack(void * _self);
 int busmail_write(void * _self, void * event);
 void busmail_send0(void * _self, uint8_t * data, int size);
 void busmail_send(void * _self, uint8_t * data, int size);

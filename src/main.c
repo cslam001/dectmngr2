@@ -14,10 +14,10 @@
 #include "state.h"
 #include "util.h"
 
-#include "list.h"
 #include "busmail.h"
 #include "stream.h"
 #include "event.h"
+#include "event_base.h"
 
 #include "prog.h"
 #include "app.h"
@@ -36,12 +36,10 @@ config_t *config = &c;
 
 int main(int argc, char * argv[]) {
 
-	void * event_base;
-
 	/* Unbuffered stdout */
 	setbuf(stdout, NULL);
 	
-	event_base = event_base_new(MAX_EVENTS);
+	event_base_new(MAX_EVENTS);
 	
 	/* Check user arguments and init config */
 	if ( check_args(argc, argv, config) < 0 ) {
@@ -51,15 +49,15 @@ int main(int argc, char * argv[]) {
 	/* Select operating mode */
 	switch (config->mode) {
 	case PROG_MODE:
-		prog_init(event_base, config);
+		prog_init(0, config);
 		break;
 	case NVS_MODE:
-		nvs_init(event_base, config);
+		nvs_init(0, config);
 		break;
 	case APP_MODE:
-		app_init(event_base, config);
+		app_init(0, config);
 #ifdef WITH_UBUS
-		ubus_init(event_base, config);
+		ubus_init(0, config);
 #endif
 		break;
 	default:
@@ -70,7 +68,7 @@ int main(int argc, char * argv[]) {
 	/* Read incomming events on registered streams
 	   and dispatch them to event handlers. Does 
 	   not return. */
-	event_base_dispatch(event_base);
+	event_base_dispatch();
 
 	return 0;
 }

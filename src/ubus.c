@@ -15,6 +15,7 @@
 #include "error.h"
 #include "stream.h"
 #include "event_base.h"
+#include "connection_init.h"
 
 
 //-------------------------------------------------------------
@@ -78,7 +79,6 @@ static struct ubus_object rpcObj = {
 
 static struct ubus_context *ubusContext;
 static void *ubus_stream;
-static void *event_base;
 static struct ubus_event_handler listener;										// Event handler registration
 static struct querier_t querier;												// Handle to deferred RPC request
 
@@ -181,6 +181,8 @@ int ubus_reply_handset_list(int retErrno, const struct handsets_t const *handset
 
 	ubus_complete_deferred_request(querier.ubus_ctx, &querier.req, retErrno);
 	querier.inUse = 0;
+
+	return 0;
 }
 
 
@@ -432,7 +434,6 @@ void ubus_init(void * base, config_t * config) {
 	int dect_fd, debug_fd, proxy_fd;
 
 	printf("ubus init\n");
-	event_base = base;
 	memset(&querier, 0, sizeof(querier));
 
 	ubusContext = ubus_connect(NULL);
@@ -441,7 +442,7 @@ void ubus_init(void * base, config_t * config) {
 	// Listen for data on ubus socket in our main event loop
 	ubus_stream = stream_new(ubusContext->sock.fd);
 	stream_add_handler(ubus_stream, 0, ubus_fd_handler);
-	event_base_add_stream(event_base, ubus_stream);
+	event_base_add_stream(ubus_stream);
 
 	// Invoke our event handler when ubus events (not calls) arrive
 	memset(&listener, 0, sizeof(listener));

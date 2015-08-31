@@ -10,6 +10,8 @@
 #include "boot.h"
 #include "util.h"
 #include "stream.h"
+#include "event.h"
+#include "preloader.h"
 
 static uint8_t PreBootPrgm441_20MHz[] =
 	{

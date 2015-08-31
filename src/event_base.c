@@ -3,6 +3,10 @@
 
 
 #include "event_base.h"
+#include "error.h"
+#include "stream.h"
+#include "event.h"
+
 
 #define MAX_EVENTS 10
 
@@ -10,7 +14,7 @@
 /* Module scope variables */
 static int epoll_fd;
 
-void * event_base_new(int count) {
+void event_base_new(int count) {
 	
 	/* Setup epoll instance */
 	epoll_fd = epoll_create(count);
@@ -20,7 +24,7 @@ void * event_base_new(int count) {
 }
 
 
-void * event_base_add_stream(void * _self, void * stream) {
+void event_base_add_stream(void * stream) {
 
 	struct epoll_event ev;
 
@@ -34,7 +38,7 @@ void * event_base_add_stream(void * _self, void * stream) {
 
 }
 
-void * event_base_delete_stream(void * _self, void * stream) {
+void event_base_delete_stream(void * stream) {
 	
 	/* Deregister fd */
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, stream_get_fd(stream), NULL) == -1) {
@@ -43,7 +47,7 @@ void * event_base_delete_stream(void * _self, void * stream) {
 }
 
 
-void * event_base_dispatch(void * _self) {
+void event_base_dispatch(void) {
 
 	int nfds, i;
 	struct epoll_event events[MAX_EVENTS];

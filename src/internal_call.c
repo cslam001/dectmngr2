@@ -11,6 +11,7 @@
 #include <Api/RsStandard.h>
 
 #include "busmail.h"
+#include "util.h"
 
 ApiCallReferenceType incoming_call;
 ApiCallReferenceType outgoing_call;
@@ -74,6 +75,8 @@ static ApiSystemCallIdType * get_system_call_id(ApiInfoElementType * InfoElement
 		}
 
 	}
+
+	return NULL;
 }
 
 

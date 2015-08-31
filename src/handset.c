@@ -9,6 +9,9 @@
 #include "util.h"
 #include "ubus.h"
 #include "app.h"
+#include "stream.h"
+#include "event_base.h"
+#include "error.h"
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
@@ -21,7 +24,6 @@
 
 
 static struct handsets_t handsets;
-
 
 
 
@@ -151,8 +153,6 @@ int delete_handset(int id) {
 // Handle PP events such as registration
 static void handset_handler(packet_t *p)
 {
-	
-	int i;
 	busmail_t * m = (busmail_t *) &p->data[0];
 	ApiFpMmGetIdCfmType *resp1 = (ApiFpMmGetIdCfmType*) &m->mail_header;		// For gett in "Status" of those structs who has it
 
@@ -184,6 +184,12 @@ static void handset_handler(packet_t *p)
 			}
 			break;
 	}
+}
+
+
+
+//-------------------------------------------------------------
+static void timer_handler(void *stream, void *event) {
 }
 
 

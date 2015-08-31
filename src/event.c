@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#include "stream.h"
+#include "event.h"
 #include "error.h"
 
 

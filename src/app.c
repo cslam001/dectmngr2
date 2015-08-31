@@ -31,10 +31,13 @@
 #include "busmail.h"
 #include "eap.h"
 #include "event.h"
+#include "event_base.h"
 #include "list.h"
 #include "stream.h"
 #include "handset.h"
 #include "internal_call.h"
+#include "connection_init.h"
+#include "api_parser.h"
 
 
 #define INBUF_SIZE 5000
@@ -48,8 +51,6 @@ void * client_stream;
 int epoll_fd;
 void * client_list;
 void * client_bus;
-void * client_list;
-void * event_base;
 struct sigaction act;
 
 
@@ -68,9 +69,6 @@ static void eap(packet_t *p) {
 
 
 static void client_packet_handler(packet_t *p) {
-
-	busmail_t * m = (busmail_t *) &p->data[0];
-
 	// Send (sniff) all packets to connected clients
 	if (client_connected == 1) eap_send(client_bus, p->data, p->size);
 }
@@ -87,7 +85,7 @@ static void client_handler(void * client_stream, void * event) {
 		perror("recv");
 	} else if ( event_count(event) == 0 ) {
 
-		event_base_delete_stream(event_base, client_stream);
+		event_base_delete_stream(client_stream);
 		
 		/* Client connection closed */
 		printf("client closed connection\n");
@@ -95,7 +93,7 @@ static void client_handler(void * client_stream, void * event) {
 			exit_failure("close");
 		}
 					
-		list_delete(client_list, client_fd);
+		list_delete(client_list, (void*) client_fd);
 
 		/* Destroy client connection object here */
 
@@ -153,10 +151,10 @@ static void listen_handler(void * listen_stream, void * event) {
 		stream_add_handler(client_stream, MAX_EVENT_SIZE, client_handler);
 
 		/* Add client_stream to event dispatcher */
-		event_base_add_stream(event_base, client_stream);
+		event_base_add_stream(client_stream);
 
 		/* Add client */
-		list_add(client_list, client_fd);
+		list_add(client_list, (void*) client_fd);
 		//list_each(client_list, list_connected);
 
 		/* Setup client busmail connection */
@@ -222,7 +220,6 @@ void app_init(void * base, config_t * config) {
 	int dect_fd, debug_fd, proxy_fd;
 
 	printf("app_init\n");
-	event_base = base;
 
 	/* Setup dect tty */
 	dect_fd = tty_open("/dev/ttyS1");
@@ -232,7 +229,7 @@ void app_init(void * base, config_t * config) {
 	/* Register dect stream */
 	dect_stream = stream_new(dect_fd);
 	stream_add_handler(dect_stream, MAX_EVENT_SIZE, dect_handler);
-	event_base_add_stream(event_base, dect_stream);
+	event_base_add_stream(dect_stream);
 
 	/* Init busmail subsystem */
 	dect_bus = busmail_new(dect_fd);
@@ -251,13 +248,13 @@ void app_init(void * base, config_t * config) {
 	debug_fd = setup_listener(10468, INADDR_ANY);
 	debug_stream = stream_new(debug_fd);
 	stream_add_handler(debug_stream, MAX_EVENT_SIZE, listen_handler);
-	event_base_add_stream(event_base, debug_stream);
+	event_base_add_stream(debug_stream);
 
 	/* Setup proxy socket */
 	proxy_fd = setup_listener(7777, INADDR_LOOPBACK);
 	proxy_stream = stream_new(proxy_fd);
 	stream_add_handler(proxy_stream, MAX_EVENT_SIZE, listen_handler);
-	event_base_add_stream(event_base, proxy_stream);
+	event_base_add_stream(proxy_stream);
 
 	/* Connect and reset dect chip */
 	printf("DECT TX TO BRCM RX\n");

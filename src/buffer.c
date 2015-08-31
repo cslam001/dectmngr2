@@ -124,7 +124,7 @@ static int rewind_wrapped(buffer_t * self, int count) {
 
 int buffer_write(buffer_t * self, uint8_t *input, int count) {
 	
-	int written;
+	int written = 0;
 
 	if (self->count == self->buf_size) {
 		return 0;
@@ -164,7 +164,7 @@ int buffer_write(buffer_t * self, uint8_t *input, int count) {
 
 int buffer_read(buffer_t * self, uint8_t *buf, int count) {
 
-	int read;
+	int read = 0;
 
 	if ( self->state == NORMAL_STATE ) {
 
@@ -203,7 +203,7 @@ int buffer_read(buffer_t * self, uint8_t *buf, int count) {
 
 int buffer_rewind(buffer_t * self, int count) {
 
-	int rewinded;
+	int rewinded = 0;
 
 	if ( self->state == NORMAL_STATE ) {
 		
@@ -237,20 +237,6 @@ int buffer_rewind(buffer_t * self, int count) {
 }
 
 
-int buffer_find(buffer_t * self, uint8_t c) {
-	
-	/* int i; */
-
-	/* /\* Do we have byte c in buffer? *\/ */
-        /* for (i = 0; i < self->count - self->cursor; i++) { */
-        /*         if (self->in[i + self->cursor] == c) { */
-        /*                 return i; */
-        /*         } */
-        /*         return -1; */
-        /* } */
-
-}
-
 
 int buffer_dump(buffer_t * self) {
 	
@@ -281,7 +267,7 @@ int buffer_dump(buffer_t * self) {
 	}
 	printf("\n\n");
 
-
+	return 0;
 }
 
 

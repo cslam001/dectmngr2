@@ -21,7 +21,8 @@
 #include "util.h"
 #include "preloader.h"
 #include "stream.h"
-
+#include "event.h"
+#include "flashloader.h"
 
 static uint8_t FlashLoader441[] =
 	{

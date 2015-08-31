@@ -19,6 +19,8 @@
 #include "state.h"
 #include "boot.h"
 #include "util.h"
+#include "stream.h"
+#include "event_base.h"
 
 
 void prog_init(void * event_base, config_t * config) {
@@ -35,7 +37,7 @@ void prog_init(void * event_base, config_t * config) {
 	
 	/* Register dect stream with event base */
 	stream = (void *) stream_new(dect_fd);
-	event_base_add_stream(event_base, stream);
+	event_base_add_stream(stream);
 
 	/* Init boot state */
 	boot_init(stream);

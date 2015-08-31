@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -8,6 +9,8 @@
 #include "busmail.h"
 #include "fifo.h"
 #include "state.h"
+#include "list.h"
+#include "event.h"
 
 
 typedef struct {
@@ -93,7 +96,7 @@ static uint8_t * make_tx_packet(uint8_t * tx, void * packet, int data_size) {
 
 
 
-static send_packet(void * data, int data_size, int fd) {
+static void send_packet(void * data, int data_size, int fd) {
 
   int tx_size = data_size + BUSMAIL_PACKET_OVER_HEAD;
   uint8_t * tx = malloc(tx_size);
@@ -134,7 +137,7 @@ static int packet_inspect(packet_t *p) {
 	uint8_t crc = 0, crc_calc = 0;
 	
 	/* Check header */
-	if (p->data[0] =! BUSMAIL_PACKET_HEADER) {
+	if (p->data[0] != BUSMAIL_PACKET_HEADER) {
 		printf("Drop packet: no header\n");
 		return -1;
 	}
@@ -375,7 +378,7 @@ int busmail_write(void * _self, void * event) {
 int busmail_get(void * _self, packet_t *p) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
-	int i, start, stop, size, read = 0;
+	int i, stop, size, read = 0;
 	uint8_t crc = 0, crc_calc = 0;
 	uint8_t buf[5000];
 
@@ -412,7 +415,7 @@ int busmail_get(void * _self, packet_t *p) {
 	buffer_read(bus->buf, buf + 3, size + 1);
 	
 	/* Read packet checksum */
-	crc = (( (uint8_t) buf[start + BUSMAIL_PACKET_OVER_HEAD + size - 1]));
+	crc = (( (uint8_t) buf[BUSMAIL_PACKET_OVER_HEAD + size - 1]));
 
 	/* Calculate checksum over data portion */
 	for (i = 0; i < size; i++) {
@@ -488,7 +491,7 @@ void busmail_dispatch(void * _self) {
 }
 
 
-void * busmail_add_handler(void * _self , void (*app_handler)(packet_t *)) {
+void busmail_add_handler(void * _self , void (*app_handler)(packet_t *)) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 

@@ -13,6 +13,8 @@ INCLUDE_PATHS += -I$(BCM_KERNEL_DIR)/bcm963xx/shared/opensource/include/bcm963xx
 INCLUDE_PATHS += -I$(BCM_KERNEL_DIR)/cm963xx/bcmdrivers/opensource/include/bcm963xx/
 endif
 
+CFLAGS += -Wall -Werror=implicit-function-declaration
+
 %.o: %.c
 	$(CC) -c $(CFLAGS) $(INCLUDE_PATHS) -o $@ $<
 

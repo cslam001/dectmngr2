@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -8,7 +9,7 @@
 #include "busmail.h"
 #include "fifo.h"
 #include "state.h"
-
+#include "event.h"
 
 #define EAP_PROG_ID 0x81
 #define RSX_TSK_ID 0xdc
@@ -92,7 +93,7 @@ static uint8_t * make_tx_packet(uint8_t * tx, void * packet, int data_size) {
 
 
 
-static send_packet(void * data, int data_size, int fd) {
+static void send_packet(void * data, int data_size, int fd) {
 
   int tx_size = data_size + BUSMAIL_PACKET_OVER_HEAD + BUSMAIL_HEADER_SIZE;
   uint8_t * tx = malloc(tx_size);

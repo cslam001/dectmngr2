@@ -34,7 +34,6 @@ int tty_set_raw(int fd)
 int tty_set_baud(int fd, int baud)
 {
 	struct termios tp;
-	speed_t rate;
 
 	printf("SET_BAUD\n");
 
@@ -50,6 +49,8 @@ int tty_set_baud(int fd, int baud)
 		exit_failure("tcsetattr");
 
 	usleep(300*1000);
+
+	return 0;
 }
 
 
