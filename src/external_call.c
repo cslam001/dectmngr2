@@ -326,12 +326,12 @@ static void info_ind(busmail_t *m) {
 	rsuint16 ie_block_len = 0;
 	ApiInfoElementType * ie_block = NULL;
 	ApiCallStatusType call_status;
-	const char term[15];
+	const char json[15];
 
 	printf("CallReference: %x\n", p->CallReference);
 
-	snprintf(term, 15, "%d", p->CallReference.Instance.Host);
-	ubus_send_string_api("dect.api.info_ind", "terminal", term);
+	snprintf(json, 50, "{ \"terminal\": \"%d\", \"dialed_nr\": \"%d\" }", p->CallReference.Instance.Host, 123);
+	ubus_send_json_string("dect.api.info_ind", json);
 }
 
 
@@ -421,7 +421,6 @@ static void release_ind(busmail_t *m) {
 	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
 
 	snprintf(term, 15, "%d", p->CallReference.Instance.Host);
-	ubus_send_string_api("dect.api.info_ind", "terminal", term);
 
 	ubus_send_string_api("dect.api.release_ind", "terminal", term);
 }
@@ -454,7 +453,7 @@ static void setup_ind(busmail_t *m) {
 	incoming_call.Instance.Host = p->TerminalId;
 
 	snprintf(term, 15, "%d", p->TerminalId);
-	ubus_send_string_api("dect.api.setup_ind", "terminal", term);
+	ubus_send_string_api("dect.api.info_ind", "terminal", term);
 
 	endpt = p->TerminalId - 1;
 	
