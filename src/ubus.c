@@ -34,6 +34,8 @@ static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object 
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg);
 static int ubus_request_handset(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg);
+static int ubus_request_status(struct ubus_context *ubus_ctx, struct ubus_object *obj,
+		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg);
 
 
 
@@ -48,7 +50,7 @@ const char strOff[] = "off";
 static const struct blobmsg_policy ubusStateKeys[] = {							// ubus RPC "state" arguments (keys and values)
 	[STATE_RADIO] = { .name = "radio", .type = BLOBMSG_TYPE_STRING },
 	[STATE_REGISTRATION] = { .name = "registration", .type = BLOBMSG_TYPE_STRING },
-	[STATE_UNUSED] = { .name = "unused", .type = BLOBMSG_TYPE_INT32 },
+	/*[STATE_UNUSED] = { .name = "unused", .type = BLOBMSG_TYPE_INT32 },*/
 };
 
 
@@ -61,6 +63,7 @@ static const struct blobmsg_policy ubusHandsetKeys[] = {						// ubus RPC "hands
 static const struct ubus_method ubusMethods[] = {								// ubus RPC methods
 	UBUS_METHOD("state", ubus_request_state, ubusStateKeys),
 	UBUS_METHOD("handset", ubus_request_handset, ubusHandsetKeys),
+	UBUS_METHOD_NOARG("status", ubus_request_status),
 };
 
 
@@ -113,6 +116,27 @@ int ubus_send_string(const char *msgKey, const char *msgVal)
 }
 
 
+
+//-------------------------------------------------------------
+// Send a busy reply that a request was successful
+static int ubus_reply_success(struct ubus_context *ubus_ctx, struct ubus_object *obj,
+		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
+{
+	struct blob_buf isOkMsg;
+
+	memset(&isOkMsg, 0, sizeof(isOkMsg));
+	if(blobmsg_buf_init(&isOkMsg)) return -1;
+
+	blobmsg_add_u32(&isOkMsg, "errno", 0);
+	blobmsg_add_string(&isOkMsg, "errstr", strerror(0));
+	blobmsg_add_string(&isOkMsg, "method", methodName);
+	blobmsg_add_blob(&isOkMsg, msg);
+
+	ubus_send_reply(ubus_ctx, req, isOkMsg.head);
+	blob_buf_free(&isOkMsg);
+
+	return 0;
+}
 
 //-------------------------------------------------------------
 // Send a busy reply that "we can't handle caller
@@ -350,9 +374,11 @@ static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object 
 		strVal = blobmsg_get_string(keys[STATE_RADIO]);
 		if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
 			connection_set_radio(1);
+			ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
 		}
 		else if(strncmp(strVal, strOff, sizeof(strOff)) == 0) {
 			connection_set_radio(0);
+			ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
 		}
 	}
 
@@ -362,9 +388,11 @@ static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object 
 		strVal = blobmsg_get_string(keys[STATE_REGISTRATION]);
 		if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
 			connection_set_registration(1);
+			ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
 		}
 		else if(strncmp(strVal, strOff, sizeof(strOff)) == 0) {
 			connection_set_registration(0);
+			ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
 		}
 	}
 
@@ -430,9 +458,49 @@ out:
 
 
 //-------------------------------------------------------------
-void ubus_init(void * base, config_t * config) {	
-	int dect_fd, debug_fd, proxy_fd;
+// RPC handler for ubus call dect status
+static int ubus_request_status(struct ubus_context *ubus_ctx, struct ubus_object *obj,
+		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
+{
+	char *keys, *key, *values, *value;
+	char *saveptr1, *saveptr2;
+	struct blob_buf blob;
+	int res = UBUS_STATUS_OK;
 
+	memset(&blob, 0, sizeof(blob));
+
+	// Fetch status of radio etc.
+	if(blobmsg_buf_init(&blob) || connection_get_status(&keys, &values)) {
+		return UBUS_STATUS_NO_DATA;
+	}
+	
+	// Add json strings for each status property
+	key = keys;
+	value = values;
+	while((key = strtok_r(key, "\n", &saveptr1)) && 
+			(value = strtok_r(value, "\n", &saveptr2))) {
+		blobmsg_add_string(&blob, key, value);
+		key = NULL;
+		value = NULL;
+	}
+
+	// Add returncode
+	blobmsg_add_u32(&blob, "errno", 0);
+	blobmsg_add_string(&blob, "errstr", strerror(0));
+	blobmsg_add_string(&blob, "method", methodName);
+
+	ubus_send_reply(ubus_ctx, req, blob.head);
+	blob_buf_free(&blob);
+	free(keys);
+	free(values);
+
+	return res;
+}
+
+
+
+//-------------------------------------------------------------
+void ubus_init(void * base, config_t * config) {	
 	printf("ubus init\n");
 	memset(&querier, 0, sizeof(querier));
 

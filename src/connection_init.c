@@ -11,6 +11,7 @@
 #include "ubus.h"
 #include "error.h"
 #include "stream.h"
+#include "event_base.h"
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
@@ -31,6 +32,14 @@ enum remote_bool_t {
 	INACTIVE,
 };
 
+static const char *remote_bool_str[] = {				// String explanations of enum remote_bool_t
+	"unknown",
+	"pending active",
+	"active",
+	"pending inactive",
+	"inactive",
+};
+
 
 struct connection_t {
 	enum remote_bool_t registration;
@@ -40,7 +49,7 @@ struct connection_t {
 
 static int reset_ind = 0;
 void * dect_bus;
-struct connection_t connection;
+static struct connection_t connection;
 static int timer_fd;
 static void *timer_stream;
 
@@ -71,11 +80,29 @@ static void fw_version_cfm(busmail_t *m) {
 }
 
 
+//-------------------------------------------------------------
+int connection_get_status(char **keys, char **values) {
+
+	*keys = calloc(1, 100);
+	if(!*keys) return -1;
+	*values = calloc(1, 100);
+	if(!*values) return -1;
+
+	strcat(*keys, "radio\n");
+	strcat(*values, remote_bool_str[connection.radio]);
+	strcat(*values, "\n");
+	strcat(*keys, "registration\n");
+	strcat(*values, remote_bool_str[connection.registration]);
+	strcat(*values, "\n");
+
+
+	return 0;
+}
+
+
 
 //-------------------------------------------------------------
 static void connection_init_handler(packet_t *p) {
-	
-	int i;
 	busmail_t * m = (busmail_t *) &p->data[0];
 
 	if (m->task_id != 1) return;
@@ -169,6 +196,39 @@ static void connection_init_handler(packet_t *p) {
 
 
 
+
+//-------------------------------------------------------------
+// Timer handler, for turning of registration
+// after a delay if no handset has registered.
+static void timer_handler(void * dect_stream, void * event) {
+	uint64_t expired;
+	int res;
+
+	expired = 1;
+
+	res = read(timer_fd, &expired, sizeof(expired));
+	if(res == -1) {
+		perror("Error, reading timer fd");
+	}
+	else if(res != sizeof(expired)) {
+		printf("Warning, short timer fd read %d\n", res);
+	}
+
+	/* Has the radio just been turned on? Then
+	 * we may need to enable registration mode.
+	 * Othwerwise it's time to disable it. */
+	if(connection.radio == ACTIVE) {
+		if(connection.registration == PENDING_ACTIVE) {
+			connection_set_registration(1);
+		}
+		else if(connection.registration == ACTIVE) {
+			connection_set_registration(0);
+		}
+	}
+}
+
+
+
 //-------------------------------------------------------------
 void connection_init(void * bus) {
 
@@ -180,9 +240,14 @@ void connection_init(void * bus) {
 		exit_failure("Error creating handset timer");
 	}
 
-//	timer_stream = stream_new(timer_fd);
-//	stream_add_handler(timer_stream, 0, timer_handler);
-//	event_base_add_stream(timer_stream);
+	timer_stream = stream_new(timer_fd);
+	stream_add_handler(timer_stream, 0, timer_handler);
+	event_base_add_stream(timer_stream);
+
+	/* At startup of dectmngr the dect chip is
+	 * reseted and thus we know initial state. */
+	connection.radio = INACTIVE;
+	connection.registration = INACTIVE;
 }
 
 
@@ -211,23 +276,51 @@ int connection_set_radio(int onoff) {
 
 
 //-------------------------------------------------------------
-// Enable registration of phones
+// Enable registration of phones and arm a
+// timer for possible timeout.
 int connection_set_registration(int onoff) {
+	struct itimerspec newTimer;
+	int doSendMsg;
+
 	ApiFpMmSetRegistrationModeReqType m = {
 		.Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ,
 		.DeleteLastHandset = true
 	};
 
+	memset(&newTimer, 0, sizeof(newTimer));
+	doSendMsg = 0;
+
 	if(onoff) {
-		m.RegistrationEnabled = true;
 		connection.registration = PENDING_ACTIVE;
+
+		if(connection.radio == ACTIVE) {
+			m.RegistrationEnabled = true;
+			newTimer.it_value.tv_sec = 180;
+			doSendMsg = 1;
+		}
+		else if(connection_set_radio(1) == 0) {
+			newTimer.it_value.tv_sec = 1;
+		}
 	}
 	else {
 		m.RegistrationEnabled = false;
 		connection.registration = PENDING_INACTIVE;
+		doSendMsg = 1;
 	}
 
-	busmail_send(dect_bus, (uint8_t *)&m, sizeof(ApiFpMmSetRegistrationModeReqType));
+	/* Either active registration mode
+	 * or do nothing if we first need to
+	 * enable the radio. */
+	if(doSendMsg) {
+		busmail_send(dect_bus, (uint8_t *)&m,
+			sizeof(ApiFpMmSetRegistrationModeReqType));
+	}
+
+	/* Activate or cancel timer for turning
+	 * registration off after a delay. */
+	if(timerfd_settime(timer_fd, 0, &newTimer, NULL) == -1) {
+		perror("Error setting timer");
+	}
 
 	return 0;
 }
