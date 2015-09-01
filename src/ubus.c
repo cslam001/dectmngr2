@@ -112,6 +112,7 @@ int ubus_send_string(const char *msgKey, const char *msgVal)
 
 	json_object_put(jsonObj);
 	blob_buf_free(&blob);
+
 	return res;
 }
 
@@ -179,7 +180,6 @@ int ubus_reply_handset_list(int retErrno, const struct handsets_t const *handset
 	for(i = 0; i < handsets->termCount; i++) {
 		tbl = blobmsg_open_table(&blob, NULL);
 		blobmsg_add_u32(&blob, "id", handsets->terminal[i].id);
-		blobmsg_add_u8(&blob, "pinging", handsets->terminal[i].pinging);
 
 		list2 = blobmsg_open_array(&blob, "ipui");
 		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[0]);
@@ -398,10 +398,10 @@ static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object 
 
 	// Handle RPC:
 	// ubus call dect state '{ "unused": 123 }'
-	if(keys[STATE_UNUSED]) {
-		numVal = blobmsg_get_u32(keys[STATE_UNUSED]);
-		printf("ronny state unused %d\n", numVal);
-	}
+	//if(keys[STATE_UNUSED]) {
+	//	numVal = blobmsg_get_u32(keys[STATE_UNUSED]);
+	//	printf("ronny state unused %d\n", numVal);
+	//}
 
 out:
 	free(keys);
