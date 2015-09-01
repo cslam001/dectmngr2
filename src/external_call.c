@@ -93,6 +93,32 @@ static ApiSystemCallIdType * get_system_call_id(ApiInfoElementType * InfoElement
 }
 
 
+static ApiCodecListType * get_dialed_nr(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
+
+	ApiInfoElementType * info;
+	ApiMultikeyPadType * keypad = NULL;
+	int keypad_len, i;
+	char * keypad_str;
+	
+	info = ApiGetInfoElement(InfoElement, InfoElementLength, API_IE_MULTIKEYPAD);
+	if ( info && info->IeLength > 0 ) {
+		printf("API_IE_MULTIKEYPAD\n");
+		keypad = (ApiCodecListType *) &info->IeData[0];
+		keypad_len = info->IeLength;
+
+		keypad_str = (char *) malloc(keypad_len + 1);
+		memcpy(keypad_str, keypad, keypad_len);
+		keypad_str[keypad_len] = '\0';
+
+		printf("keypad: %s\n", keypad_str);
+
+		return keypad_str;
+	}
+
+	return NULL;
+}
+
+
 static ApiCodecListType * get_codecs(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
 
 	ApiInfoElementType * info;
@@ -327,11 +353,18 @@ static void info_ind(busmail_t *m) {
 	ApiInfoElementType * ie_block = NULL;
 	ApiCallStatusType call_status;
 	const char json[15];
+	char * dialed_nr;
 
 	printf("CallReference: %x\n", p->CallReference);
 
-	snprintf(json, 50, "{ \"terminal\": \"%d\", \"dialed_nr\": \"%d\" }", p->CallReference.Instance.Host, 123);
-	ubus_send_json_string("dect.api.info_ind", json);
+	if ( p->InfoElementLength > 0 ) {
+		dialed_nr = get_dialed_nr((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+	}
+
+	if (dialed_nr) {
+		snprintf(json, 50, "{ \"terminal\": \"%d\", \"dialed_nr\": \"%s\" }", p->CallReference.Instance.Host, dialed_nr);
+		ubus_send_json_string("dect.api.info_ind", json);
+	}
 }
 
 
