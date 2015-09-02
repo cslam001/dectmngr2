@@ -7,7 +7,6 @@
 #define MAX_NR_HANDSETS 20
 
 struct terminal_t {
-	uint8_t pinging;
 	uint32_t id;
 	uint8_t ipui[5];
 };
@@ -23,6 +22,7 @@ struct handsets_t {
 //-------------------------------------------------------------
 int list_handsets(void);
 int delete_handset(int id);
+int page_all_handsets(void);
 void handset_init(void *bus);
 
 

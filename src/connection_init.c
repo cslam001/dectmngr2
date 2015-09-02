@@ -225,6 +225,10 @@ static void timer_handler(void * dect_stream, void * event) {
 			connection_set_registration(0);
 		}
 	}
+	else if(connection.radio == INACTIVE && 
+			connection.registration != INACTIVE) {
+		connection_set_registration(0);
+	}
 }
 
 
@@ -255,19 +259,27 @@ void connection_init(void * bus) {
 //-------------------------------------------------------------
 /* Start or stop protocol (the DECT radio) */
 int connection_set_radio(int onoff) {
+	struct itimerspec newTimer;
+
 	if(onoff) {
 		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
 		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
 		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
 		connection.radio = ACTIVE;												// No confirmation is replied
 		ubus_send_string("radio", ubusStrActive);
-
 	}
 	else {
 		ApiFpMmStopProtocolReqType r = { .Primitive = API_FP_MM_STOP_PROTOCOL_REQ, };
 		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStopProtocolReqType));
 		connection.radio = INACTIVE;											// No confirmation is replied
 		ubus_send_string("radio", ubusStrInActive);
+
+	}
+
+	memset(&newTimer, 0, sizeof(newTimer));
+	newTimer.it_value.tv_sec = 1;
+	if(timerfd_settime(timer_fd, 0, &newTimer, NULL) == -1) {
+		perror("Error setting timer");
 	}
 
 	return 0;

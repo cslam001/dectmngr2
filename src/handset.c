@@ -147,6 +147,22 @@ int delete_handset(int id) {
 }
 
 
+//-------------------------------------------------------------
+// Make ALL handsets ring. To make only one of
+// them ring Asterisk has to be used, due to such
+// a case works like a phone call even though there
+// is no audio.
+int page_all_handsets(void) {
+	ApiFpMmAlertBroadcastReqType m = {
+		.Primitive = API_FP_MM_ALERT_BROADCAST_REQ,
+		.Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2
+	};
+
+	busmail_send(dect_bus, (uint8_t*) &m, sizeof(m));
+
+	return 0;
+}
+
 
 
 //-------------------------------------------------------------
@@ -186,11 +202,6 @@ static void handset_handler(packet_t *p)
 	}
 }
 
-
-
-//-------------------------------------------------------------
-static void timer_handler(void *stream, void *event) {
-}
 
 
 

@@ -28,6 +28,7 @@ enum {
 enum {
 	HANDSET_LIST,
 	HANDSET_DELETE,
+	HANDSET_PAGEALL,															// Page (ping) all handsets
 };
 
 static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object *obj,
@@ -45,11 +46,15 @@ const char ubusStrActive[] = "active";											// The "bool" we transmitt for 
 const char ubusStrInActive[] = "inactive";
 const char strOn[] = "on";
 const char strOff[] = "off";
+const char strAction[] = "action";
+const char strPressed[] = "pressed";											// Button pressed string
+const char strReleased[] = "released";
 
 
 static const struct blobmsg_policy ubusStateKeys[] = {							// ubus RPC "state" arguments (keys and values)
 	[STATE_RADIO] = { .name = "radio", .type = BLOBMSG_TYPE_STRING },
 	[STATE_REGISTRATION] = { .name = "registration", .type = BLOBMSG_TYPE_STRING },
+
 	/*[STATE_UNUSED] = { .name = "unused", .type = BLOBMSG_TYPE_INT32 },*/
 };
 
@@ -57,6 +62,7 @@ static const struct blobmsg_policy ubusStateKeys[] = {							// ubus RPC "state"
 static const struct blobmsg_policy ubusHandsetKeys[] = {						// ubus RPC "handset" arguments (keys and values)
 	[HANDSET_LIST] = { .name = "list", .type = BLOBMSG_TYPE_STRING },
 	[HANDSET_DELETE] = { .name = "delete", .type = BLOBMSG_TYPE_INT32 },
+	[HANDSET_PAGEALL] = { .name = "pageall", .type = BLOBMSG_TYPE_STRING },
 };
 
 
@@ -231,6 +237,40 @@ static void perhaps_reply_deferred_timeout(void) {
 
 
 //-------------------------------------------------------------
+// Event handler for
+// ubus send button.DECT '{ "action": "pressed" }'
+static void ubus_event_button(struct ubus_context *ctx,
+	struct ubus_event_handler *ev, const char *type, struct blob_attr *blob)
+{
+	struct json_object *obj, *val;
+	char *json;
+	int res;
+
+	json = blobmsg_format_json(blob, true);										// Blob to JSON
+	obj = json_tokener_parse(json);												// JSON to C-struct
+	res = 0;
+
+	if(!json_object_object_get_ex(obj, strAction, &val)) return;
+
+	if(json_object_get_type(val) == json_type_string) {							// Primitive type of value for key?
+		if(strncmp(json_object_get_string(val), strPressed, 
+				sizeof(strPressed)) == 0) {
+			printf("Dect button pressed\n");
+			connection_set_registration(1);
+		}
+		else if(strncmp(json_object_get_string(val), strReleased,
+				sizeof(strReleased)) == 0) {
+			printf("Dect button released\n");
+			connection_set_radio(0);
+		}
+	}
+
+	free(json);
+}
+
+
+
+//-------------------------------------------------------------
 // Subevent handler for
 // ubus send dect '{ "registration": "off" }'
 static int ubus_event_registration(struct json_object *val)
@@ -256,7 +296,6 @@ static int ubus_event_registration(struct json_object *val)
 		default:
 			return -1;
 	}
-
 
 	return 0;
 }
@@ -290,15 +329,15 @@ static int ubus_event_radio(struct json_object *val)
 			return -1;
 	}
 
-
 	return 0;
 }
 
 
 
 //-------------------------------------------------------------
-// Main handler for ubus events
-static void ubus_event_handler(struct ubus_context *ctx,
+// Event handler for
+// ubus send dect '{ "key": "value" }'
+static void ubus_event_state(struct ubus_context *ctx,
 	struct ubus_event_handler *ev, const char *type, struct blob_attr *blob)
 {
 	struct json_object *obj, *val;
@@ -355,7 +394,8 @@ static int keyTokenize(struct ubus_object *obj, const char *methodName,
 
 
 //-------------------------------------------------------------
-// RPC handler for ubus call dect state '{....}'
+// RPC handler for
+// ubus call dect state '{....}'
 static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
 {
@@ -411,7 +451,8 @@ out:
 
 
 //-------------------------------------------------------------
-// RPC handler for ubus call dect handset '{....}'
+// RPC handler for
+// ubus call dect handset '{....}'
 static int ubus_request_handset(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
 {
@@ -446,8 +487,14 @@ static int ubus_request_handset(struct ubus_context *ubus_ctx, struct ubus_objec
 	}
 
 	// ubus call dect handset '{ "delete": "" }'
-	if(keys[HANDSET_DELETE]) {
-		delete_handset(blobmsg_get_u32(keys[HANDSET_DELETE]));
+	if(keys[HANDSET_DELETE] && 
+			delete_handset(blobmsg_get_u32(keys[HANDSET_DELETE]))) {
+		res = UBUS_STATUS_NO_DATA;
+	}
+
+	// ubus call dect handset '{ "pageall": "" }'
+	if(keys[HANDSET_PAGEALL] && page_all_handsets()) {
+		res = UBUS_STATUS_NO_DATA;
 	}
 
 out:
@@ -512,12 +559,21 @@ void ubus_init(void * base, config_t * config) {
 	stream_add_handler(ubus_stream, 0, ubus_fd_handler);
 	event_base_add_stream(ubus_stream);
 
-	// Invoke our event handler when ubus events (not calls) arrive
+	/* Register event handler (not calls) for:
+	 * ubus send dect '{ "key": "value" }' */
 	memset(&listener, 0, sizeof(listener));
-	listener.cb = ubus_event_handler;
+	listener.cb = ubus_event_state;
 	if(ubus_register_event_handler(ubusContext, &listener, ubusSenderId) != 
 			UBUS_STATUS_OK) {
-		exit_failure("Error registering ubus event handler");
+		exit_failure("Error registering ubus event handler %s", ubusSenderId);
+	}
+
+	/* Register event handler (not calls) for:
+	 * ubus send button.DECT '{ "action": "pressed" }' */
+	listener.cb = ubus_event_button;
+	if(ubus_register_event_handler(ubusContext, &listener, "button.DECT") != 
+			UBUS_STATUS_OK) {
+		exit_failure("Error registering ubus event handler button.DECT");
 	}
 
 	// Invoke our RPC handler when ubus calls (not events) arrive
