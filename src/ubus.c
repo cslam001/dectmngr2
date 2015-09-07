@@ -46,7 +46,6 @@ const char ubusStrActive[] = "active";											// The "bool" we transmitt for 
 const char ubusStrInActive[] = "inactive";
 const char strOn[] = "on";
 const char strOff[] = "off";
-const char strAction[] = "action";
 const char strPressed[] = "pressed";											// Button pressed string
 const char strReleased[] = "released";
 
@@ -76,6 +75,15 @@ static const struct ubus_method ubusMethods[] = {								// ubus RPC methods
 static struct ubus_object_type rpcType[] = {
 	UBUS_OBJECT_TYPE(ubusSenderId, ubusMethods)
 };
+
+
+
+static const struct blobmsg_policy buttonKeys[] = {
+	{ .name = "action", .type = BLOBMSG_TYPE_STRING },
+};
+
+
+
 
 
 static struct ubus_object rpcObj = {
@@ -301,31 +309,25 @@ static void perhaps_reply_deferred_timeout(void) {
 static void ubus_event_button(struct ubus_context *ctx,
 	struct ubus_event_handler *ev, const char *type, struct blob_attr *blob)
 {
-	struct json_object *obj, *val;
-	char *json;
+	struct blob_attr *keys;
+	const char *strVal;
 
-// THERE IS A MEMORY LEAK BELOW!!!
-// PROBABLY WE CAN REMOVE THE json
-// REFORMATION AND USE blobmsg_get_string()
-	json = blobmsg_format_json(blob, true);										// Blob to JSON
-	obj = json_tokener_parse(json);												// JSON to C-struct
-
-	if(!json_object_object_get_ex(obj, strAction, &val)) return;
-
-	if(json_object_get_type(val) == json_type_string) {							// Primitive type of value for key?
-		if(strncmp(json_object_get_string(val), strPressed, 
-				sizeof(strPressed)) == 0) {
-			printf("Dect button pressed\n");
-			connection_set_registration(1);
-		}
-		else if(strncmp(json_object_get_string(val), strReleased,
-				sizeof(strReleased)) == 0) {
-			printf("Dect button released\n");
-			connection_set_radio(0);
-		}
+	if(blobmsg_parse(buttonKeys, 1, &keys, blob_data(blob), blob_len(blob))) {
+		return;
+	}
+	else if(!keys) {
+		return;
 	}
 
-	free(json);
+	strVal = blobmsg_get_string(keys);
+	printf("Dect button %s\n", strVal);
+
+	if(strncmp(strVal, strPressed, sizeof(strPressed)) == 0) {
+		connection_set_registration(1);
+	}
+	else if(strncmp(strVal, strReleased, sizeof(strReleased)) == 0) {
+		connection_set_radio(0);
+	}
 }
 
 
