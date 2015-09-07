@@ -5,10 +5,6 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <libubus.h>
-#include <libubox/blobmsg_json.h>
-#include <json-c/json_object.h>
-#include <json-c/json_util.h>
-#include <json-c/json_tokener.h>
 
 #include "ubus.h"
 #include "util.h"
@@ -96,7 +92,8 @@ static struct ubus_object rpcObj = {
 
 static struct ubus_context *ubusContext;
 static void *ubus_stream;
-static struct ubus_event_handler listener;										// Event handler registration
+static struct ubus_event_handler stateListener;									// Event handler for radio and registration 
+static struct ubus_event_handler buttonListener;								// Event handler box dect button
 static struct querier_t querier;												// Handle to deferred RPC request
 
 
@@ -320,7 +317,7 @@ static void ubus_event_button(struct ubus_context *ctx,
 	}
 
 	strVal = blobmsg_get_string(keys);
-	printf("Dect button %s\n", strVal);
+	printf("Dect button event %s\n", strVal);
 
 	if(strncmp(strVal, strPressed, sizeof(strPressed)) == 0) {
 		connection_set_registration(1);
@@ -333,94 +330,47 @@ static void ubus_event_button(struct ubus_context *ctx,
 
 
 //-------------------------------------------------------------
-// Subevent handler for
-// ubus send dect '{ "registration": "off" }'
-static int ubus_event_registration(struct json_object *val)
-{
-	switch(json_object_get_type(val)) {											// Primitive type of value for key?
-		case json_type_string:
-			if(strncmp(json_object_get_string(val), strOn, sizeof(strOn)) == 0) {
-				connection_set_registration(1);
-			}
-			else if(strncmp(json_object_get_string(val), strOff, sizeof(strOff)) == 0) {
-				connection_set_registration(0);
-			}
-			break;
-
-		case json_type_boolean:
-			connection_set_registration(json_object_get_boolean(val));
-			break;
-
-		case json_type_int:
-			connection_set_registration(json_object_get_int(val));
-			break;
-		
-		default:
-			return -1;
-	}
-
-	return 0;
-}
-
-
-
-//-------------------------------------------------------------
-// Subevent handler for
-// ubus send dect '{ "radio": "off" }'
-static int ubus_event_radio(struct json_object *val)
-{
-	switch(json_object_get_type(val)) {											// Primitive type of value for key?
-		case json_type_string:
-			if(strncmp(json_object_get_string(val), strOn, sizeof(strOn)) == 0) {
-				connection_set_radio(1);
-			}
-			else if(strncmp(json_object_get_string(val), strOff, sizeof(strOff)) == 0) {
-				connection_set_radio(0);
-			}
-			break;
-
-		case json_type_boolean:
-			connection_set_radio(json_object_get_boolean(val));
-			break;
-
-		case json_type_int:
-			connection_set_radio(json_object_get_int(val));
-			break;
-		
-		default:
-			return -1;
-	}
-
-	return 0;
-}
-
-
-
-//-------------------------------------------------------------
 // Event handler for
 // ubus send dect '{ "key": "value" }'
 static void ubus_event_state(struct ubus_context *ctx,
 	struct ubus_event_handler *ev, const char *type, struct blob_attr *blob)
 {
-	struct json_object *obj, *val;
-	char *json;
-	int res;
+	struct blob_attr *keys[ARRAY_SIZE(ubusStateKeys)];
+	const char *strVal;
 
-	json = blobmsg_format_json(blob, true);										// Blob to JSON
-	obj = json_tokener_parse(json);												// JSON to C-struct
-	res = 0;
-
-	if(json_object_object_get_ex(obj, ubusStateKeys[STATE_RADIO].name, &val)) {	// Contains this key?
-		res = ubus_event_radio(val);
-	}
-	else if(json_object_object_get_ex(obj, 
-			ubusStateKeys[STATE_REGISTRATION].name, &val)) {
-		res = ubus_event_registration(val);
+	// Tokenize message key/value paris into an array
+	if(blobmsg_parse(ubusStateKeys, ARRAY_SIZE(ubusStateKeys),
+			keys, blob_data(blob), blob_len(blob))) {
+		return;
 	}
 
-	if(res) printf("Error for event %s\n", json_object_to_json_string(obj));
+	/* Handle event:
+	 * ubus send dect '{ "radio": "off" }' */
+	if(keys[STATE_RADIO]) {
+		strVal = blobmsg_get_string(keys[STATE_RADIO]);
+		if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
+			connection_set_radio(1);
+		}
+		else if(strncmp(strVal, strOff, sizeof(strOff)) == 0) {
+			connection_set_radio(0);
+		}
+		printf("Dect radio event %s\n", strVal);
+		return;
+	}
 
-	free(json);
+	/* Handle event:
+	 * ubus send dect '{ "registration": "off" }' */
+	if(keys[STATE_REGISTRATION]) {
+		strVal = blobmsg_get_string(keys[STATE_REGISTRATION]);
+		if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
+			connection_set_registration(1);
+		}
+		else if(strncmp(strVal, strOff, sizeof(strOff)) == 0) {
+			connection_set_registration(0);
+		}
+		printf("Dect registration event %s\n", strVal);
+		return;
+	}
 }
 
 
@@ -622,18 +572,19 @@ void ubus_init(void * base, config_t * config) {
 
 	/* Register event handler (not calls) for:
 	 * ubus send dect '{ "key": "value" }' */
-	memset(&listener, 0, sizeof(listener));
-	listener.cb = ubus_event_state;
-	if(ubus_register_event_handler(ubusContext, &listener, ubusSenderId) != 
-			UBUS_STATUS_OK) {
+	memset(&stateListener, 0, sizeof(stateListener));
+	stateListener.cb = ubus_event_state;
+	if(ubus_register_event_handler(ubusContext, &stateListener,
+			ubusSenderId) != UBUS_STATUS_OK) {
 		exit_failure("Error registering ubus event handler %s", ubusSenderId);
 	}
 
 	/* Register event handler (not calls) for:
 	 * ubus send button.DECT '{ "action": "pressed" }' */
-	listener.cb = ubus_event_button;
-	if(ubus_register_event_handler(ubusContext, &listener, "button.DECT") != 
-			UBUS_STATUS_OK) {
+	memset(&buttonListener, 0, sizeof(buttonListener));
+	buttonListener.cb = ubus_event_button;
+	if(ubus_register_event_handler(ubusContext, &buttonListener,
+			"button.DECT") != UBUS_STATUS_OK) {
 		exit_failure("Error registering ubus event handler button.DECT");
 	}
 

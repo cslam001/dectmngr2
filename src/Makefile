@@ -21,7 +21,7 @@ CFLAGS += -Wall -Werror=implicit-function-declaration
 
 # Ability to build without ubus etc. for Sercomm
 CFLAGS += -DWITH_UBUS
-LIBS += -lubox -lubus -lblobmsg_json -ljson-c
+LIBS += -lubox -lubus
 dectmngr2: ubus.o
 
 
