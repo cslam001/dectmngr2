@@ -96,32 +96,91 @@ static struct querier_t querier;												// Handle to deferred RPC request
 // We transmitt a public ubus string event
 int ubus_send_string(const char *msgKey, const char *msgVal)
 {
-	struct json_object *jsonObj, *jsonVal;
 	struct blob_buf blob;
 	int res = 0;
 
 	memset(&blob, 0, sizeof(blob));
 	if(blob_buf_init(&blob, 0)) return -1;
+	blobmsg_add_string(&blob, msgKey, msgVal);
 
-	jsonVal = json_object_new_string(msgVal);
-	jsonObj = json_object_new_object();
-	json_object_object_add(jsonObj, msgKey, jsonVal);
-
-	if(!blobmsg_add_object(&blob, jsonObj)) {
-		res = -1;
-	}
-	else if(ubus_send_event(ubusContext, ubusSenderId, blob.head) != UBUS_STATUS_OK) {
-		printf("Error sending ubus message %s\n", 
-			json_object_to_json_string(jsonObj));
+	if(ubus_send_event(ubusContext, ubusSenderId, blob.head) != UBUS_STATUS_OK) {
+		printf("Error sending ubus message %s %s\n", msgKey, msgVal);
 			res = -1;
 	}
 
-	json_object_put(jsonObj);
 	blob_buf_free(&blob);
 
 	return res;
 }
 
+
+//-------------------------------------------------------------
+// Callback for: a ubus call (invocation) has replied with some data
+static void call_answer(struct ubus_request *req, int type, struct blob_attr *msg)
+{
+}
+
+
+//-------------------------------------------------------------
+// Callback for: a ubus call (invocation) has finished
+static void call_complete(struct ubus_request *req, int ret)
+{
+	ubus_call_complete_callback cb = (ubus_call_complete_callback) req->priv;
+
+	if(cb) cb(ret);
+	free(req);
+}
+
+
+//-------------------------------------------------------------
+// We invoke someone with ubus RPC and a string argument
+int ubus_call_string(const char *path, const char* method, const char *key, 
+	const char *val, ubus_call_complete_callback cb)
+{
+	struct ubus_request *req;
+	struct blob_buf blob;
+	uint32_t id;
+	int res;
+
+	res = 0;
+
+	req = calloc(1, sizeof(struct ubus_request));
+	if(!req) return -1;
+
+	memset(&blob, 0, sizeof(blob));
+	if(blob_buf_init(&blob, 0)) return -1;
+	blobmsg_add_string(&blob, key, val);
+
+	// Find id number for ubus "path"
+	res = ubus_lookup_id(ubusContext, path, &id);
+	if(res != UBUS_STATUS_OK) {
+		printf("Error searching for usbus path\n");
+		res = -1;
+		goto out;
+	}
+
+	/* Call remote method, without
+	 * waiting for completion. */
+	res = ubus_invoke_async(ubusContext, id, method, blob.head, req);
+	if(res != UBUS_STATUS_OK) {
+		printf("Error invoking\n");
+		res = -1;
+		goto out;
+	}
+
+	/* Mark the call as non blocking. When
+	 * it completes we get "called back". */
+	req->data_cb = call_answer;
+	req->complete_cb = call_complete;
+	req->priv = cb;
+	ubus_complete_request_async(ubusContext, req);
+
+out:
+	if(res == -1) free(req);
+	blob_buf_free(&blob);
+
+	return res;
+}
 
 
 //-------------------------------------------------------------
@@ -244,11 +303,12 @@ static void ubus_event_button(struct ubus_context *ctx,
 {
 	struct json_object *obj, *val;
 	char *json;
-	int res;
 
+// THERE IS A MEMORY LEAK BELOW!!!
+// PROBABLY WE CAN REMOVE THE json
+// REFORMATION AND USE blobmsg_get_string()
 	json = blobmsg_format_json(blob, true);										// Blob to JSON
 	obj = json_tokener_parse(json);												// JSON to C-struct
-	res = 0;
 
 	if(!json_object_object_get_ex(obj, strAction, &val)) return;
 
@@ -401,7 +461,6 @@ static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object 
 {
 	struct blob_attr **keys;
 	const char *strVal;
-	int numVal;
 	int res;
 
 	// Tokenize message key/value paris into an array
@@ -579,7 +638,7 @@ void ubus_init(void * base, config_t * config) {
 	// Invoke our RPC handler when ubus calls (not events) arrive
 	if(ubus_add_object(ubusContext, &rpcObj) != UBUS_STATUS_OK) {
 		exit_failure("Error registering ubus object");
-	}		
+	}
 }
 
 

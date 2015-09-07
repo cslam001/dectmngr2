@@ -115,6 +115,7 @@ static void connection_init_handler(packet_t *p) {
 			reset_ind = 1;
 			connection.radio = INACTIVE;
 			ubus_send_string("radio", ubusStrInActive);
+			ubus_call_string("led.dect", "set", "state", "off", NULL);
 
 			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
 			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
@@ -178,11 +179,14 @@ static void connection_init_handler(packet_t *p) {
 			if(resp->Status == RSS_SUCCESS) {
 				if(connection.registration == PENDING_ACTIVE) {
 					connection.registration = ACTIVE;
-					ubus_send_string("registration", ubusStrActive);
+					ubus_send_string("registration", ubusStrActive);			// Send ubus event
+					ubus_call_string("led.dect", "set", "state", "notice", NULL);// Light up box LED
 				}
 				else if(connection.registration == PENDING_INACTIVE) {
 						connection.registration = INACTIVE;
 						ubus_send_string("registration", ubusStrInActive);
+						ubus_call_string("led.dect", "set", "state", 
+							(connection.radio == ACTIVE) ? "ok" : "off", NULL);
 				}
 			}
 		}
@@ -267,13 +271,14 @@ int connection_set_radio(int onoff) {
 		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
 		connection.radio = ACTIVE;												// No confirmation is replied
 		ubus_send_string("radio", ubusStrActive);
+		ubus_call_string("led.dect", "set", "state", "ok", NULL);
 	}
 	else {
 		ApiFpMmStopProtocolReqType r = { .Primitive = API_FP_MM_STOP_PROTOCOL_REQ, };
 		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStopProtocolReqType));
 		connection.radio = INACTIVE;											// No confirmation is replied
 		ubus_send_string("radio", ubusStrInActive);
-
+		ubus_call_string("led.dect", "set", "state", "off", NULL);
 	}
 
 	memset(&newTimer, 0, sizeof(newTimer));
