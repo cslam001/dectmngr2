@@ -486,7 +486,7 @@ static void setup_ind(busmail_t *m) {
 	incoming_call.Instance.Host = p->TerminalId;
 
 	snprintf(term, 15, "%d", p->TerminalId);
-	ubus_send_string_api("dect.api.info_ind", "terminal", term);
+	ubus_send_string_api("dect.api.setup_ind", "terminal", term);
 
 	endpt = p->TerminalId - 1;
 	
