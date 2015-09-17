@@ -256,9 +256,40 @@ static void reject_ind(busmail_t *m) {
 static void alert_cfm(busmail_t *m) {
 
 	ApiFpCcAlertCfmType * p = (ApiFpCcAlertCfmType *) &m->mail_header;
+	rsuint16 ie_block_len = 0;
+	ApiInfoElementType * ie_block = NULL;
+	ApiCallStatusType call_status;
 
 	printf("CallReference: %x\n", p->CallReference);
 	print_status(p->Status);
+
+	/* Connect handset */
+	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
+	call_status.CallStatusValue.State = API_CSS_CALL_CONNECT;
+
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_CALL_STATUS,
+			    sizeof(ApiCallStatusType),
+			    (rsuint8 *) &call_status);
+	
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_SYSTEM_CALL_ID,
+			    sizeof(ApiSystemCallIdType),
+			    (rsuint8 *) system_call_id);
+
+
+	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len));
+	req->Primitive = API_FP_CC_CONNECT_REQ;
+	req->CallReference = incoming_call;
+	req->InfoElementLength = ie_block_len;
+	memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len);
+
+	printf("API_FP_CC_CONNECT_REQ\n");
+	busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
+	free(req);
+
 }
 
 
@@ -363,35 +394,6 @@ static void info_ind(busmail_t *m) {
 		free(req);
 
 
-		/* ie_block_len = 0; */
-		/* ie_block = NULL; */
-
-		/* /\* Connect handset *\/ */
-		/* call_status.CallStatusSubId = API_SUB_CALL_STATUS; */
-		/* call_status.CallStatusValue.State = API_CSS_CALL_CONNECT; */
-
-		/* ApiBuildInfoElement(&ie_block, */
-		/* 		    &ie_block_len, */
-		/* 		    API_IE_CALL_STATUS, */
-		/* 		    sizeof(ApiCallStatusType), */
-		/* 		    (rsuint8 *) &call_status); */
-	
-		/* ApiBuildInfoElement(&ie_block, */
-		/* 		    &ie_block_len, */
-		/* 		    API_IE_SYSTEM_CALL_ID, */
-		/* 		    sizeof(ApiSystemCallIdType), */
-		/* 		    (rsuint8 *) system_call_id); */
-
-
-		/* ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len)); */
-		/* req->Primitive = API_FP_CC_CONNECT_REQ; */
-		/* req->CallReference = incoming_call; */
-		/* req->InfoElementLength = ie_block_len; */
-		/* memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len); */
-
-		/* printf("API_FP_CC_CONNECT_REQ\n"); */
-		/* busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len); */
-		/* free(req); */
 	}
 }
 
