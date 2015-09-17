@@ -286,32 +286,6 @@ static void alert_ind(busmail_t *m) {
 		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 	}
 	
-	/* call_status.CallStatusSubId = API_SUB_CALL_STATUS; */
-	/* call_status.CallStatusValue.State = API_CSS_CALL_ALERTING; */
-
-	/* ApiBuildInfoElement(&ie_block, */
-	/* 		    &ie_block_len, */
-	/* 		    API_IE_CALL_STATUS, */
-	/* 		    sizeof(ApiCallStatusType), */
-	/* 		    (rsuint8 *) &call_status); */
-
-	/* ApiBuildInfoElement(&ie_block, */
-	/* 		    &ie_block_len, */
-	/* 		    API_IE_SYSTEM_CALL_ID, */
-	/* 		    sizeof(ApiSystemCallIdType), */
-	/* 		    (rsuint8 *) internal_call); */
-
-
-	/* r = malloc(sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);	 */
-
-        /* r->Primitive = API_FP_CC_ALERT_REQ; */
-	/* r->CallReference = incoming_call; */
-        /* r->InfoElementLength = ie_block_len; */
-        /* memcpy(r->InfoElement,(rsuint8*)ie_block, ie_block_len); */
-	
-	/* printf("API_FP_CC_ALERT_REQ\n"); */
-	/* busmail_send(dect_bus, (uint8_t *) r, sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len); */
-	/* free(r); */
 
 
 
@@ -419,6 +393,48 @@ static void info_ind(busmail_t *m) {
 		/* busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len); */
 		/* free(req); */
 	}
+}
+
+
+static void call_proc_cfm(busmail_t *m) {
+
+
+	ApiFpSetAudioFormatCfmType * p = (ApiFpSetAudioFormatCfmType *) &m->mail_header;
+	rsuint16 ie_block_len = 0;
+	ApiInfoElementType * ie_block = NULL;
+	ApiCallStatusType call_status;
+	
+	print_status(p->Status);
+
+	
+	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
+	call_status.CallStatusValue.State = API_CSS_CALL_ALERTING;
+
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_CALL_STATUS,
+			    sizeof(ApiCallStatusType),
+			    (rsuint8 *) &call_status);
+
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_SYSTEM_CALL_ID,
+			    sizeof(ApiSystemCallIdType),
+			    (rsuint8 *) system_call_id);
+
+
+	ApiFpCcAlertReqType * r = malloc(sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
+
+        r->Primitive = API_FP_CC_ALERT_REQ;
+	r->CallReference = incoming_call;
+        r->InfoElementLength = ie_block_len;
+        memcpy(r->InfoElement,(rsuint8*)ie_block, ie_block_len);
+	
+	printf("API_FP_CC_ALERT_REQ\n");
+	busmail_send(dect_bus, (uint8_t *) r, sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
+	free(r);
+
+
 }
 
 
@@ -662,6 +678,11 @@ void external_call_handler(packet_t *p) {
 	case API_FP_SET_AUDIO_FORMAT_CFM:
 		audio_format_cfm(m);
 		break;
+
+	case API_FP_CC_CALL_PROC_CFM:
+		call_proc_cfm(m);
+		break;
+
 	}
 }
 
