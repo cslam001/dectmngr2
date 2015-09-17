@@ -346,41 +346,79 @@ static void info_ind(busmail_t *m) {
 		dialed_nr = get_dialed_nr((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 	}
 
-	if (!dialed_nr)
-		return;
+	if (dialed_nr) {
+
 	
 	snprintf(json, 50, "{ \"terminal\": \"%d\", \"dialed_nr\": \"%s\" }", p->CallReference.Instance.Host, dialed_nr);
 	ubus_send_json_string("dect.api.info_ind", json);
 
-	ie_block_len = 0;
-	ie_block = NULL;
+	} else {
 
-	/* Connect handset */
-	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
-	call_status.CallStatusValue.State = API_CSS_CALL_CONNECT;
 
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_CALL_STATUS,
-			    sizeof(ApiCallStatusType),
-			    (rsuint8 *) &call_status);
+
+
+		ie_block_len = 0;
+		ie_block = NULL;
+
+		/* Connect handset */
+		call_status.CallStatusSubId = API_SUB_CALL_STATUS;
+		call_status.CallStatusValue.State = API_CSS_CALL_PROC;
+
+		ApiBuildInfoElement(&ie_block,
+				    &ie_block_len,
+				    API_IE_CALL_STATUS,
+				    sizeof(ApiCallStatusType),
+				    (rsuint8 *) &call_status);
 	
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_SYSTEM_CALL_ID,
-			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) system_call_id);
+		ApiBuildInfoElement(&ie_block,
+				    &ie_block_len,
+				    API_IE_SYSTEM_CALL_ID,
+				    sizeof(ApiSystemCallIdType),
+				    (rsuint8 *) system_call_id);
 
 
-	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len));
-        req->Primitive = API_FP_CC_CONNECT_REQ;
-	req->CallReference = incoming_call;
-        req->InfoElementLength = ie_block_len;
-        memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len);
+		ApiFpCcCallProcReqType * req = (ApiFpCcCallProcReqType*) malloc((sizeof(ApiFpCcCallProcReqType) - 1 + ie_block_len));
+		req->Primitive = API_FP_CC_CALL_PROC_REQ;
+		req->CallReference = incoming_call;
+		req->ProgressInd = API_IN_BAND_NOT_AVAILABLE;
+		req->InfoElementLength = ie_block_len;
+		memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len);
 
-	printf("API_FP_CC_CONNECT_REQ\n");
-	busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
-	free(req);
+		printf("API_FP_CC_CALL_PROC_REQ\n");
+		busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcCallProcReqType) - 1 + ie_block_len);
+		free(req);
+
+
+		/* ie_block_len = 0; */
+		/* ie_block = NULL; */
+
+		/* /\* Connect handset *\/ */
+		/* call_status.CallStatusSubId = API_SUB_CALL_STATUS; */
+		/* call_status.CallStatusValue.State = API_CSS_CALL_CONNECT; */
+
+		/* ApiBuildInfoElement(&ie_block, */
+		/* 		    &ie_block_len, */
+		/* 		    API_IE_CALL_STATUS, */
+		/* 		    sizeof(ApiCallStatusType), */
+		/* 		    (rsuint8 *) &call_status); */
+	
+		/* ApiBuildInfoElement(&ie_block, */
+		/* 		    &ie_block_len, */
+		/* 		    API_IE_SYSTEM_CALL_ID, */
+		/* 		    sizeof(ApiSystemCallIdType), */
+		/* 		    (rsuint8 *) system_call_id); */
+
+
+		/* ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len)); */
+		/* req->Primitive = API_FP_CC_CONNECT_REQ; */
+		/* req->CallReference = incoming_call; */
+		/* req->InfoElementLength = ie_block_len; */
+		/* memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len); */
+
+		/* printf("API_FP_CC_CONNECT_REQ\n"); */
+		/* busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len); */
+		/* free(req); */
+	}
 }
 
 
