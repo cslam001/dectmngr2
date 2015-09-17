@@ -328,21 +328,6 @@ static void connect_cfm(busmail_t *m) {
 
 	printf("CallReference: %x\n", p->CallReference);
 	print_status(p->Status);
-
-	if ( p->InfoElementLength > 0 ) {
-		get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
-	}
-
-	ApiFpCcConnectResType res = {
-		.Primitive = API_FP_CC_CONNECT_RES,
-		.CallReference = outgoing_call,
-		.Status = RSS_SUCCESS,
-		.InfoElementLength = 0,
-	};
-	
-	
-	printf("API_FP_CC_CONNECT_RES\n");
-	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
 }
 
 
@@ -361,10 +346,41 @@ static void info_ind(busmail_t *m) {
 		dialed_nr = get_dialed_nr((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 	}
 
-	if (dialed_nr) {
-		snprintf(json, 50, "{ \"terminal\": \"%d\", \"dialed_nr\": \"%s\" }", p->CallReference.Instance.Host, dialed_nr);
-		ubus_send_json_string("dect.api.info_ind", json);
-	}
+	if (!dialed_nr)
+		return;
+	
+	snprintf(json, 50, "{ \"terminal\": \"%d\", \"dialed_nr\": \"%s\" }", p->CallReference.Instance.Host, dialed_nr);
+	ubus_send_json_string("dect.api.info_ind", json);
+
+	ie_block_len = 0;
+	ie_block = NULL;
+
+	/* Connect handset */
+	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
+	call_status.CallStatusValue.State = API_CSS_CALL_CONNECT;
+
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_CALL_STATUS,
+			    sizeof(ApiCallStatusType),
+			    (rsuint8 *) &call_status);
+	
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_SYSTEM_CALL_ID,
+			    sizeof(ApiSystemCallIdType),
+			    (rsuint8 *) system_call_id);
+
+
+	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len));
+        req->Primitive = API_FP_CC_CONNECT_REQ;
+	req->CallReference = incoming_call;
+        req->InfoElementLength = ie_block_len;
+        memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len);
+
+	printf("API_FP_CC_CONNECT_REQ\n");
+	busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
+	free(req);
 }
 
 
