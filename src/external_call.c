@@ -272,6 +272,12 @@ static void alert_cfm(busmail_t *m) {
 			    API_IE_CALL_STATUS,
 			    sizeof(ApiCallStatusType),
 			    (rsuint8 *) &call_status);
+
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_CODEC_LIST,
+			    NarrowBandCodecIe->IeLength,
+			    (rsuint8 *) NarrowBandCodecIe->IeData);
 	
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
@@ -359,9 +365,6 @@ static void info_ind(busmail_t *m) {
 
 	} else {
 
-
-
-
 		ie_block_len = 0;
 		ie_block = NULL;
 
@@ -392,8 +395,6 @@ static void info_ind(busmail_t *m) {
 		printf("API_FP_CC_CALL_PROC_REQ\n");
 		busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcCallProcReqType) - 1 + ie_block_len);
 		free(req);
-
-
 	}
 }
 
@@ -401,7 +402,7 @@ static void info_ind(busmail_t *m) {
 static void call_proc_cfm(busmail_t *m) {
 
 
-	ApiFpSetAudioFormatCfmType * p = (ApiFpSetAudioFormatCfmType *) &m->mail_header;
+	ApiFpCcCallProcCfmType * p = (ApiFpCcCallProcCfmType *) &m->mail_header;
 	rsuint16 ie_block_len = 0;
 	ApiInfoElementType * ie_block = NULL;
 	ApiCallStatusType call_status;
@@ -547,6 +548,7 @@ static void setup_ind(busmail_t *m) {
 	rsuint16 ie_block_len = 0;
 	ApiAudioEndPointIdType endpt;
 	const char term[15];
+	ApiLineIdValueType * line_id;
 
 	printf("CallReference: %x\n", p->CallReference);
 	printf("TerminalIdInitiating: %d\n", p->TerminalId);
@@ -567,6 +569,8 @@ static void setup_ind(busmail_t *m) {
 		printf("internal_call: %x\n", system_call_id->ApiSystemCallId);
 
 		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+		
+		line_id = get_line_id((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 	}
 		
 
