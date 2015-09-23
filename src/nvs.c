@@ -4,7 +4,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
-
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/FpCc/ApiFpCc.h>
@@ -16,6 +18,7 @@
 #include <termios.h>
 
 
+#include "nvs.h"
 #include "tty.h"
 #include "error.h"
 #include "state.h"
@@ -253,5 +256,92 @@ void nvs_init(void * event_base, config_t * config) {
  	printf("RESET_DECT\n");
 	if(dect_chip_reset()) return;
 }
+
+
+
+// Write NVS data from internal Dect to a file in flash
+int nvs_file_write(uint32_t offset, uint32_t len, uint8_t *data) {
+	ssize_t writtenLen;
+	int nvsFd;
+	off_t o;
+
+	nvsFd = open("/etc/dect/nvs", O_WRONLY | O_CREAT, S_IRUSR | 
+		S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+	if(nvsFd == -1) {
+		perror("Error opening NVS file");
+		return -1;
+	}
+
+	o = lseek(nvsFd, offset, SEEK_SET);
+	if(o == (off_t) -1) {
+		perror("Error seeking in NVS file");
+		close(nvsFd);
+		return -1;
+	}
+
+
+	writtenLen = write(nvsFd, data, len);
+	if(writtenLen == -1) {
+		perror("Error, writing to NVS file");
+		close(nvsFd);
+		return -1;
+	}
+
+	printf("Wrote %d bytes to NVS file\n", writtenLen);
+
+	close(nvsFd);
+
+	return 0;
+}
+
+
+// Read data from a NVS file in flash and store in
+// <data>, which must point to a buffer of at least
+// DECT_NVS_SIZE bytes. Number of bytes read are
+// stored into <len>.
+int nvs_file_read(uint32_t *len, uint8_t *data) {
+	const char *nvsPath;
+	int nvsFd, maxLen;
+	ssize_t readLen;
+
+	// Find out where the NVS is stored in filesystem
+	if(access("/etc/dect/nvs", R_OK) == 0) {
+		nvsPath = "/etc/dect/nvs";
+		maxLen = DECT_NVS_SIZE;
+	}
+	else if(access("/etc/dect/nvs_default", R_OK) == 0) {
+		// Inteno default
+		nvsPath = "/etc/dect/nvs_default";
+		maxLen = DECT_NVS_SIZE;
+	}
+	else {
+		// Stack internal default
+		nvsPath = NULL;
+		maxLen = 0;
+	}
+
+	// Read NVS data from file
+	if(nvsPath) {
+		nvsFd = open(nvsPath, O_RDONLY);
+		if (nvsFd == -1) {
+			return -1;
+		}
+
+		readLen = read(nvsFd, data, maxLen);
+		if(readLen == -1) {
+			perror("Error reading NVS file");
+			close(nvsFd);
+			return -1;
+		}
+		
+		*len = readLen;
+		printf("Read %d bytes from NFS file\n", readLen);
+	}
+
+	close(nvsFd);
+
+	return 0;
+}
+
 
 
