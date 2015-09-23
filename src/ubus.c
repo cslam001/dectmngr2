@@ -201,7 +201,7 @@ static int ubus_reply_success(struct ubus_context *ubus_ctx, struct ubus_object 
 	blobmsg_add_u32(&isOkMsg, "errno", 0);
 	blobmsg_add_string(&isOkMsg, "errstr", strerror(0));
 	blobmsg_add_string(&isOkMsg, "method", methodName);
-	blobmsg_add_blob(&isOkMsg, msg);
+//	blobmsg_add_blob(&isOkMsg, msg);
 
 	ubus_send_reply(ubus_ctx, req, isOkMsg.head);
 	blob_buf_free(&isOkMsg);
@@ -223,7 +223,7 @@ static int ubus_reply_busy(struct ubus_context *ubus_ctx, struct ubus_object *ob
 	blobmsg_add_u32(&isBusyMsg, "errno", EBUSY);
 	blobmsg_add_string(&isBusyMsg, "errstr", strerror(EBUSY));
 	blobmsg_add_string(&isBusyMsg, "method", methodName);
-	blobmsg_add_blob(&isBusyMsg, msg);
+//	blobmsg_add_blob(&isBusyMsg, msg);
 
 	ubus_send_reply(ubus_ctx, req, isBusyMsg.head);
 	blob_buf_free(&isBusyMsg);
