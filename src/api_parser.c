@@ -21,6 +21,18 @@ static void api_parser_handler(packet_t *p) {
 		printf("API_FP_RESET_IND\n");
 		break;
 
+	case API_LINUX_INIT_GET_SYSTEM_INFO_CFM:
+		printf("API_LINUX_INIT_GET_SYSTEM_INFO_CFM\n");
+		break;
+
+	case API_LINUX_INIT_CFM:
+		printf("API_FP_LINUX_INIT_CFM\n");
+		break;
+
+	case API_LINUX_NVS_UPDATE_IND:
+		printf("API_FP_LINUX_NVS_UPDATE_IND\n");
+		break;
+
 	case API_PROD_TEST_CFM:
 		printf("API_PROD_TEST_CFM\n");
 		break;
