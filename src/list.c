@@ -2,22 +2,22 @@
 #include <stdio.h>
 
 
-typedef struct {
-	void * prev;
-	void * next;
-	void * p;
-} list_t;
+struct list_t {
+	struct list_t *prev;
+	struct list_t *next;
+	void (*p)(void *arg);
+};
 
 typedef struct {
-	void * first;
-	void * last;
+	struct list_t *first;
+	struct list_t *last;
 	int count;
 } list_head_t;
 
 void * list_new(void) {
 	
-	list_head_t * head = (list_head_t *) calloc(sizeof(list_head_t), 1);
-	
+	list_head_t * head = (list_head_t *) calloc(1, sizeof(list_head_t));
+
 	head->first = NULL;
 	head->last = NULL;
 	head->count = 0;
@@ -30,9 +30,9 @@ void * list_new(void) {
 void list_add(void * _self, void * p) {
 	
 	list_head_t * head = (list_head_t *) _self;
-	list_t * new_last, * last;
+	struct list_t * new_last, * last;
 
-	new_last = (list_t *) calloc(sizeof(list_t), 1);
+	new_last = (struct list_t*) calloc(1, sizeof(struct list_t));
 	new_last->p = p;
 
 	if ( head->last ) {
@@ -59,8 +59,7 @@ void list_add(void * _self, void * p) {
 void list_delete(void * _self, void * p) {
 	
 	list_head_t * head = (list_head_t *) _self;
-	int i;
-	list_t * obj, * prev, * next;
+	struct list_t * obj, * prev, * next;
 
 	if ( head->count == 0 ) {
 		return;
@@ -125,8 +124,7 @@ void list_delete(void * _self, void * p) {
 void list_call_each(void * _self, void * arg) {
 	
 	list_head_t * head = (list_head_t *) _self;
-	void (*callback)(void * arg);
-	list_t * obj;
+	struct list_t *obj;
 
 	if ( head->count == 0 ) {
 		return;
@@ -136,8 +134,7 @@ void list_call_each(void * _self, void * arg) {
 
 	/* Loop over all objects in list */
 	for (;;) {
-		callback = obj->p;
-		callback(arg);
+		obj->p(arg);
 		
 		if ( obj->next ) {
 			/* Next object in list */
