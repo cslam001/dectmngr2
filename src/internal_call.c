@@ -39,7 +39,7 @@ const rsuint16 WideBandCodecIeLen = (RSOFFSETOF(ApiInfoElementType, IeData) + 6)
 
 ApiCodecListType * codecs = NULL;
 
-void * dect_bus;
+static void *dect_bus;
 
 
 static ApiSystemCallIdType * get_system_call_id(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
@@ -177,7 +177,7 @@ static void connect_ind(busmail_t *m) {
 	codecs = get_codecs((ApiInfoElementType *) req->InfoElement, req->InfoElementLength);
 
 	printf("API_FP_CC_CONNECT_REQ\n");
-	busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
+	mailProto.send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
 	free(req);
 
 
@@ -283,7 +283,7 @@ static void connect_cfm(busmail_t *m) {
 	
 	
 	printf("API_FP_CC_CONNECT_RES\n");
-	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
+	mailProto.send(dect_bus, (uint8_t *)&res, sizeof(res));
 
 	/* /\* Call progress state to initiating handset *\/ */
 	/* call_status.CallStatusSubId = API_SUB_CALL_STATUS; */
@@ -372,7 +372,7 @@ static void release_ind(busmail_t *m) {
 	};
 	
 	printf("API_FP_CC_RELEASE_RES\n");
-	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
+	mailProto.send(dect_bus, (uint8_t *)&res, sizeof(res));
 
 
 	ApiFpCcReleaseReqType req = {
@@ -383,7 +383,7 @@ static void release_ind(busmail_t *m) {
 	};
 	
 	printf("API_FP_CC_RELEASE_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)&req, sizeof(req));
+	mailProto.send(dect_bus, (uint8_t *)&req, sizeof(req));
 
 }
 
@@ -546,7 +546,7 @@ static void setup_ind(busmail_t *m) {
 	};
 
 	printf("API_FP_CC_SETUP_RES\n");
-	busmail_send(dect_bus, (uint8_t *)&res, sizeof(ApiFpCcSetupResType));
+	mailProto.send(dect_bus, (uint8_t *)&res, sizeof(ApiFpCcSetupResType));
 
 
 	/* Call progress state to initiating handset */
@@ -575,7 +575,7 @@ static void setup_ind(busmail_t *m) {
 	memcpy(ra->InfoElement, ie_block, ie_block_len);
 
 	printf("API_FP_CC_SETUP_ACK_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)ra, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
+	mailProto.send(dect_bus, (uint8_t *)ra, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
 	free(ra);
 
 
@@ -614,7 +614,7 @@ static void setup_ind(busmail_t *m) {
 	memcpy(req->InfoElement, ie_block, ie_block_len);
 
 	printf("API_FP_CC_SETUP_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)req, sizeof(ApiFpCcSetupReqType) - 1 + ie_block_len);
+	mailProto.send(dect_bus, (uint8_t *)req, sizeof(ApiFpCcSetupReqType) - 1 + ie_block_len);
 	free(req);
 
 	printf("\n\n");
@@ -637,7 +637,7 @@ static void pinging_call(int handset) {
 
 	printf("pinging_call\n");
 	printf("API_FP_CC_SETUP_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
+	mailProto.send(dect_bus, (uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
 	return;
 }
 
@@ -706,5 +706,5 @@ void internal_call_init(void * bus) {
 	dect_bus = bus;
 
 	dect_codec_init();
-	busmail_add_handler(bus, internal_call_handler);
+	mailProto.add_handler(bus, internal_call_handler);
 }

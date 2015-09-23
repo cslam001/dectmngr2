@@ -117,6 +117,5 @@ static void api_parser_handler(packet_t *p) {
 
 
 void api_parser_init(void * bus) {
-
-	busmail_add_handler(bus, api_parser_handler);
+	mailProto.add_handler(bus, api_parser_handler);
 }

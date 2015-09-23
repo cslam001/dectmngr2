@@ -228,7 +228,7 @@ static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8
 
 
 // Send a busmail to DECT stack API
-void busmail_send(void * _self, uint8_t * data, int size) {
+int busmail_send(void * _self, uint8_t * data, int size) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);
@@ -243,6 +243,8 @@ void busmail_send(void * _self, uint8_t * data, int size) {
        
 	busmail_tx(bus, tx->data, tx->size, PF, tx->task_id, API_PROG_ID);
 	free(tx);
+
+	return 0;
 }
 
 // Send a busmail to DECT stack API
@@ -361,7 +363,7 @@ static void information_frame(void * _self, packet_t *p) {
 
 
 
-int busmail_write(void * _self, void * event) {
+int busmail_receive(void *_self, void *event) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	
@@ -448,7 +450,7 @@ void packet_dump(packet_t *p) {
 }
 
 
-void busmail_dispatch(void * _self) {
+int busmail_dispatch(void * _self) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	packet_t packet;
@@ -488,6 +490,8 @@ void busmail_dispatch(void * _self) {
 
 		}
 	}
+
+	return 0;
 }
 
 

@@ -24,6 +24,7 @@
 
 
 static struct handsets_t handsets;
+static void *dect_bus;
 
 
 
@@ -37,7 +38,7 @@ static void get_handset_ipui(int handsetId)
 		.TerminalId = handsetId,
 	};
 
-	busmail_send(dect_bus, (uint8_t*) &m, sizeof(m));
+	mailProto.send(dect_bus, (uint8_t*) &m, sizeof(m));
 }
 
 
@@ -89,7 +90,7 @@ int list_handsets(void)
 		.StartTerminalId = 0
 	};
 
-	busmail_send(dect_bus, (uint8_t*) &m, sizeof(m));
+	mailProto.send(dect_bus, (uint8_t*) &m, sizeof(m));
 
 	return 0;
 }
@@ -141,7 +142,7 @@ int delete_handset(int id) {
 		.TerminalId = id
 	};
 
-	busmail_send(dect_bus, (uint8_t*) &m, sizeof(m));
+	mailProto.send(dect_bus, (uint8_t*) &m, sizeof(m));
 
 	return 0;
 }
@@ -158,7 +159,7 @@ int page_all_handsets(void) {
 		.Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2
 	};
 
-	busmail_send(dect_bus, (uint8_t*) &m, sizeof(m));
+	mailProto.send(dect_bus, (uint8_t*) &m, sizeof(m));
 
 	return 0;
 }
@@ -170,7 +171,7 @@ int page_all_handsets(void) {
 static void handset_handler(packet_t *p)
 {
 	busmail_t * m = (busmail_t *) &p->data[0];
-	ApiFpMmGetIdCfmType *resp1 = (ApiFpMmGetIdCfmType*) &m->mail_header;		// For gett in "Status" of those structs who has it
+	ApiFpMmGetIdCfmType *resp = (ApiFpMmGetIdCfmType*) &m->mail_header;			// For get in "Status" of those structs who has it
 
 	if (m->task_id != 1) return;
 	
@@ -189,13 +190,13 @@ static void handset_handler(packet_t *p)
 			break;
 
 		case API_FP_MM_REGISTRATION_COMPLETE_IND:
-			if(resp1->Status == RSS_SUCCESS) {
+			if(resp->Status == RSS_SUCCESS) {
 				ubus_send_string("handset", "add");
 			}
 			break;
 
 		case API_FP_MM_DELETE_REGISTRATION_CFM:
-			if(resp1->Status == RSS_SUCCESS) {
+			if(resp->Status == RSS_SUCCESS) {
 				ubus_send_string("handset", "remove");
 			}
 			break;
@@ -208,7 +209,8 @@ static void handset_handler(packet_t *p)
 //-------------------------------------------------------------
 void handset_init(void * bus)
 {
-	busmail_add_handler(bus, handset_handler);
+	dect_bus = bus;
+	mailProto.add_handler(bus, handset_handler);
 }
 
 

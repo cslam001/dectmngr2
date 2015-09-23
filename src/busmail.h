@@ -63,16 +63,26 @@ typedef struct __attribute__((__packed__))
 } busmail_t;
 
 
+struct mail_protocol_t {
+	void* (*new)(int fd);
+	void (*add_handler)(void *_self, void (*app_handler)(packet_t *));
+	int (*dispatch)(void *_self);
+	int (*send)(void *_self, uint8_t *data, int size);
+	int (*receive)(void *_self, void *event);
+};
+
+
+extern struct mail_protocol_t mailProto;
 
 void * busmail_new(int fd);
 void busmail_add_handler(void * _self, void (*app_handler)(packet_t *));
 int busmail_get(void * _self, packet_t *p);
 void packet_dump(packet_t *p);
-void busmail_dispatch(void * _self);
+int busmail_dispatch(void * _self);
 void busmail_ack(void * _self);
-int busmail_write(void * _self, void * event);
+int busmail_receive(void * _self, void * event);
 void busmail_send0(void * _self, uint8_t * data, int size);
-void busmail_send(void * _self, uint8_t * data, int size);
+int busmail_send(void * _self, uint8_t * data, int size);
 void busmail_send_task(void * _self, uint8_t * data, int size, int task_id);
 void busmail_send_addressee(void * _self, uint8_t * data, int size);
 

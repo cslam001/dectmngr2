@@ -7,5 +7,6 @@ int connection_get_status(char **keys, char **values);
 void connection_init(void * bus);
 int connection_set_radio(int onff);
 int connection_set_registration(int onoff);
+int start_internal_dect(void);
 
 #endif

@@ -11,14 +11,17 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <signal.h>
+#include <errno.h>
 
+#include <Api/ApiCfg.h>
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
 #include <Api/FpCc/ApiFpCc.h>
 #include <Api/FpMm/ApiFpMm.h>
 #include <Api/ProdTest/ApiProdTest.h>
 #include <Api/RsStandard.h>
-#include <termios.h>
+#include <Api/Linux/ApiLinux.h>
+#include <termios.h>															// Must be included after natalie or collision occur
 
 #include "dect.h"
 #include "tty.h"
@@ -28,6 +31,7 @@
 #include "util.h"
 #include "app.h"
 #include "buffer.h"
+#include "rawmail.h"
 #include "busmail.h"
 #include "eap.h"
 #include "event.h"
@@ -39,19 +43,20 @@
 #include "connection_init.h"
 #include "api_parser.h"
 
-
 #define INBUF_SIZE 5000
 #define BUF_SIZE 50000
 
 buffer_t * buf;
 int client_connected;
-void * dect_bus;
+static int dect_fd;
+static void *dect_bus;
 void * dect_stream, * listen_stream, * debug_stream, * proxy_stream;
 void * client_stream;
 int epoll_fd;
 void * client_list;
 void * client_bus;
 struct sigaction act;
+struct mail_protocol_t mailProto;
 
 
 static void sighandler(int signum, siginfo_t * info, void * ptr) {
@@ -127,7 +132,7 @@ static void client_init(void) {
 	
 	setup_signal_handler();
 	client_list = list_new();
-	busmail_add_handler(dect_bus, client_packet_handler);
+	mailProto.add_handler(dect_bus, client_packet_handler);
 }
 
 static void listen_handler(void * listen_stream, void * event) {
@@ -199,32 +204,53 @@ static int setup_listener(uint16_t port, uint32_t type) {
 
 
 void dect_handler(void * dect_stream, void * event) {
-
-
 	/* Add input to busmail subsystem */
-	if (busmail_write(dect_bus, event) < 0) {
+	if (mailProto.receive(dect_bus, event) < 0) {
 		printf("busmail buffer full\n");
 	}
 	
-
 	/* Process whole packets in buffer. The previously registered
 	   callback will be called for application frames */
-	busmail_dispatch(dect_bus);
+	mailProto.dispatch(dect_bus);
 }
-
 
 
 
 void app_init(void * base, config_t * config) {
 	
-	int dect_fd, debug_fd, proxy_fd;
+	int debug_fd, proxy_fd, isInternal = 0;
 
 	printf("app_init\n");
-
-	/* Setup dect tty */
-	dect_fd = tty_open("/dev/ttyS1");
-	tty_set_raw(dect_fd);
-	tty_set_baud(dect_fd, B115200);
+	
+	if(access("/dev/dect", R_OK | W_OK) == 0) {
+		/* CPU internal Dect. It has a simple
+		 * protocol, we always get entire packets
+		 * all at once. */
+		isInternal = 1;
+		dect_fd = tty_open("/dev/dect");
+		mailProto.new = rawmail_new;
+		mailProto.add_handler = rawmail_add_handler;
+		mailProto.dispatch = rawmail_dispatch;
+		mailProto.send = rawmail_send;
+		mailProto.receive = rawmail_receive;
+	}
+	else if(access("/dev/ttyS1", R_OK | W_OK) == 0) {
+		/* External Dect chip, connected via
+		 * serial port. Packets arrive one byte
+		 * at a time which we need to buffer. */
+		isInternal = 0;
+		dect_fd = tty_open("/dev/ttyS1");
+		tty_set_raw(dect_fd);
+		tty_set_baud(dect_fd, B115200);
+		mailProto.new = busmail_new;
+		mailProto.add_handler = busmail_add_handler;
+		mailProto.dispatch = busmail_dispatch;
+		mailProto.send = busmail_send;
+		mailProto.receive = busmail_receive;
+	}
+	else {
+		exit_failure("No char dev for Dect com\n");
+	}
 
 	/* Register dect stream */
 	dect_stream = stream_new(dect_fd);
@@ -232,12 +258,12 @@ void app_init(void * base, config_t * config) {
 	event_base_add_stream(dect_stream);
 
 	/* Init busmail subsystem */
-	dect_bus = busmail_new(dect_fd);
+	dect_bus = mailProto.new(dect_fd);
 
 	/* Initialize submodules. The submodules will bind 
 	   application frame handlers to the dect_bus */
-	connection_init(dect_bus);
 	api_parser_init(dect_bus);
+	connection_init(dect_bus);
 	internal_call_init(dect_bus);
 	handset_init(dect_bus);
 
@@ -256,11 +282,16 @@ void app_init(void * base, config_t * config) {
 	stream_add_handler(proxy_stream, MAX_EVENT_SIZE, listen_handler);
 	event_base_add_stream(proxy_stream);
 
-	/* Connect and reset dect chip */
-	printf("DECT TX TO BRCM RX\n");
-	if(gpio_control(118, 0)) return;
- 	printf("RESET_DECT\n");
-	if(dect_chip_reset()) return;
+	if(isInternal) {
+		start_internal_dect();
+	}
+	else {
+		// Reset chip
+		printf("DECT TX TO BRCM RX\n");
+		if(gpio_control(118, 0)) return;
+		printf("RESET_DECT\n");
+		if(dect_chip_reset()) return;
+	}
 
 	return;
 }

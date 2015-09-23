@@ -208,7 +208,7 @@ void nvs_handler(void * stream, void * event) {
 	//util_dump(e->in, e->incount, "\n[READ]");
 
 	/* Add input to busmail subsystem */
-	if (busmail_write(dect_bus, event) < 0) {
+	if (busmail_receive(dect_bus, event) < 0) {
 		printf("busmail buffer full\n");
 	}
 	

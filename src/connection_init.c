@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <fcntl.h>
 #include <sys/timerfd.h>
+#include <sys/ioctl.h>
+
 
 #include "connection_init.h"
 #include "busmail.h"
@@ -12,6 +14,7 @@
 #include "error.h"
 #include "stream.h"
 #include "event_base.h"
+#include "nvs.h"
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
@@ -20,6 +23,8 @@
 #include <Api/ProdTest/ApiProdTest.h>
 #include <Api/FpAudio/ApiFpAudio.h>
 #include <Api/RsStandard.h>
+#include <Api/Linux/ApiLinux.h>
+#include <dectshimdrv.h>
 
 #define TRUE 1
 #define FALSE 0
@@ -48,7 +53,7 @@ struct connection_t {
 
 
 static int reset_ind = 0;
-void * dect_bus;
+static void *dect_bus;
 static struct connection_t connection;
 static int timer_fd;
 static void *timer_stream;
@@ -95,7 +100,6 @@ int connection_get_status(char **keys, char **values) {
 	strcat(*values, remote_bool_str[connection.registration]);
 	strcat(*values, "\n");
 
-
 	return 0;
 }
 
@@ -109,36 +113,91 @@ static void connection_init_handler(packet_t *p) {
 	
 	/* Application command */
 	switch (m->mail_header) {
-		
-	case API_FP_RESET_IND:
+
+	case API_FP_RESET_IND:														// External Dect has reseted
 		if (reset_ind == 0) {
 			reset_ind = 1;
 			connection.radio = INACTIVE;
 			ubus_send_string("radio", ubusStrInActive);
 			ubus_call_string("led.dect", "set", "state", "off", NULL);
 
-			printf("\nWRITE: API_FP_GET_FW_VERSION_REQ\n");
+			printf("WRITE: API_FP_GET_FW_VERSION_REQ\n");
 			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
-			busmail_send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
+			mailProto.send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
 
 		}
 		break;
 
-	case API_FP_GET_FW_VERSION_CFM:
+	case API_LINUX_INIT_GET_SYSTEM_INFO_CFM:									// Query internal Dect. Does it need to be initialized?
+		{	
+			ApiLinuxInitGetSystemInfoCfmType *resp = 
+				(ApiLinuxInitGetSystemInfoCfmType*) &m->mail_header;
+
+			if(resp->NvsSize != DECT_NVS_SIZE) {
+				exit_failure("Invalid NVS size from driver, something is wrong!\n");
+			}
+			else if(resp->MaxMailSize == 0) {
+				/* Internal Dect has already been initialized previously
+				 * and we MUST only do the init once, so skip it. */
+				printf("WRITE: API_FP_FEATURES_REQ\n");
+				ApiFpCcFeaturesReqType req = {
+					.Primitive = API_FP_FEATURES_REQ,
+					.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
+				};
+				
+				mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
+			}
+			else {
+				// Initialization is needed, send NVS data to kernel driver
+				ApiLinuxInitReqType *req = (ApiLinuxInitReqType*)
+					malloc(sizeof(ApiLinuxInitReqType) + DECT_NVS_SIZE);
+				memset(req, 0, sizeof(ApiLinuxInitReqType) + DECT_NVS_SIZE);
+				req->Primitive = API_LINUX_INIT_REQ;
+	
+				if(nvs_file_read((uint32_t*) &req->LengthOfData, 
+						req->Data) == 0) {
+					mailProto.send(dect_bus, (uint8_t*) req,
+						sizeof(ApiLinuxInitReqType) + req->LengthOfData - 1);
+				}
+				free(req);
+			}
+		}
+		break;
+
+	case API_LINUX_NVS_UPDATE_IND:												// Internal Dect writes to the NVS-file
+		{
+			ApiLinuxNvsUpdateIndType *resp =
+				(ApiLinuxNvsUpdateIndType*) &m->mail_header;
+			nvs_file_write(resp->NvsOffset, resp->NvsDataLength, resp->NvsData);
+		}
+		break;
+
+	case API_LINUX_INTERNAL_ERROR_IND:
+		{
+			ApiLinuxInternalErrorIndType *resp =
+				(ApiLinuxInternalErrorIndType*) &m->mail_header;
+			printf("Warning, internal Dect error %d\n", resp->ErrorCode);
+		}
+		break;	
+
+	case API_LINUX_INIT_CFM:													// Internal Dect has initialized
+	case API_FP_GET_FW_VERSION_CFM:												// External Dext has initialized
 		{
 			/* Setup terminal id */
-			printf("\nWRITE: API_FP_FEATURES_REQ\n");
-			ApiFpCcFeaturesReqType fr = { .Primitive = API_FP_FEATURES_REQ,
-				.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT };
-	
-			busmail_send(dect_bus, (uint8_t *)&fr, sizeof(ApiFpCcFeaturesReqType));
+			printf("WRITE: API_FP_FEATURES_REQ\n");
+			ApiFpCcFeaturesReqType req = {
+				.Primitive = API_FP_FEATURES_REQ,
+				.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
+			};
+
+			mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
 		}
 		break;
 
 	case API_FP_FEATURES_CFM:
 		{
 			/* Init PCM bus */
-			printf("\nWRITE: API_FP_INIT_PCM_REQ\n");
+			printf("WRITE: API_FP_INIT_PCM_REQ\n");
 			ApiFpInitPcmReqType pcm_req =  { .Primitive = API_FP_INIT_PCM_REQ,
 						 .PcmEnable = 0x1,
 						 .IsMaster = 0x0,
@@ -154,7 +213,7 @@ static void connection_init_handler(packet_t *p) {
 						 .PcmDoutIsOpenDrain = 0x1, /* Must be 1 if mult. devices on bus */
 						 .PcmIsOpenDrain = 0x0,  /* 0 == Normal mode */
 			};
-			busmail_send(dect_bus, (uint8_t *)&pcm_req, sizeof(ApiFpInitPcmReqType));
+			mailProto.send(dect_bus, (uint8_t *)&pcm_req, sizeof(ApiFpInitPcmReqType));
 		}
 		break;
 
@@ -174,6 +233,7 @@ static void connection_init_handler(packet_t *p) {
 		{
 			ApiFpMmSetRegistrationModeCfmType *resp =
 				(ApiFpMmSetRegistrationModeCfmType*) &m->mail_header;
+
 			print_status(resp->Status);
 
 			if(resp->Status == RSS_SUCCESS) {
@@ -204,7 +264,7 @@ static void connection_init_handler(packet_t *p) {
 //-------------------------------------------------------------
 // Timer handler, for turning of registration
 // after a delay if no handset has registered.
-static void timer_handler(void * dect_stream, void * event) {
+static void timer_handler(void *unused1, void *unused2) {
 	uint64_t expired;
 	int res;
 
@@ -239,9 +299,8 @@ static void timer_handler(void * dect_stream, void * event) {
 
 //-------------------------------------------------------------
 void connection_init(void * bus) {
-
 	dect_bus = bus;
-	busmail_add_handler(bus, connection_init_handler);
+	mailProto.add_handler(bus, connection_init_handler);
 
 	timer_fd = timerfd_create(CLOCK_MONOTONIC, O_NONBLOCK);
 	if(timer_fd == -1) {
@@ -268,14 +327,14 @@ int connection_set_radio(int onoff) {
 	if(onoff) {
 		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
 		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
-		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+		mailProto.send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
 		connection.radio = ACTIVE;												// No confirmation is replied
 		ubus_send_string("radio", ubusStrActive);
 		ubus_call_string("led.dect", "set", "state", "ok", NULL);
 	}
 	else {
 		ApiFpMmStopProtocolReqType r = { .Primitive = API_FP_MM_STOP_PROTOCOL_REQ, };
-		busmail_send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStopProtocolReqType));
+		mailProto.send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStopProtocolReqType));
 		connection.radio = INACTIVE;											// No confirmation is replied
 		ubus_send_string("radio", ubusStrInActive);
 		ubus_call_string("led.dect", "set", "state", "off", NULL);
@@ -329,7 +388,7 @@ int connection_set_registration(int onoff) {
 	 * or do nothing if we first need to
 	 * enable the radio. */
 	if(doSendMsg) {
-		busmail_send(dect_bus, (uint8_t *)&m,
+		mailProto.send(dect_bus, (uint8_t *)&m,
 			sizeof(ApiFpMmSetRegistrationModeReqType));
 	}
 
@@ -338,6 +397,31 @@ int connection_set_registration(int onoff) {
 	if(timerfd_settime(timer_fd, 0, &newTimer, NULL) == -1) {
 		perror("Error setting timer");
 	}
+
+	return 0;
+}
+
+
+
+//-------------------------------------------------------------
+// Initialize SoC internal Dect
+int start_internal_dect(void) {
+	ApiLinuxInitGetSystemInfoReqType req;
+	DECTSHIMDRV_INIT_PARAM parm;
+	int shimFd, r;
+
+	shimFd = open("/dev/dectshim", O_RDWR);
+	if (shimFd == -1) exit_failure("%s: open error %d\n", __FUNCTION__, errno);
+
+	memset(&parm, 0, sizeof(parm));
+	r = ioctl(shimFd, DECTSHIMIOCTL_INIT_CMD, &parm);
+	if (r != 0) exit_failure("%s: ioctl error %d\n", __FUNCTION__, errno);
+
+	close(shimFd);
+
+	printf("WRITE: API_LINUX_INIT_GET_SYSTEM_INFO_REQ\n");
+	req.Primitive = API_LINUX_INIT_GET_SYSTEM_INFO_REQ;
+	mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
 
 	return 0;
 }
