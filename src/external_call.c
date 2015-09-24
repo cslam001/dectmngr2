@@ -590,7 +590,7 @@ static void setup_ind(busmail_t *m) {
 	ApiFpSetAudioFormatReqType  aud_req = {
 		.Primitive = API_FP_SET_AUDIO_FORMAT_REQ,
 		.DestinationId = endpt,
-		.AudioDataFormat = AP_DATA_FORMAT_LINEAR_8kHz
+		.AudioDataFormat = AP_DATA_FORMAT_LINEAR_16kHz
 	};
 
 	printf("API_FP_SET_AUDIO_FORMAT_REQ\n");
