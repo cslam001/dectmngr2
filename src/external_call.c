@@ -216,7 +216,7 @@ static void connect_ind(busmail_t *m) {
 	codecs = get_codecs((ApiInfoElementType *) req->InfoElement, req->InfoElementLength);
 
 	printf("API_FP_CC_CONNECT_REQ\n");
-	busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
+	mailProto.send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
 	free(req);
 
 
@@ -273,7 +273,7 @@ static void alert_cfm(busmail_t *m) {
 	memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len);
 
 	printf("API_FP_CC_CONNECT_REQ\n");
-	busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
+	mailProto.send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
 	free(req);
 
 }
@@ -375,7 +375,7 @@ static void info_ind(busmail_t *m) {
 		memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len);
 
 		printf("API_FP_CC_CALL_PROC_REQ\n");
-		busmail_send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcCallProcReqType) - 1 + ie_block_len);
+		mailProto.send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcCallProcReqType) - 1 + ie_block_len);
 		free(req);
 	}
 }
@@ -416,7 +416,7 @@ static void call_proc_cfm(busmail_t *m) {
         memcpy(r->InfoElement,(rsuint8*)ie_block, ie_block_len);
 	
 	printf("API_FP_CC_ALERT_REQ\n");
-	busmail_send(dect_bus, (uint8_t *) r, sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
+	mailProto.send(dect_bus, (uint8_t *) r, sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
 	free(r);
 
 
@@ -460,7 +460,7 @@ static void audio_format_cfm(busmail_t *m) {
 	
 	printf("API_FP_CC_SETUP_ACK_REQ\n");
 	
-	busmail_send(dect_bus, (uint8_t *)ra, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
+	mailProto.send(dect_bus, (uint8_t *)ra, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
 	free(ra);
 
 }
@@ -506,7 +506,7 @@ static void release_ind(busmail_t *m) {
 	};
 	
 	printf("API_FP_CC_RELEASE_RES\n");
-	busmail_send(dect_bus, (uint8_t *)&res, sizeof(res));
+	mailProto.send(dect_bus, (uint8_t *)&res, sizeof(res));
 
 	snprintf(term, 15, "%d", p->CallReference.Instance.Host);
 
@@ -566,7 +566,7 @@ static void setup_ind(busmail_t *m) {
 	};
 
 	printf("API_FP_CC_SETUP_RES\n");
-	busmail_send(dect_bus, (uint8_t *)&res, sizeof(ApiFpCcSetupResType));
+	mailProto.send(dect_bus, (uint8_t *)&res, sizeof(ApiFpCcSetupResType));
 
 
 	ApiFpSetAudioFormatReqType  aud_req = {
@@ -576,7 +576,7 @@ static void setup_ind(busmail_t *m) {
 	};
 
 	printf("API_FP_SET_AUDIO_FORMAT_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)&aud_req, sizeof(ApiFpSetAudioFormatReqType));
+	mailProto.send(dect_bus, (uint8_t *)&aud_req, sizeof(ApiFpSetAudioFormatReqType));
 	
 	return;
 }
@@ -602,7 +602,7 @@ static void pinging_call(int handset) {
 
 	printf("pinging_call\n");
 	printf("API_FP_CC_SETUP_REQ\n");
-	busmail_send(dect_bus, (uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
+	mailProto.send(dect_bus, (uint8_t *)&req, sizeof(ApiFpCcSetupReqType));
 	return;
 }
 
@@ -680,5 +680,5 @@ void external_call_init(void * bus) {
 	dect_bus = bus;
 
 	dect_codec_init();
-	busmail_add_handler(bus, external_call_handler);
+	mailProto.add_handler(bus, external_call_handler);
 }
