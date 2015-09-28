@@ -12,6 +12,7 @@
 #include <Api/RsStandard.h>
 
 #include "busmail.h"
+#include "ubus.h"
 #include "natalie_utils.h"
 
 /* Module scope variables */
@@ -34,27 +35,6 @@ static void * dect_bus;
 
 
 
-
-static void print_status(RsStatusType s) {
-
-	switch (s) {
-		
-	case RSS_SUCCESS:
-		printf("RSS_SUCCESS\n");
-		break;
-
-	case RSS_NOT_SUPPORTED:
-		printf("RSS_NOT_SUPPORTED\n");
-		break;
-
-	case RSS_BAD_ARGUMENTS:
-		printf("RSS_BAD_ARGUMENTS\n");
-		break;
-		
-	default:
-		printf("STATUS: %x\n", s);
-	}
-}
 
 
 static ApiSystemCallIdType * get_system_call_id(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
@@ -361,6 +341,8 @@ static void info_ind(busmail_t *m) {
 
 	
 	snprintf(json, 50, "{ \"terminal\": \"%d\", \"dialed_nr\": \"%s\" }", p->CallReference.Instance.Host, dialed_nr);
+	
+	printf("string: %s\n", json);
 	ubus_send_json_string("dect.api.info_ind", json);
 
 	} else {

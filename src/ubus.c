@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <libubus.h>
-
+#include <libubox/blobmsg_json.h>
 #include "ubus.h"
 #include "util.h"
 #include "error.h"
@@ -120,6 +120,52 @@ int ubus_send_string(const char *msgKey, const char *msgVal)
 
 
 //-------------------------------------------------------------
+// We transmitt a public ubus string event with sender id
+int ubus_send_string_api(const char *sender, const char *msgKey, const char *msgVal)
+{
+	struct blob_buf blob;
+	int res = 0;
+
+	memset(&blob, 0, sizeof(blob));
+	if(blob_buf_init(&blob, 0)) return -1;
+	blobmsg_add_string(&blob, msgKey, msgVal);
+
+	if(ubus_send_event(ubusContext, sender, blob.head) != UBUS_STATUS_OK) {
+		printf("Error sending ubus message %s %s\n", msgKey, msgVal);
+			res = -1;
+	}
+
+	blob_buf_free(&blob);
+
+	return res;
+}
+
+
+//-------------------------------------------------------------
+// We transmitt an entire json object to ubus
+int ubus_send_json_string(const char *sender_id, const char *json_string)
+{
+	struct json_object *jsonObj, *jsonVal;
+	struct blob_buf blob;
+	int res = 0;
+
+	memset(&blob, 0, sizeof(blob));
+	if(blob_buf_init(&blob, 0)) return -1;
+
+	if(!blobmsg_add_json_from_string(&blob, json_string)) {
+		res = -1;
+	}
+	else if(ubus_send_event(ubusContext, sender_id, blob.head) != UBUS_STATUS_OK) {
+		printf("Error sending ubus message %s\n", json_string);
+	}
+
+	blob_buf_free(&blob);
+	return res;
+}
+
+
+
+//-------------------------------------------------------------
 // Callback for: a ubus call (invocation) has replied with some data
 static void call_answer(struct ubus_request *req, int type, struct blob_attr *msg)
 {
@@ -210,60 +256,7 @@ static int ubus_reply_success(struct ubus_context *ubus_ctx, struct ubus_object 
 }
 
 
-//-------------------------------------------------------------
-// We transmitt a public ubus string event
-int ubus_send_string_api(const char *sender_id, const char *msgKey, const char *msgVal)
-{
-	struct json_object *jsonObj, *jsonVal;
-	struct blob_buf blob;
-	int res = 0;
 
-	memset(&blob, 0, sizeof(blob));
-	if(blob_buf_init(&blob, 0)) return -1;
-
-	jsonVal = json_object_new_string(msgVal);
-	jsonObj = json_object_new_object();
-	json_object_object_add(jsonObj, msgKey, jsonVal);
-
-	if(!blobmsg_add_object(&blob, jsonObj)) {
-		res = -1;
-	}
-	else if(ubus_send_event(ubusContext, sender_id, blob.head) != UBUS_STATUS_OK) {
-		printf("Error sending ubus message %s\n",
-			json_object_to_json_string(jsonObj));
-			res = -1;
-	}
-
-	json_object_put(jsonObj);
-	blob_buf_free(&blob);
-	return res;
-}
-
-
-//-------------------------------------------------------------
-// We transmitt a public ubus string event
-int ubus_send_json_string(const char *sender_id, const char *json_string)
-{
-	struct json_object *jsonObj, *jsonVal;
-	struct blob_buf blob;
-	int res = 0;
-
-	memset(&blob, 0, sizeof(blob));
-	if(blob_buf_init(&blob, 0)) return -1;
-
-	if(!blobmsg_add_json_from_string(&blob, json_string)) {
-		res = -1;
-	}
-	else if(ubus_send_event(ubusContext, sender_id, blob.head) != UBUS_STATUS_OK) {
-		printf("Error sending ubus message %s\n",
-			json_object_to_json_string(jsonObj));
-			res = -1;
-	}
-
-	json_object_put(jsonObj);
-	blob_buf_free(&blob);
-	return res;
-}
 
 
 

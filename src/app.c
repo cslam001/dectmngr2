@@ -39,7 +39,7 @@
 #include "list.h"
 #include "stream.h"
 #include "handset.h"
-#include "internal_call.h"
+#include "external_call.h"
 #include "connection_init.h"
 #include "api_parser.h"
 

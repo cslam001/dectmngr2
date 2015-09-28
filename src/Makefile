@@ -22,7 +22,7 @@ CFLAGS += -Wextra
 
 # Ability to build without ubus etc. for Sercomm
 CFLAGS += -DWITH_UBUS
-LIBS += -lubox -lubus
+LIBS += -lubox -lubus -lblobmsg_json
 dectmngr2: ubus.o
 
 
