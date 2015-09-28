@@ -110,8 +110,8 @@ static void connection_init_handler(packet_t *p) {
 							 .IsMaster = 0x0,
 							 .DoClockSync = 0x1,
 							 .PcmFscFreq = AP_FSC_FREQ_8KHZ,  // PCM FS 16/8 Khz select (1 - 16Khz, 0 - 8Khz)
-							 .PcmFscLength = AP_FSC_LENGTH_1,
-							 .PcmFscStartAligned = 0x0,
+							 .PcmFscLength = AP_FSC_LENGTH_NORMAL,
+							 .PcmFscStartAligned = 0x1,
 							 .PcmClk = 0x0,    /* Ignored if device is slave */
 							 .PcmClkOnRising = 0x0, /* best */
 							 .PcmClksPerBit = 0x2,

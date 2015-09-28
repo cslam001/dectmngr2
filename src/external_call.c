@@ -216,8 +216,8 @@ static void connect_ind(busmail_t *m) {
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
 			    API_IE_CODEC_LIST,
-			    WideBandCodecIe->IeLength,
-			    (rsuint8 *) WideBandCodecIe->IeData);
+			    NarrowBandCodecIe->IeLength,
+			    (rsuint8 *) NarrowBandCodecIe->IeData);
 
 	ApiBuildInfoElement(&ie_block,
 			    &ie_block_len,
@@ -590,7 +590,7 @@ static void setup_ind(busmail_t *m) {
 	ApiFpSetAudioFormatReqType  aud_req = {
 		.Primitive = API_FP_SET_AUDIO_FORMAT_REQ,
 		.DestinationId = endpt,
-		.AudioDataFormat = AP_DATA_FORMAT_LINEAR_16kHz
+		.AudioDataFormat = AP_DATA_FORMAT_LINEAR_8kHz
 	};
 
 	printf("API_FP_SET_AUDIO_FORMAT_REQ\n");
