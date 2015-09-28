@@ -264,8 +264,9 @@ void app_init(void * base, config_t * config) {
 	   application frame handlers to the dect_bus */
 	api_parser_init(dect_bus);
 	connection_init(dect_bus);
-	internal_call_init(dect_bus);
+	external_call_init(dect_bus);
 	handset_init(dect_bus);
+
 
 	/* Init client subsystem */
 	client_init();

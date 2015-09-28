@@ -199,19 +199,19 @@ static void connection_init_handler(packet_t *p) {
 			/* Init PCM bus */
 			printf("WRITE: API_FP_INIT_PCM_REQ\n");
 			ApiFpInitPcmReqType pcm_req =  { .Primitive = API_FP_INIT_PCM_REQ,
-						 .PcmEnable = 0x1,
-						 .IsMaster = 0x0,
-						 .DoClockSync = 0x1,
-						 .PcmFscFreq = AP_FSC_FREQ_8KHZ,  // PCM FS 16/8 Khz select (1 - 16Khz, 0 - 8Khz)
-						 .PcmFscLength = AP_FSC_LENGTH_NORMAL,
-						 .PcmFscStartAligned = 0x0,
-						 .PcmClk = 0x0,    /* Ignored if device is slave */
-						 .PcmClkOnRising = 0x0,
-						 .PcmClksPerBit = 0x1,
-						 .PcmFscInvert = 0x0,
-						 .PcmCh0Delay = 0x0,
-						 .PcmDoutIsOpenDrain = 0x1, /* Must be 1 if mult. devices on bus */
-						 .PcmIsOpenDrain = 0x0,  /* 0 == Normal mode */
+							 .PcmEnable = 0x1,
+							 .IsMaster = 0x0,
+							 .DoClockSync = 0x1,
+							 .PcmFscFreq = AP_FSC_FREQ_8KHZ,  // PCM FS 16/8 Khz select (1 - 16Khz, 0 - 8Khz)
+							 .PcmFscLength = AP_FSC_LENGTH_NORMAL,
+							 .PcmFscStartAligned = 0x1,
+							 .PcmClk = 0x0,    /* Ignored if device is slave */
+							 .PcmClkOnRising = 0x0, /* best */
+							 .PcmClksPerBit = 0x2,
+							 .PcmFscInvert = 0x0, /* best */
+							 .PcmCh0Delay = 0x0, /* no delay of entire frame */
+							 .PcmDoutIsOpenDrain = 0x1, /* Must be 1 if mult. devices on bus */
+							 .PcmIsOpenDrain = 0x0,  /* 0 == Normal mode */
 			};
 			mailProto.send(dect_bus, (uint8_t *)&pcm_req, sizeof(ApiFpInitPcmReqType));
 		}
