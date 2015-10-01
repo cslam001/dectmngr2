@@ -202,14 +202,14 @@ static void connection_init_handler(packet_t *p) {
 							 .PcmEnable = 0x1,
 							 .IsMaster = 0x0,
 							 .DoClockSync = 0x1,
-							 .PcmFscFreq = AP_FSC_FREQ_8KHZ,  // PCM FS 16/8 Khz select (1 - 16Khz, 0 - 8Khz)
+							 .PcmFscFreq = AP_FSC_FREQ_8KHZ,  /* FSC 8 kHz */
 							 .PcmFscLength = AP_FSC_LENGTH_NORMAL,
-							 .PcmFscStartAligned = 0x1,
+							 .PcmFscStartAligned = 0x0, /* FSC starts one clock before data */
 							 .PcmClk = 0x0,    /* Ignored if device is slave */
-							 .PcmClkOnRising = 0x0, /* best */
-							 .PcmClksPerBit = 0x2,
-							 .PcmFscInvert = 0x0, /* best */
-							 .PcmCh0Delay = 0x0, /* no delay of entire frame */
+							 .PcmClkOnRising = 0x1, /* Data is clocked out on rising edge */
+							 .PcmClksPerBit = 0x1, /* One clock per bit */
+							 .PcmFscInvert = 0x0,  /* FSC not inverted */
+							 .PcmCh0Delay = 0x0,   /* No 8-bit offset for chan 0 */
 							 .PcmDoutIsOpenDrain = 0x1, /* Must be 1 if mult. devices on bus */
 							 .PcmIsOpenDrain = 0x0,  /* 0 == Normal mode */
 			};
