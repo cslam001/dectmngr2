@@ -52,6 +52,9 @@ const char strOff[] = "off";
 const char strAuto[] = "auto";
 const char strPressed[] = "pressed";											// Button pressed string
 const char strReleased[] = "released";
+const char butnShrt1[] = "button.DECT";
+const char butnShrt2[] = "button.DECTS";										// Ubus button event names
+const char butnLong[] = "button.DECTL";
 
 
 static const struct blobmsg_policy ubusStateKeys[] = {							// ubus RPC "state" arguments (keys and values)
@@ -88,7 +91,7 @@ static const struct blobmsg_policy buttonKeys[] = {
 
 
 static const struct blobmsg_policy uciKeys[] = {
-	{ .name = "value", .type = BLOBMSG_TYPE_STRING },
+	[SETTING_RADIO] = { .name = "value", .type = BLOBMSG_TYPE_STRING },
 };
 
 
@@ -197,6 +200,8 @@ static void call_answer(struct ubus_request *req, int type, struct blob_attr *ms
 		// Handle setting "radio" == on/off/auto
 		if(keys[SETTING_RADIO]) {
 			strVal = blobmsg_get_string(keys[SETTING_RADIO]);
+			printf("Uci setting radio is %s\n", strVal);
+
 			if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
 				// Radio should always be on
 				connection_set_radio(1);
@@ -211,7 +216,6 @@ static void call_answer(struct ubus_request *req, int type, struct blob_attr *ms
 				//connection_set_radio(0);
 				// perhaps_disable_radio
 			}
-			printf("Uci setting is %s\n", strVal);
 		}
 	}
 }
@@ -445,7 +449,7 @@ static void ubus_event_button(struct ubus_context *ctx,
 	}
 
 	strVal = blobmsg_get_string(keys);
-	printf("Dect button event %s\n", strVal);
+	printf("Dect button event %s %s\n", type, strVal);
 
 	if(strncmp(strVal, strPressed, sizeof(strPressed)) == 0) {
 		connection_set_registration(1);
@@ -712,11 +716,11 @@ void ubus_init(void * base, config_t * config) {
 	memset(&buttonListener, 0, sizeof(buttonListener));
 	buttonListener.cb = ubus_event_button;
 	if(ubus_register_event_handler(ubusContext, &buttonListener,
-			"button.DECT") != UBUS_STATUS_OK ||
+			butnShrt1) != UBUS_STATUS_OK ||
 			ubus_register_event_handler(ubusContext, &buttonListener,
-			"button.DECTS") != UBUS_STATUS_OK ||
+			butnShrt2) != UBUS_STATUS_OK ||
 			ubus_register_event_handler(ubusContext, &buttonListener,
-			"button.DECTL") != UBUS_STATUS_OK) {
+			butnLong) != UBUS_STATUS_OK) {
 		exit_failure("Error registering ubus event handler button.DECT");
 	}
 
