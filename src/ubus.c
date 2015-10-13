@@ -27,6 +27,13 @@ enum {
 	HANDSET_PAGEALL,															// Page (ping) all handsets
 };
 
+enum {
+	SETTING_RADIO,
+};
+
+
+static uint32_t uciId;
+
 static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg);
 static int ubus_request_handset(struct ubus_context *ubus_ctx, struct ubus_object *obj,
@@ -42,6 +49,7 @@ const char ubusStrActive[] = "active";											// The "bool" we transmitt for 
 const char ubusStrInActive[] = "inactive";
 const char strOn[] = "on";
 const char strOff[] = "off";
+const char strAuto[] = "auto";
 const char strPressed[] = "pressed";											// Button pressed string
 const char strReleased[] = "released";
 
@@ -79,7 +87,9 @@ static const struct blobmsg_policy buttonKeys[] = {
 };
 
 
-
+static const struct blobmsg_policy uciKeys[] = {
+	{ .name = "value", .type = BLOBMSG_TYPE_STRING },
+};
 
 
 static struct ubus_object rpcObj = {
@@ -169,7 +179,43 @@ int ubus_send_json_string(const char *sender_id, const char *json_string)
 // Callback for: a ubus call (invocation) has replied with some data
 static void call_answer(struct ubus_request *req, int type, struct blob_attr *msg)
 {
+	struct blob_attr *keys[ARRAY_SIZE(uciKeys)];
+	const char *strVal;
+
+	if(type != UBUS_MSG_DATA) return;
+	if(req->status_code != UBUS_STATUS_OK) printf("Got error answer\n");
+
+	// Got answer from an UCI query?
+	if(uciId == req->peer) {
+
+		// Tokenize message key/value paris into an array
+		if(blobmsg_parse(uciKeys, ARRAY_SIZE(uciKeys), keys, 
+				blob_data(msg), blob_len(msg))) {
+			return;
+		}
+
+		// Handle setting "radio" == on/off/auto
+		if(keys[SETTING_RADIO]) {
+			strVal = blobmsg_get_string(keys[SETTING_RADIO]);
+			if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
+				// Radio should always be on
+				connection_set_radio(1);
+			}
+			else if(strncmp(strVal, strOff, sizeof(strOff)) == 0) {
+				// Radio should always be off
+				connection_set_radio(0);
+			}
+			else if(strncmp(strVal, strAuto, sizeof(strAuto)) == 0) {
+				/* Radio should be on if we have registered
+				 * handsets, otherwise off. */
+				//connection_set_radio(0);
+				// perhaps_disable_radio
+			}
+			printf("Uci setting is %s\n", strVal);
+		}
+	}
 }
+
 
 
 //-------------------------------------------------------------
@@ -183,36 +229,22 @@ static void call_complete(struct ubus_request *req, int ret)
 }
 
 
+
 //-------------------------------------------------------------
-// We invoke someone with ubus RPC and a string argument
-int ubus_call_string(const char *path, const char* method, const char *key, 
-	const char *val, ubus_call_complete_callback cb)
+// Common code for sending a call invocation away
+static int ubus_call_blob(uint32_t id, const char* method, struct blob_buf *blob, 
+	ubus_call_complete_callback cb)
 {
 	struct ubus_request *req;
-	struct blob_buf blob;
-	uint32_t id;
 	int res;
 
 	res = 0;
-
 	req = calloc(1, sizeof(struct ubus_request));
 	if(!req) return -1;
 
-	memset(&blob, 0, sizeof(blob));
-	if(blob_buf_init(&blob, 0)) return -1;
-	blobmsg_add_string(&blob, key, val);
-
-	// Find id number for ubus "path"
-	res = ubus_lookup_id(ubusContext, path, &id);
-	if(res != UBUS_STATUS_OK) {
-		printf("Error searching for usbus path\n");
-		res = -1;
-		goto out;
-	}
-
 	/* Call remote method, without
 	 * waiting for completion. */
-	res = ubus_invoke_async(ubusContext, id, method, blob.head, req);
+	res = ubus_invoke_async(ubusContext, id, method, blob->head, req);
 	if(res != UBUS_STATUS_OK) {
 		printf("Error invoking\n");
 		res = -1;
@@ -227,11 +259,56 @@ int ubus_call_string(const char *path, const char* method, const char *key,
 	ubus_complete_request_async(ubusContext, req);
 
 out:
-	if(res == -1) free(req);
-	blob_buf_free(&blob);
+	blob_buf_free(blob);
 
 	return res;
 }
+
+
+
+//-------------------------------------------------------------
+// We invoke someone with ubus RPC and a string argument
+int ubus_call_string(const char *path, const char* method, const char *key, 
+	const char *val, ubus_call_complete_callback cb)
+{
+	struct blob_buf blob;
+	uint32_t id;
+	int res;
+
+	res = 0;
+	memset(&blob, 0, sizeof(blob));
+	if(blob_buf_init(&blob, 0)) return -1;
+	blobmsg_add_string(&blob, key, val);
+
+	// Find id number for ubus "path"
+	res = ubus_lookup_id(ubusContext, path, &id);
+	if(res != UBUS_STATUS_OK) {
+		printf("Error searching for usbus path\n");
+		return -1;
+	}
+
+	return ubus_call_blob(uciId, method, &blob, cb);
+}
+
+
+
+//-------------------------------------------------------------
+// Query UCI for settings. The reply arrives in call_answer().
+int uci_call_query(const char *option)
+{
+	struct blob_buf blob;
+	int res;
+
+	res = 0;
+	memset(&blob, 0, sizeof(blob));
+	if(blob_buf_init(&blob, 0)) return -1;
+	blobmsg_add_string(&blob, "config", ubusSenderId);
+	blobmsg_add_string(&blob, "section", ubusSenderId);
+	blobmsg_add_string(&blob, "option", option);
+
+	return ubus_call_blob(uciId, "get", &blob, 0);
+}
+
 
 
 //-------------------------------------------------------------
@@ -635,7 +712,11 @@ void ubus_init(void * base, config_t * config) {
 	memset(&buttonListener, 0, sizeof(buttonListener));
 	buttonListener.cb = ubus_event_button;
 	if(ubus_register_event_handler(ubusContext, &buttonListener,
-			"button.DECT") != UBUS_STATUS_OK) {
+			"button.DECT") != UBUS_STATUS_OK ||
+			ubus_register_event_handler(ubusContext, &buttonListener,
+			"button.DECTS") != UBUS_STATUS_OK ||
+			ubus_register_event_handler(ubusContext, &buttonListener,
+			"button.DECTL") != UBUS_STATUS_OK) {
 		exit_failure("Error registering ubus event handler button.DECT");
 	}
 
@@ -643,6 +724,11 @@ void ubus_init(void * base, config_t * config) {
 	if(ubus_add_object(ubusContext, &rpcObj) != UBUS_STATUS_OK) {
 		exit_failure("Error registering ubus object");
 	}
+
+	if(ubus_lookup_id(ubusContext, "uci", &uciId) != UBUS_STATUS_OK) {
+		exit_failure("Error, can't get UCI path");
+	}
+
 }
 
 

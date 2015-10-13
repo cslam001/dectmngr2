@@ -224,8 +224,9 @@ static void connection_init_handler(packet_t *p) {
 
 			ubus_send_string("dectmngr", ubusStrActive);
 
-			/* Start protocol */
-			connection_set_radio(1);
+			/* Start protocol (the radio) if
+			 * it's configured by user. */
+			uci_call_query("radio");
 		}
 		break;
 
