@@ -19,6 +19,11 @@ struct handsets_t {
 
 
 
+
+//-------------------------------------------------------------
+struct handsets_t handsets;
+
+
 //-------------------------------------------------------------
 int list_handsets(void);
 int delete_handset(int id);

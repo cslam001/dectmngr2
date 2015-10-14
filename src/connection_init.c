@@ -119,7 +119,7 @@ static void connection_init_handler(packet_t *p) {
 					.Primitive = API_FP_FEATURES_REQ,
 					.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
 				};
-				
+
 				mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
 			}
 			else {
@@ -238,7 +238,6 @@ static void connection_init_handler(packet_t *p) {
 
 
 
-
 //-------------------------------------------------------------
 // Timer handler, for turning of registration
 // after a delay if no handset has registered.
@@ -303,6 +302,11 @@ int connection_set_radio(int onoff) {
 	struct itimerspec newTimer;
 
 	if(onoff) {
+		/* Don't enable radio again if it's already active
+		 * since it would inactivate registration in the
+		 * timer handler. */
+		if(connection.radio == ACTIVE) return 0;
+
 		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
 		mailProto.send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
 		connection.radio = ACTIVE;												// No confirmation is replied
@@ -404,4 +408,26 @@ int start_internal_dect(void) {
 
 	return 0;
 }
+
+
+
+//-------------------------------------------------------------
+// If user has set the radio to "auto" we will disable
+// it when no handsets are registered (to reduce EMC).
+int perhaps_disable_radio(void) {
+	if(connection.registration == ACTIVE) return 0;
+
+	if(connection.uciRadioConf == RADIO_AUTO) {
+		return connection_set_radio(handsets.termCount > 0);
+	}
+	else if(connection.uciRadioConf == RADIO_ALWAYS_ON) {
+		return connection_set_radio(1);
+	}
+	else if(connection.uciRadioConf == RADIO_ALWAYS_OFF) {
+		return connection_set_radio(0);
+	}
+
+	return 0;
+}
+
 

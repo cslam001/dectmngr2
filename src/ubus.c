@@ -197,7 +197,7 @@ static void call_answer(struct ubus_request *req, int type, struct blob_attr *ms
 			return;
 		}
 
-		// Handle setting "radio" == on/off/auto
+		// Handle UCI setting "radio" == on/off/auto
 		if(keys[SETTING_RADIO]) {
 			strVal = blobmsg_get_string(keys[SETTING_RADIO]);
 
@@ -218,7 +218,7 @@ static void call_answer(struct ubus_request *req, int type, struct blob_attr *ms
 				 * handsets, otherwise off. */
 				printf("Uci setting radio active when handsets registered\n");
 				connection.uciRadioConf = RADIO_AUTO;
-// issue a list to get number of registerd handsets
+				list_handsets();
 			}
 		}
 	}

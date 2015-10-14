@@ -12,6 +12,7 @@
 #include "stream.h"
 #include "event_base.h"
 #include "error.h"
+#include "connection_init.h"
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
@@ -23,7 +24,6 @@
 
 
 
-static struct handsets_t handsets;
 static void *dect_bus;
 
 
@@ -71,7 +71,7 @@ static void got_handset_ipui(busmail_t *m)
 	 * haven't got them all. */
 	i++;
 	if(i >= handsets.termCount) {
-//		perhaps_disable_protocol();
+		perhaps_disable_radio();
 		ubus_reply_handset_list(0, &handsets);
 	}
 	else {
@@ -90,6 +90,7 @@ int list_handsets(void)
 		.StartTerminalId = 0
 	};
 
+	printf("Querying number of registered handsets\n");
 	mailProto.send(dect_bus, (uint8_t*) &m, sizeof(m));
 
 	return 0;
@@ -116,6 +117,7 @@ static void got_registration_count(busmail_t *m)
 
 	handsets.termCount = resp->TerminalIdCount;
 	memset(handsets.terminal, 0, sizeof(struct terminal_t) * MAX_NR_HANDSETS);
+	printf("There are %d registered handsets\n", handsets.termCount);
 
 	for(i = 0 ; i < resp->TerminalIdCount; i++) {
 		handsets.terminal[i].id = resp->TerminalId[i];
@@ -127,7 +129,7 @@ static void got_registration_count(busmail_t *m)
 		get_handset_ipui(handsets.terminal[0].id);
 	}
 	else {
-		//perhaps_disable_protocol();
+		perhaps_disable_radio();
 		ubus_reply_handset_list(0, &handsets);
 	}
 }
@@ -191,12 +193,16 @@ static void handset_handler(packet_t *p)
 
 		case API_FP_MM_REGISTRATION_COMPLETE_IND:
 			if(resp->Status == RSS_SUCCESS) {
+				if(handsets.termCount < MAX_NR_HANDSETS) handsets.termCount++;
 				ubus_send_string("handset", "add");
 			}
+			perhaps_disable_radio();
 			break;
 
 		case API_FP_MM_DELETE_REGISTRATION_CFM:
 			if(resp->Status == RSS_SUCCESS) {
+				if(handsets.termCount) handsets.termCount--;
+				perhaps_disable_radio();
 				ubus_send_string("handset", "remove");
 			}
 			break;
