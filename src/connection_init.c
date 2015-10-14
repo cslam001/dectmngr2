@@ -26,35 +26,10 @@
 #include <Api/Linux/ApiLinux.h>
 #include <dectshimdrv.h>
 
-#define TRUE 1
-#define FALSE 0
-
-enum remote_bool_t {
-	UNKNOWN,
-	PENDING_ACTIVE,										// We have sent a request to activate something
-	ACTIVE,												// Confirmed response, it's active
-	PENDING_INACTIVE,
-	INACTIVE,
-};
-
-static const char *remote_bool_str[] = {				// String explanations of enum remote_bool_t
-	"unknown",
-	"pending active",
-	"active",
-	"pending inactive",
-	"inactive",
-};
-
-
-struct connection_t {
-	enum remote_bool_t registration;
-	enum remote_bool_t radio;
-};
-
 
 static int reset_ind = 0;
 static void *dect_bus;
-static struct connection_t connection;
+struct connection_t connection;
 static int timer_fd;
 static void *timer_stream;
 
@@ -240,11 +215,13 @@ static void connection_init_handler(packet_t *p) {
 			if(resp->Status == RSS_SUCCESS) {
 				if(connection.registration == PENDING_ACTIVE) {
 					connection.registration = ACTIVE;
+					printf("Registration is active\n");
 					ubus_send_string("registration", ubusStrActive);			// Send ubus event
 					ubus_call_string("led.dect", "set", "state", "notice", NULL);// Light up box LED
 				}
 				else if(connection.registration == PENDING_INACTIVE) {
 						connection.registration = INACTIVE;
+						printf("Registration is inactive\n");
 						ubus_send_string("registration", ubusStrInActive);
 						ubus_call_string("led.dect", "set", "state", 
 							(connection.radio == ACTIVE) ? "ok" : "off", NULL);
@@ -326,10 +303,10 @@ int connection_set_radio(int onoff) {
 	struct itimerspec newTimer;
 
 	if(onoff) {
-		printf("\nWRITE: API_FP_MM_START_PROTOCOL_REQ\n");
 		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
 		mailProto.send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
 		connection.radio = ACTIVE;												// No confirmation is replied
+		printf("Radio is active\n");
 		ubus_send_string("radio", ubusStrActive);
 		ubus_call_string("led.dect", "set", "state", "ok", NULL);
 	}
@@ -337,6 +314,7 @@ int connection_set_radio(int onoff) {
 		ApiFpMmStopProtocolReqType r = { .Primitive = API_FP_MM_STOP_PROTOCOL_REQ, };
 		mailProto.send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStopProtocolReqType));
 		connection.radio = INACTIVE;											// No confirmation is replied
+		printf("Radio is inactive\n");
 		ubus_send_string("radio", ubusStrInActive);
 		ubus_call_string("led.dect", "set", "state", "off", NULL);
 	}

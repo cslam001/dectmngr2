@@ -200,21 +200,25 @@ static void call_answer(struct ubus_request *req, int type, struct blob_attr *ms
 		// Handle setting "radio" == on/off/auto
 		if(keys[SETTING_RADIO]) {
 			strVal = blobmsg_get_string(keys[SETTING_RADIO]);
-			printf("Uci setting radio is %s\n", strVal);
 
 			if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
 				// Radio should always be on
+				printf("Uci setting radio permanently active\n");
+				connection.uciRadioConf = RADIO_ALWAYS_ON;
 				connection_set_radio(1);
 			}
 			else if(strncmp(strVal, strOff, sizeof(strOff)) == 0) {
 				// Radio should always be off
+				printf("Uci setting radio permanently inactive\n");
+				connection.uciRadioConf = RADIO_ALWAYS_OFF;
 				connection_set_radio(0);
 			}
 			else if(strncmp(strVal, strAuto, sizeof(strAuto)) == 0) {
 				/* Radio should be on if we have registered
 				 * handsets, otherwise off. */
-				//connection_set_radio(0);
-				// perhaps_disable_radio
+				printf("Uci setting radio active when handsets registered\n");
+				connection.uciRadioConf = RADIO_AUTO;
+// issue a list to get number of registerd handsets
 			}
 		}
 	}
@@ -291,7 +295,7 @@ int ubus_call_string(const char *path, const char* method, const char *key,
 		return -1;
 	}
 
-	return ubus_call_blob(uciId, method, &blob, cb);
+	return ubus_call_blob(id, method, &blob, cb);
 }
 
 
@@ -449,13 +453,34 @@ static void ubus_event_button(struct ubus_context *ctx,
 	}
 
 	strVal = blobmsg_get_string(keys);
-	printf("Dect button event %s %s\n", type, strVal);
+	//printf("Dect button event %s %s\n", type, strVal);
 
-	if(strncmp(strVal, strPressed, sizeof(strPressed)) == 0) {
-		connection_set_registration(1);
-	}
-	else if(strncmp(strVal, strReleased, sizeof(strReleased)) == 0) {
-		connection_set_radio(0);
+	/* Do nothing on button presses, we don't want to
+	 * trigger a radio activity just before we might
+	 * turn radio off (at button release). */
+	if(strncmp(strVal, strReleased, sizeof(strReleased))) return;
+
+	// Long button released?
+	if(strncmp(type, butnLong, sizeof(butnLong)) == 0) {
+		if(connection.uciRadioConf == RADIO_ALWAYS_OFF) {
+			printf("Buttin activates radio permanently\n");
+			connection.uciRadioConf = RADIO_ALWAYS_ON;
+			connection_set_registration(1);
+		}
+		else {
+			printf("Button inactivates radio permanently\n");
+			connection.uciRadioConf = RADIO_ALWAYS_OFF;
+			connection_set_radio(0);
+		}
+	} 
+
+	// Short button released?
+	else if(strncmp(type, butnShrt1, sizeof(butnShrt1)) == 0 ||
+			strncmp(type, butnShrt2, sizeof(butnShrt2)) == 0) {
+		if(connection.uciRadioConf != RADIO_ALWAYS_OFF) {
+			printf("Button activates registration\n");
+			connection_set_registration(1);
+		}
 	}
 }
 
