@@ -46,29 +46,38 @@
 #define INBUF_SIZE 5000
 #define BUF_SIZE 50000
 
+//-------------------------------------------------------------
 buffer_t * buf;
 int client_connected;
 static int dect_fd;
 static void *dect_bus;
-void * dect_stream, * listen_stream, * debug_stream, * proxy_stream;
+void * dect_stream, * listen_stream, * debug_srv_steam;
 void * client_stream;
+static void *debug_bus;
+static void *debug_int_stream;
+static int debug_int_fd;
 int epoll_fd;
 void * client_list;
 void * client_bus;
 struct sigaction act;
 struct mail_protocol_t mailProto;
+int hwIsInternal;
+static config_t *conf;
 
 
+//-------------------------------------------------------------
+static int dect_hw_reset(void);
+
+
+//-------------------------------------------------------------
 static void sighandler(int signum, siginfo_t * info, void * ptr) {
-
 	printf("Recieved signal %d\n", signum);
 }
 
 
 static void eap(packet_t *p) {
-	
 	printf("send to dect_bus\n");
-	busmail_send_addressee(dect_bus, p->data, p->size);
+	busmail_send_addressee(debug_bus, p->data, p->size);
 }
 
 
@@ -110,9 +119,7 @@ static void client_handler(void * client_stream, void * event) {
 		/* Send packets from clients to dect_bus */
 		eap_write(client_bus, event);
 		eap_dispatch(client_bus);
-
 	}
-
 }
 
 
@@ -132,7 +139,7 @@ static void client_init(void) {
 	
 	setup_signal_handler();
 	client_list = list_new();
-	mailProto.add_handler(dect_bus, client_packet_handler);
+	busmail_add_handler(debug_bus, client_packet_handler);
 }
 
 static void listen_handler(void * listen_stream, void * event) {
@@ -163,9 +170,14 @@ static void listen_handler(void * listen_stream, void * event) {
 		//list_each(client_list, list_connected);
 
 		/* Setup client busmail connection */
-		printf("setup client_bus\n");
+		printf("setup client_bus on fd %d\n", client_fd);
 		client_bus = eap_new(client_fd, eap);
 		client_connected = 1;
+
+		if(conf->wait_dbg_client == 1) {
+			dect_hw_reset();
+			conf->wait_dbg_client = 2;
+		}
 	}
 }
 
@@ -203,7 +215,9 @@ static int setup_listener(uint16_t port, uint32_t type) {
 }
 
 
-void dect_handler(void * dect_stream, void * event) {
+
+//-------------------------------------------------------------
+static void dect_handler(void * dect_stream, void * event) {
 	/* Add input to busmail subsystem */
 	if (mailProto.receive(dect_bus, event) < 0) {
 		printf("busmail buffer full\n");
@@ -216,18 +230,35 @@ void dect_handler(void * dect_stream, void * event) {
 
 
 
+//-------------------------------------------------------------
+static void debug_handler(void *stream, void *event) {
+	/* Add input to busmail subsystem */
+	if (busmail_receive(debug_bus, event) < 0) {
+		printf("busmail debug buffer full\n");
+	}
+	
+	/* Process whole packets in buffer. The previously registered
+	   callback will be called for application frames */
+	busmail_dispatch(debug_bus);
+}
+
+
+
+//-------------------------------------------------------------
 void app_init(void * base, config_t * config) {
 	
-	int debug_fd, proxy_fd, isInternal = 0;
+	int debug_sock;
 
 	printf("app_init\n");
+	conf = config;
 	
-	if(access("/dev/dect", R_OK | W_OK) == 0) {
+	if(access("/dev/dect", R_OK | W_OK) == 0 &&
+			(dect_fd = open("/dev/dect", O_RDWR)) &&
+			(debug_int_fd = open("/dev/dectdbg", O_RDWR))) {
 		/* CPU internal Dect. It has a simple
 		 * protocol, we always get entire packets
 		 * all at once. */
-		isInternal = 1;
-		dect_fd = tty_open("/dev/dect");
+		hwIsInternal = 1;
 		mailProto.new = rawmail_new;
 		mailProto.add_handler = rawmail_add_handler;
 		mailProto.dispatch = rawmail_dispatch;
@@ -238,7 +269,7 @@ void app_init(void * base, config_t * config) {
 		/* External Dect chip, connected via
 		 * serial port. Packets arrive one byte
 		 * at a time which we need to buffer. */
-		isInternal = 0;
+		hwIsInternal = 0;
 		dect_fd = tty_open("/dev/ttyS1");
 		tty_set_raw(dect_fd);
 		tty_set_baud(dect_fd, B115200);
@@ -267,34 +298,51 @@ void app_init(void * base, config_t * config) {
 	external_call_init(dect_bus);
 	handset_init(dect_bus);
 
-
-	/* Init client subsystem */
-	client_init();
-
 	/* Setup debug socket */
-	debug_fd = setup_listener(10468, INADDR_ANY);
-	debug_stream = stream_new(debug_fd);
-	stream_add_handler(debug_stream, MAX_EVENT_SIZE, listen_handler);
-	event_base_add_stream(debug_stream);
+	debug_sock = setup_listener(10468, INADDR_ANY);
+	debug_srv_steam = stream_new(debug_sock);
+	stream_add_handler(debug_srv_steam, MAX_EVENT_SIZE, listen_handler);
+	event_base_add_stream(debug_srv_steam);
 
-	/* Setup proxy socket */
-	proxy_fd = setup_listener(7777, INADDR_LOOPBACK);
-	proxy_stream = stream_new(proxy_fd);
-	stream_add_handler(proxy_stream, MAX_EVENT_SIZE, listen_handler);
-	event_base_add_stream(proxy_stream);
-
-	if(isInternal) {
-		start_internal_dect();
+	/* For internal Dect the debug data is transfered
+	 * via a separatde character device. External Dect
+	 * use same serial port as control data (multiplexed) */
+	if(hwIsInternal) {
+		debug_int_stream = stream_new(debug_int_fd);
+		stream_add_handler(debug_int_stream, MAX_EVENT_SIZE, debug_handler);
+		event_base_add_stream(debug_int_stream);
+		debug_bus = busmail_new(debug_int_fd);
 	}
 	else {
-		// Reset chip
-		printf("DECT TX TO BRCM RX\n");
-		if(gpio_control(118, 0)) return;
-		printf("RESET_DECT\n");
-		if(dect_chip_reset()) return;
+		/* For external Dect the debug data is transfered
+		 * via same serial port as control data (multiplexed). */
+		debug_bus = dect_bus;
 	}
+
+	/* Init debug client subsystem */
+	client_init();
+
+	if(conf->wait_dbg_client) return;
+
+	dect_hw_reset();
 
 	return;
 }
 
 
+
+//-------------------------------------------------------------
+static int dect_hw_reset(void) {
+	if(hwIsInternal) {
+		return start_internal_dect();
+	}
+	else {
+		// Reset chip
+		printf("DECT TX TO BRCM RX\n");
+		if(gpio_control(118, 0)) return -1;
+		printf("RESET_DECT\n");
+		if(dect_chip_reset()) return -1;
+	}
+
+	return 0;
+}

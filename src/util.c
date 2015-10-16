@@ -67,12 +67,13 @@ void util_dump(unsigned char *buf, int size, char *start) {
 static void print_usage(const char * name) {
 
 	printf("Usage: %s [--app] [--prog] [--nvs]\n", name);
-	printf("\t[--help]\n\n");
+	printf("\t[--help] [--rsx]\n\n");
 
 	printf("\tapp\t: Start in application mode\n");
 	printf("\tprog\t: Program DECT flash chip\n");
 	printf("\tnvs\t: Configure DECT chip\n");
 	printf("\thelp\t: print this help and exit\n\n");
+	printf("\trsx\t: Wait for RSX debug connection\n\n");
 }
 
 
@@ -86,6 +87,7 @@ int check_args(int argc, char * argv[], config_t * c) {
 		{"prog", no_argument, NULL, 'p'},
 		{"app", no_argument, NULL, 'a'},
 		{"nvs", no_argument, NULL, 'n'},
+		{"rsx", no_argument, NULL, 'r'},
 		{NULL, 0, NULL, 0}
 	};
 
@@ -106,6 +108,10 @@ int check_args(int argc, char * argv[], config_t * c) {
 
 		case 'p':
 			c->mode = PROG_MODE;
+			break;
+
+		case 'r':
+			c->wait_dbg_client = 1;
 			break;
 
 		case 'h':

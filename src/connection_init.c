@@ -292,6 +292,7 @@ void connection_init(void * bus) {
 	 * reseted and thus we know initial state. */
 	connection.radio = INACTIVE;
 	connection.registration = INACTIVE;
+	connection.uciRadioConf = RADIO_AUTO;
 }
 
 

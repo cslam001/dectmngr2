@@ -15,6 +15,7 @@ struct bin_img {
 typedef struct {
 	uint32_t mode;
 	uint8_t test_enable;
+	uint8_t wait_dbg_client;									// Wait for debug client to connect before init of Dect
 } config_t;
 
 
