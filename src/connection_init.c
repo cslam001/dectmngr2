@@ -201,7 +201,7 @@ static void connection_init_handler(packet_t *p) {
 
 			/* Start protocol (the radio) if
 			 * it's configured by user. */
-			uci_call_query("radio");
+			if(uci_call_query("radio")) perhaps_disable_radio();
 		}
 		break;
 
