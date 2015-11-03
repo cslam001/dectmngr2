@@ -252,7 +252,8 @@ void app_init(void * base, config_t * config) {
 	printf("app_init\n");
 	conf = config;
 	
-	if(access("/dev/dect", R_OK | W_OK) == 0 &&
+	if(0 &&
+access("/dev/dect", R_OK | W_OK) == 0 &&
 			(dect_fd = open("/dev/dect", O_RDWR)) &&
 			(debug_int_fd = open("/dev/dectdbg", O_RDWR))) {
 		/* CPU internal Dect. It has a simple
