@@ -46,6 +46,8 @@ int main(int argc, char * argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
+	if(timeSinceInit()) exit(EXIT_FAILURE);
+
 	/* Select operating mode */
 	switch (config->mode) {
 	case PROG_MODE:
