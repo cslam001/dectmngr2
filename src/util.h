@@ -26,5 +26,7 @@ int initial_transition(config_t * config, int dect_fd);
 int gpio_control(int gpio, int state);
 int dect_chip_reset(void);
 void print_status(RsStatusType s);
+int timeSinceInit(void);
+int64_t timeSinceStart(void);
 
 #endif /* UTIL_H */

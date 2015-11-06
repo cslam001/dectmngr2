@@ -19,6 +19,11 @@
 
 #include <Api/RsStandard.h>
 
+
+static struct timespec timeStartup;								// Time stamp of when application starts up
+
+
+
 void print_status(RsStatusType s) {
 
 	switch (s) {
@@ -175,5 +180,37 @@ int dect_chip_reset(void) {
 }
 
 
+// Initialize the time stamp measurement for how
+// long this application has been up and running.
+int timeSinceInit(void) {
+	if(clock_gettime(CLOCK_MONOTONIC, &timeStartup)) {
+		perror("Error getting time");
+		return -1;
+	}
 
+	return 0;
+}
+
+
+// Return number of micro seconds since this
+// application started up.
+int64_t timeSinceStart(void) {
+	struct timespec now;
+	long t;
+
+	if(clock_gettime(CLOCK_MONOTONIC, &now)) {
+		perror("Error getting time");
+		return -1;
+	}
+
+	if(now.tv_nsec >= timeStartup.tv_nsec) {
+		t = now.tv_nsec - timeStartup.tv_nsec;
+	}
+	else {
+		t = 1e9L - timeStartup.tv_nsec + now.tv_nsec;
+	}
+
+	return (int64_t) ((now.tv_sec - timeStartup.tv_sec) * 1e6L) +
+		(int64_t) (t / 1e3L);
+}
 
