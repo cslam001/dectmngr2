@@ -225,6 +225,73 @@ static void dect_codec_init(void)
 
 
 
+/* Caller dials */
+static void setup_ind(busmail_t *m) {
+
+	ApiFpCcSetupIndType * p = (ApiFpCcSetupIndType *) &m->mail_header;
+	char term[15];
+	ApiFpCcSetupResType reply;
+	struct call_t *call;
+	
+	printf("[%llu] CallReference: val %d instancefp %d\n", timeSinceStart(),
+		p->CallReference.Value, p->CallReference.Instance.Fp);
+	printf("TerminalIdInitiating: %d\n", p->TerminalId);
+	printf("InfoElementLength: %d\n", p->InfoElementLength);
+	printf("BasicService (voice quality): %d\n", p->BasicService);
+	printf("CallClass: %d\n", p->CallClass);
+
+	incoming_call = p->CallReference;
+	incoming_call.Instance.Host = p->TerminalId;
+	reply.Primitive = API_FP_CC_SETUP_RES;
+	reply.CallReference = incoming_call;
+	reply.AudioId.IntExtAudio = API_IEA_EXT;
+	reply.AudioId.AudioEndPointId = p->TerminalId - 1;
+
+	call = find_free_call_slot();
+	if(!call) {
+		printf("Error, no free call slot\n");
+		reply.Status = RSS_NO_RESOURCE;
+		mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
+		return;
+	}
+
+	call->CallReference = p->CallReference;
+	call->TerminalId = p->TerminalId;
+	call->BasicService = p->BasicService;
+
+	snprintf(term, sizeof(term), "%d", p->TerminalId);
+	ubus_send_string_api("dect.api.setup_ind", "terminal", term);
+	
+	if(p->InfoElementLength > 0) {
+		call->SystemCallId = get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+		system_call_id = call->SystemCallId;
+		printf("syscall id: %d\n", call->SystemCallId->ApiSystemCallId);
+
+		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+
+		printf("API_FP_CC_SETUP_RES\n");
+		reply.Status = RSS_SUCCESS;
+		mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
+	}
+	else {
+		printf("Error, got no system call ID\n");
+		reply.Status = RSS_MISSING_PARAMETER;
+		mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
+		return;
+	}
+		
+	ApiFpSetAudioFormatReqType  aud_req = {
+		.Primitive = API_FP_SET_AUDIO_FORMAT_REQ,
+		.DestinationId = p->TerminalId - 1,
+		.AudioDataFormat = AP_DATA_FORMAT_LINEAR_8kHz
+	};
+
+	printf("API_FP_SET_AUDIO_FORMAT_REQ\n");
+	mailProto.send(dect_bus, (uint8_t *)&aud_req, sizeof(ApiFpSetAudioFormatReqType));
+}
+
+
+
 /* Handset answers */
 static void connect_ind(busmail_t *m) {
 	
@@ -578,71 +645,6 @@ static void release_ind(busmail_t *m) {
 
 
 
-
-/* Caller dials */
-static void setup_ind(busmail_t *m) {
-
-	ApiFpCcSetupIndType * p = (ApiFpCcSetupIndType *) &m->mail_header;
-	char term[15];
-	ApiFpCcSetupResType reply;
-	struct call_t *call;
-	
-	printf("[%llu] CallReference: val %d instancefp %d\n", timeSinceStart(),
-		p->CallReference.Value, p->CallReference.Instance.Fp);
-	printf("TerminalIdInitiating: %d\n", p->TerminalId);
-	printf("InfoElementLength: %d\n", p->InfoElementLength);
-	printf("BasicService (voice quality): %d\n", p->BasicService);
-	printf("CallClass: %d\n", p->CallClass);
-
-	incoming_call = p->CallReference;
-	incoming_call.Instance.Host = p->TerminalId;
-	reply.Primitive = API_FP_CC_SETUP_RES;
-	reply.CallReference = incoming_call;
-	reply.AudioId.IntExtAudio = API_IEA_EXT;
-	reply.AudioId.AudioEndPointId = p->TerminalId - 1;
-
-	call = find_free_call_slot();
-	if(!call) {
-		printf("Error, no free call slot\n");
-		reply.Status = RSS_NO_RESOURCE;
-		mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
-		return;
-	}
-
-	call->CallReference = p->CallReference;
-	call->TerminalId = p->TerminalId;
-	call->BasicService = p->BasicService;
-
-	snprintf(term, sizeof(term), "%d", p->TerminalId);
-	ubus_send_string_api("dect.api.setup_ind", "terminal", term);
-	
-	if(p->InfoElementLength > 0) {
-		call->SystemCallId = get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
-		system_call_id = call->SystemCallId;
-		printf("syscall id: %d\n", call->SystemCallId->ApiSystemCallId);
-
-		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
-
-		printf("API_FP_CC_SETUP_RES\n");
-		reply.Status = RSS_SUCCESS;
-		mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
-	}
-	else {
-		printf("Error, got no system call ID\n");
-		reply.Status = RSS_MISSING_PARAMETER;
-		mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
-		return;
-	}
-		
-	ApiFpSetAudioFormatReqType  aud_req = {
-		.Primitive = API_FP_SET_AUDIO_FORMAT_REQ,
-		.DestinationId = p->TerminalId - 1,
-		.AudioDataFormat = AP_DATA_FORMAT_LINEAR_8kHz
-	};
-
-	printf("API_FP_SET_AUDIO_FORMAT_REQ\n");
-	mailProto.send(dect_bus, (uint8_t *)&aud_req, sizeof(ApiFpSetAudioFormatReqType));
-}
 
 
 
