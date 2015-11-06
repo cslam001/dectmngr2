@@ -291,6 +291,49 @@ static void setup_ind(busmail_t *m) {
 }
 
 
+// PCM-bus audio format setup
+static void audio_format_cfm(busmail_t *m) {
+
+	ApiFpSetAudioFormatCfmType * p = (ApiFpSetAudioFormatCfmType *) &m->mail_header;
+	rsuint16 ie_block_len = 0;
+	ApiInfoElementType * ie_block = NULL;
+	ApiCallStatusType call_status;
+	
+	print_status(p->Status);
+
+	/* Call progress state to initiating handset */
+	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
+	call_status.CallStatusValue.State = API_CSS_CALL_SETUP_ACK;
+	
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_SYSTEM_CALL_ID,
+			    sizeof(ApiSystemCallIdType),
+			    (rsuint8 *) find_call_by_ref(&incoming_call)->SystemCallId);
+
+	ApiBuildInfoElement(&ie_block,
+			    &ie_block_len,
+			    API_IE_CALL_STATUS,
+			    sizeof(ApiCallStatusType),
+			    (rsuint8 *) &call_status);
+
+
+	ApiFpCcSetupAckReqType * ra = (ApiFpCcSetupAckReqType *) malloc(sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
+	ra->Primitive = API_FP_CC_SETUP_ACK_REQ;
+	ra->CallReference = incoming_call;
+	ra->Signal = API_CC_SIGNAL_DIAL_TONE_ON;
+	ra->ProgressInd = API_IN_BAND_NOT_AVAILABLE;
+
+	ra->InfoElementLength = ie_block_len;
+	memcpy(ra->InfoElement, ie_block, ie_block_len);
+	
+	printf("[%llu] API_FP_CC_SETUP_ACK_REQ\n", timeSinceStart());
+	
+	mailProto.send(dect_bus, (uint8_t *)ra, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
+	free(ra);
+}
+
+
 
 /* Handset answers */
 static void connect_ind(busmail_t *m) {
@@ -547,48 +590,6 @@ static void call_proc_cfm(busmail_t *m) {
 	printf("API_FP_CC_ALERT_REQ in call_proc_cfm()\n");
 	mailProto.send(dect_bus, (uint8_t *) r, sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
 	free(r);
-}
-
-
-static void audio_format_cfm(busmail_t *m) {
-
-	ApiFpSetAudioFormatCfmType * p = (ApiFpSetAudioFormatCfmType *) &m->mail_header;
-	rsuint16 ie_block_len = 0;
-	ApiInfoElementType * ie_block = NULL;
-	ApiCallStatusType call_status;
-	
-	print_status(p->Status);
-
-	/* Call progress state to initiating handset */
-	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
-	call_status.CallStatusValue.State = API_CSS_CALL_SETUP_ACK;
-	
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_SYSTEM_CALL_ID,
-			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) find_call_by_ref(&incoming_call)->SystemCallId);
-
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_CALL_STATUS,
-			    sizeof(ApiCallStatusType),
-			    (rsuint8 *) &call_status);
-
-
-	ApiFpCcSetupAckReqType * ra = (ApiFpCcSetupAckReqType *) malloc(sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
-	ra->Primitive = API_FP_CC_SETUP_ACK_REQ;
-	ra->CallReference = incoming_call;
-	ra->Signal = API_CC_SIGNAL_DIAL_TONE_ON;
-	ra->ProgressInd = API_IN_BAND_NOT_AVAILABLE;
-
-	ra->InfoElementLength = ie_block_len;
-	memcpy(ra->InfoElement, ie_block, ie_block_len);
-	
-	printf("[%llu] API_FP_CC_SETUP_ACK_REQ\n", timeSinceStart());
-	
-	mailProto.send(dect_bus, (uint8_t *)ra, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
-	free(ra);
 }
 
 
