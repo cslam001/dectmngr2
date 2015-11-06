@@ -15,6 +15,8 @@ endif
 
 CFLAGS += -Wall -Werror=implicit-function-declaration
 CFLAGS += -Wextra
+# For debug during development
+#CFLAGS += -g -fstack-protector -L $(STAGING_DIR)/target-*/root-brcm*/usr/lib/
 
 %.o: %.c
 	$(CC) -c $(CFLAGS) $(INCLUDE_PATHS) -o $@ $<
