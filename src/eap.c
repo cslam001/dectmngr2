@@ -8,7 +8,6 @@
 #include "error.h"
 #include "busmail.h"
 #include "fifo.h"
-#include "state.h"
 #include "event.h"
 
 #define EAP_PROG_ID 0x81

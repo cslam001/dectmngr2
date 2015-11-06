@@ -21,7 +21,6 @@
 #include "nvs.h"
 #include "tty.h"
 #include "error.h"
-#include "state.h"
 #include "util.h"
 #include "buffer.h"
 #include "busmail.h"

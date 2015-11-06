@@ -26,7 +26,6 @@
 #include "dect.h"
 #include "tty.h"
 #include "error.h"
-#include "state.h"
 #include "boot.h"
 #include "util.h"
 #include "app.h"

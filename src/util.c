@@ -10,7 +10,6 @@
 
 #include "dect.h"
 #include "util.h"
-#include "state.h"
 #include "boot.h"
 #include "app.h"
 #include "nvs.h"

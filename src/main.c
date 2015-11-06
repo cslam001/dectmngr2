@@ -11,7 +11,6 @@
 #include "tty.h"
 #include "error.h"
 #include "boot.h"
-#include "state.h"
 #include "util.h"
 
 #include "busmail.h"
@@ -30,9 +29,8 @@
 
 #define MAX_EVENTS 10
 
-config_t c;
-config_t *config = &c;
-
+static config_t c;
+static config_t *config = &c;
 
 int main(int argc, char * argv[]) {
 

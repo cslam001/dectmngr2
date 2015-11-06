@@ -8,7 +8,6 @@
 #include "error.h"
 #include "busmail.h"
 #include "fifo.h"
-#include "state.h"
 #include "list.h"
 #include "event.h"
 
