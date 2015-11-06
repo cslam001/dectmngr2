@@ -335,6 +335,22 @@ static void audio_format_cfm(busmail_t *m) {
 
 
 
+#if 0
+static void setup_cfm(busmail_t *m) {
+	
+	ApiFpCcSetupCfmType * p = (ApiFpCcSetupCfmType *) &m->mail_header;
+	
+	printf("SystemCallId: %x\n", p->SystemCallId);
+	
+	print_status(p->Status);
+
+	outgoing_call = p->CallReference;
+	printf("outgoing_call: %x\n", p->CallReference);
+}
+#endif
+
+
+
 /* Handset answers */
 static void connect_ind(busmail_t *m) {
 	
@@ -591,21 +607,6 @@ static void call_proc_cfm(busmail_t *m) {
 	mailProto.send(dect_bus, (uint8_t *) r, sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
 	free(r);
 }
-
-
-#if 0
-static void setup_cfm(busmail_t *m) {
-	
-	ApiFpCcSetupCfmType * p = (ApiFpCcSetupCfmType *) &m->mail_header;
-	
-	printf("SystemCallId: %x\n", p->SystemCallId);
-	
-	print_status(p->Status);
-
-	outgoing_call = p->CallReference;
-	printf("outgoing_call: %x\n", p->CallReference);
-}
-#endif
 
 
 static void release_cfm(busmail_t *m) {
