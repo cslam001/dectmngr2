@@ -43,7 +43,7 @@ static struct call_t calls[MAX_CALLS];
 //static ApiCallReferenceType incoming_call;
 //static ApiCallReferenceType outgoing_call;
 //static ApiSystemCallIdType * external_call;
-static ApiSystemCallIdType * system_call_id;
+//static ApiSystemCallIdType * system_call_id;
 //static ApiLineIdValueType * outgoing_line_id;
 //static char nbwbCodecList[NBWB_CODECLIST_LENGTH]={0x01, 0x02, 0x03, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x04};
 //static char nbCodecList[]={0x01, 0x01, 0x02, 0x00, 0x00, 0x04};
@@ -287,7 +287,6 @@ static void setup_ind(busmail_t *m) {
 	
 	if(p->InfoElementLength > 0) {
 		call->SystemCallId = get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
-		system_call_id = call->SystemCallId;
 		printf("syscall id: %d\n", call->SystemCallId->ApiSystemCallId);
 
 		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
@@ -577,7 +576,7 @@ static void connect_ind(busmail_t *m) {
 	printf("[%llu] CallReference: val %d instancefp %d received\n", timeSinceStart(),
 		p->CallReference.Value, p->CallReference.Instance.Fp);
 	printf("p->InfoElementLength: %d\n", p->InfoElementLength);
-	printf("internal_call: %x\n", system_call_id->ApiSystemCallId);
+	printf("internal_call: %x\n", call->SystemCallId->ApiSystemCallId);
 
 	if (p->InfoElementLength > 0) {
 		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
