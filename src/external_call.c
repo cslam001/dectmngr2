@@ -122,7 +122,6 @@ static char* get_dialed_nr(ApiInfoElementType * InfoElement, rsuint16 InfoElemen
 
 
 static ApiCodecListType * get_codecs(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
-
 	ApiInfoElementType * info;
 	ApiCodecListType * list;
 	
@@ -144,7 +143,6 @@ static ApiCodecListType * get_codecs(ApiInfoElementType * InfoElement, rsuint16 
 
 
 static ApiLineIdValueType * get_line_id(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
-
 	ApiInfoElementType * info;
 	ApiCodecListType * list;
 	ApiLineIdValueType * line_id;
@@ -250,7 +248,6 @@ static void dect_codec_init(void)
 
 /* Caller dials */
 static void setup_ind(busmail_t *m) {
-
 	ApiFpCcSetupIndType * p = (ApiFpCcSetupIndType *) &m->mail_header;
 	char term[15];
 	ApiFpCcSetupResType reply;
@@ -286,7 +283,8 @@ static void setup_ind(busmail_t *m) {
 	ubus_send_string_api("dect.api.setup_ind", "terminal", term);
 	
 	if(p->InfoElementLength > 0) {
-		call->SystemCallId = get_system_call_id( (ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+		call->SystemCallId = get_system_call_id(
+			(ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
 		printf("syscall id: %d\n", call->SystemCallId->ApiSystemCallId);
 
 		codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
@@ -372,7 +370,8 @@ static void audio_format_cfm(busmail_t *m) {
 	
 	printf("[%llu] API_FP_CC_SETUP_ACK_REQ\n", timeSinceStart());
 	
-	mailProto.send(dect_bus, (uint8_t *)ra, sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
+	mailProto.send(dect_bus, (uint8_t *)ra,
+		sizeof(ApiFpCcSetupAckReqType) - 1 + ie_block_len);
 	free(ra);
 }
 
@@ -444,8 +443,6 @@ static void info_ind(busmail_t *m) {
 
 
 static void call_proc_cfm(busmail_t *m) {
-
-
 	ApiFpCcCallProcCfmType * p = (ApiFpCcCallProcCfmType *) &m->mail_header;
 	rsuint16 ie_block_len = 0;
 	ApiInfoElementType * ie_block = NULL;
@@ -462,17 +459,11 @@ static void call_proc_cfm(busmail_t *m) {
 	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
 	call_status.CallStatusValue.State = API_CSS_CALL_ALERTING;
 
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_CALL_STATUS,
-			    sizeof(ApiCallStatusType),
-			    (rsuint8 *) &call_status);
+	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_CALL_STATUS,
+		sizeof(ApiCallStatusType), (rsuint8 *) &call_status);
 
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_SYSTEM_CALL_ID,
-			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) call->SystemCallId);
+	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_SYSTEM_CALL_ID,
+		sizeof(ApiSystemCallIdType), (rsuint8 *) call->SystemCallId);
 
 	call->state = API_CSS_CALL_ALERTING;
 	ApiFpCcAlertReqType * r = malloc(sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
@@ -484,14 +475,14 @@ static void call_proc_cfm(busmail_t *m) {
 	memcpy(r->InfoElement,(rsuint8*)ie_block, ie_block_len);
 	
 	printf("API_FP_CC_ALERT_REQ in call_proc_cfm()\n");
-	mailProto.send(dect_bus, (uint8_t *) r, sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
+	mailProto.send(dect_bus, (uint8_t *) r,
+		sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
 	free(r);
 }
 
 
 
 static void alert_cfm(busmail_t *m) {
-
 	ApiFpCcAlertCfmType * p = (ApiFpCcAlertCfmType *) &m->mail_header;
 	rsuint16 ie_block_len = 0;
 	ApiInfoElementType * ie_block = NULL;
@@ -509,33 +500,26 @@ static void alert_cfm(busmail_t *m) {
 	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
 	call_status.CallStatusValue.State = API_CSS_CALL_CONNECT;
 
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_CALL_STATUS,
-			    sizeof(ApiCallStatusType),
-			    (rsuint8 *) &call_status);
+	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_CALL_STATUS,
+		sizeof(ApiCallStatusType), (rsuint8 *) &call_status);
 
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_CODEC_LIST,
-			    NarrowBandCodecIe->IeLength,
-			    (rsuint8 *) NarrowBandCodecIe->IeData);
+	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_CODEC_LIST,
+		NarrowBandCodecIe->IeLength, (rsuint8 *) NarrowBandCodecIe->IeData);
 	
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_SYSTEM_CALL_ID,
-			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) call->SystemCallId);
+	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_SYSTEM_CALL_ID,
+		sizeof(ApiSystemCallIdType), (rsuint8 *) call->SystemCallId);
 
 	call->state = API_CSS_CALL_CONNECT;
-	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*) malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len));
+	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*)
+		malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len));
 	req->Primitive = API_FP_CC_CONNECT_REQ;
 	req->CallReference = call->CallReference;
 	req->InfoElementLength = ie_block_len;
 	memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len);
 
 	printf("[%llu] API_FP_CC_CONNECT_REQ\n", timeSinceStart());
-	mailProto.send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
+	mailProto.send(dect_bus, (uint8_t *) req,
+		sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
 	free(req);
 
 }
@@ -563,7 +547,6 @@ static void alert_ind(busmail_t *m) {
 
 /* Handset answers */
 static void connect_ind(busmail_t *m) {
-	
 	ApiFpCcConnectIndType * p = (ApiFpCcConnectIndType *) &m->mail_header;
 	ApiInfoElementType * ie_block = NULL;
 	rsuint16 ie_block_len = 0;
@@ -586,27 +569,17 @@ static void connect_ind(busmail_t *m) {
 	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
 	call_status.CallStatusValue.State = API_CSS_CALL_CONNECT;
 
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_CALL_STATUS,
-			    sizeof(ApiCallStatusType),
-			    (rsuint8 *) &call_status);
+	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_CALL_STATUS,
+		sizeof(ApiCallStatusType), (rsuint8 *) &call_status);
 
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_CODEC_LIST,
-			    NarrowBandCodecIe->IeLength,
-			    (rsuint8 *) NarrowBandCodecIe->IeData);
+	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_CODEC_LIST,
+		NarrowBandCodecIe->IeLength, (rsuint8 *) NarrowBandCodecIe->IeData);
 
-	ApiBuildInfoElement(&ie_block,
-			    &ie_block_len,
-			    API_IE_SYSTEM_CALL_ID,
-			    sizeof(ApiSystemCallIdType),
-			    (rsuint8 *) call->SystemCallId);
+	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_SYSTEM_CALL_ID,
+		sizeof(ApiSystemCallIdType), (rsuint8 *) call->SystemCallId);
 	
 	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*)
 		malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len));
-
 	req->Primitive = API_FP_CC_CONNECT_REQ;
 	req->CallReference = call->CallReference;
 	req->InfoElementLength = ie_block_len;
@@ -617,7 +590,8 @@ static void connect_ind(busmail_t *m) {
 	printf("[%llu] API_FP_CC_CONNECT_REQ\n", timeSinceStart());
 	printf("[%llu] CallReference: val %d instancefp %d sent\n", timeSinceStart(),
 		call->CallReference.Value, call->CallReference.Instance.Fp);
-	mailProto.send(dect_bus, (uint8_t *) req, sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
+	mailProto.send(dect_bus, (uint8_t *) req,
+		sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
 	free(req);
 
 
@@ -626,7 +600,6 @@ static void connect_ind(busmail_t *m) {
 
 
 static void connect_cfm(busmail_t *m) {
-	
 	ApiFpCcConnectCfmType * p = (ApiFpCcConnectCfmType *) &m->mail_header;
 	ApiInfoElementType * ie_block = NULL;
 	rsuint16 ie_block_len = 0;
@@ -640,7 +613,6 @@ static void connect_cfm(busmail_t *m) {
 
 
 static void reject_ind(busmail_t *m) {
-
 	ApiFpCcRejectIndType * p = (ApiFpCcRejectIndType *) &m->mail_header;
 
 	printf("[%llu] CallReference: %d\n", timeSinceStart(),
@@ -651,7 +623,6 @@ static void reject_ind(busmail_t *m) {
 
 
 static void release_cfm(busmail_t *m) {
-	
 	ApiFpCcReleaseCfmType * p = (ApiFpCcReleaseCfmType *) &m->mail_header;
 
 	printf("CallReference: %d\n", p->CallReference.Instance.Fp);	
@@ -660,7 +631,6 @@ static void release_cfm(busmail_t *m) {
 
 
 static void release_ind(busmail_t *m) {
-	
 	ApiFpCcReleaseIndType * p = (ApiFpCcReleaseIndType *) &m->mail_header;
 	ApiCallReferenceType terminate_call;
 	char term[15];
@@ -694,10 +664,6 @@ static void release_ind(busmail_t *m) {
 
 
 
-
-
-
-
 #if 0
 static void pinging_call(int handset) {
 
@@ -723,7 +689,6 @@ static void pinging_call(int handset) {
 
 
 void external_call_handler(packet_t *p) {
-	
 	busmail_t * m = (busmail_t *) &p->data[0];
 
 	if (m->task_id != 1) return;
@@ -788,7 +753,6 @@ void external_call_handler(packet_t *p) {
 
 
 void external_call_init(void * bus) {
-	
 	dect_bus = bus;
 	memset(calls, 0, sizeof(calls));
 
