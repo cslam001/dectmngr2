@@ -12,6 +12,7 @@
 #include "stream.h"
 #include "event_base.h"
 #include "connection_init.h"
+#include "external_call.h"
 
 
 //-------------------------------------------------------------
@@ -28,6 +29,13 @@ enum {
 };
 
 enum {
+	CALL_TERM,																	// Terminal ID
+	CALL_ADD,																	// Add call using PCMx
+	CALL_REL,																	// Release call using PCMx
+	CALL_CID,																	// Caller ID
+};
+
+enum {
 	SETTING_RADIO,
 };
 
@@ -39,6 +47,8 @@ static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object 
 static int ubus_request_handset(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg);
 static int ubus_request_status(struct ubus_context *ubus_ctx, struct ubus_object *obj,
+		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg);
+static int ubus_request_call(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg);
 
 
@@ -72,10 +82,18 @@ static const struct blobmsg_policy ubusHandsetKeys[] = {						// ubus RPC "hands
 };
 
 
+static const struct blobmsg_policy ubusCallKeys[] = {							// ubus RPC "call" arguments (keys and values)
+	[CALL_TERM] = { .name = "terminal", .type = BLOBMSG_TYPE_INT32 },
+	[CALL_ADD] = { .name = "add", .type = BLOBMSG_TYPE_INT32 },
+	[CALL_REL] = { .name = "release", .type = BLOBMSG_TYPE_INT32 },
+	[CALL_CID] = { .name = "cid", .type = BLOBMSG_TYPE_STRING },
+};
+
 static const struct ubus_method ubusMethods[] = {								// ubus RPC methods
 	UBUS_METHOD("state", ubus_request_state, ubusStateKeys),
 	UBUS_METHOD("handset", ubus_request_handset, ubusHandsetKeys),
 	UBUS_METHOD_NOARG("status", ubus_request_status),
+	UBUS_METHOD("call", ubus_request_call, ubusCallKeys),
 };
 
 
@@ -709,6 +727,54 @@ static int ubus_request_status(struct ubus_context *ubus_ctx, struct ubus_object
 	free(keys);
 	free(values);
 
+	return res;
+}
+
+
+
+//-------------------------------------------------------------
+// RPC handler for
+// ubus call dect call '{ "terminal": x, "add": x }'
+static int ubus_request_call(struct ubus_context *ubus_ctx, struct ubus_object *obj,
+		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
+{
+	struct blob_attr **keys;
+	int res, termId, pcmId, add;
+
+	termId = -1;
+	pcmId = -1;
+	add = 0;
+
+	// Tokenize message key/value paris into an array
+	res = keyTokenize(obj, methodName, msg, &keys);
+	if(res != UBUS_STATUS_OK) goto out;
+
+	if(keys[CALL_TERM]) {
+		termId = blobmsg_get_u32(keys[CALL_TERM]);
+		printf("call term %d\n", termId);
+	}
+
+	if(keys[CALL_ADD]) {
+		add = 1;
+		pcmId = blobmsg_get_u32(keys[CALL_ADD]);
+		printf("call pcm %d\n", pcmId);
+	}
+
+	// Did we get all arguments we need?
+	if(termId >= 0 && add && pcmId >= 0) {
+		if(setup_req(termId, pcmId)) {
+			res = ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
+		}
+		else {
+			res = ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
+		}		
+	}
+	else {
+		res = ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
+	}
+	
+out:
+	free(keys);
 	return res;
 }
 
