@@ -149,6 +149,7 @@ static ApiLineIdValueType * get_line_id(ApiInfoElementType * InfoElement, rsuint
 
 
 
+//-------------------------------------------------------------
 static struct call_t* find_free_call_slot(void) {
 	int i;
 
@@ -163,6 +164,7 @@ static struct call_t* find_free_call_slot(void) {
 }
 
 
+//-------------------------------------------------------------
 static struct call_t* find_call_by_endpoint_id(ApiAudioEndPointIdType epId) {
 	int i;
 
@@ -176,6 +178,7 @@ static struct call_t* find_call_by_endpoint_id(ApiAudioEndPointIdType epId) {
 }
 
 
+//-------------------------------------------------------------
 static struct call_t* find_call_by_sys_id(rsuint8 SystemCallId) {
 	int i;
 
@@ -190,6 +193,7 @@ static struct call_t* find_call_by_sys_id(rsuint8 SystemCallId) {
 }
 
 
+//-------------------------------------------------------------
 static struct call_t* find_call_by_ref(ApiCallReferenceType *CallReference) {
 	int i;
 
@@ -209,6 +213,7 @@ static struct call_t* find_call_by_ref(ApiCallReferenceType *CallReference) {
 }
 
 
+//-------------------------------------------------------------
 static void free_call_slot(struct call_t *call) {
 	memset(call, 0, sizeof(struct call_t));
 }
@@ -243,7 +248,7 @@ static void dect_codec_init(void)
 /* Caller dials */
 static void setup_ind(busmail_t *m) {
 	ApiFpCcSetupIndType * p = (ApiFpCcSetupIndType *) &m->mail_header;
-	char term[15];
+	ApiFpSetAudioFormatReqType pcmFormat;
 	ApiFpCcSetupResType reply;
 	struct call_t *call;
 	
@@ -297,18 +302,15 @@ static void setup_ind(busmail_t *m) {
 	reply.Status = RSS_SUCCESS;
 	mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
 
-	// Send message to Asterisk to start PCM audio		
-	snprintf(term, sizeof(term), "%d", call->epId);
-	ubus_send_string_api("dect.api.setup_ind", "terminal", term);
-	
-	ApiFpSetAudioFormatReqType aud_req = {
-		.Primitive = API_FP_SET_AUDIO_FORMAT_REQ,
-		.DestinationId = reply.AudioId.AudioEndPointId,
-		.AudioDataFormat = AP_DATA_FORMAT_LINEAR_8kHz
-	};
-
+	/* Tell FP what audio format PCMx should use.
+	 * TODO: change endpoint parameters in
+	 * build_dir/target-arm_v7-a_uClibc-0.9.33.2_eabi/bcmkernel/bcm963xx/shared/opensource/boardparms/bcm963xx/boardparms_voice.c
+	 * to wideband, so we can pass 16kHz samplerate. */
+	pcmFormat.Primitive = API_FP_SET_AUDIO_FORMAT_REQ;
+	pcmFormat.DestinationId = reply.AudioId.AudioEndPointId;
+	pcmFormat.AudioDataFormat = AP_DATA_FORMAT_LINEAR_8kHz;
 	printf("API_FP_SET_AUDIO_FORMAT_REQ\n");
-	mailProto.send(dect_bus, (uint8_t *)&aud_req, sizeof(ApiFpSetAudioFormatReqType));
+	mailProto.send(dect_bus, (uint8_t *) &pcmFormat, sizeof(pcmFormat));
 }
 
 
@@ -337,6 +339,7 @@ const char number[] = { '0', '1', '2', '3', '4' };
 
 	buf = NULL;
 	bufLen = 0;
+	// Send "call setup"
 	status.CallStatusSubId = API_SUB_CALL_STATUS;
 	status.CallStatusValue.State = API_CSS_CALL_SETUP;
 	ApiBuildInfoElement(&buf, &bufLen, API_IE_CALL_STATUS,
@@ -347,6 +350,7 @@ const char number[] = { '0', '1', '2', '3', '4' };
 	ApiBuildInfoElement(&buf, &bufLen, API_IE_LINE_ID,
 		sizeof(line), (rsuint8*) &line);
 
+	// Send callers phone number
 	callerNumber.NumberType = ANT_NATIONAL;
 	callerNumber.Npi = ANPI_NATIONAL;
 	callerNumber.PresentationInd = API_PRESENTATION_ALLOWED;
@@ -356,6 +360,7 @@ const char number[] = { '0', '1', '2', '3', '4' };
 	ApiBuildInfoElement(&buf, &bufLen, API_IE_CALLING_PARTY_NUMBER,
 		sizeof(callerNumber) + sizeof(number), (rsuint8*) &callerNumber);
 
+	// Send list of codecs we support to handset
 	codecs = malloc(sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType));
 	codecs->NegotiationIndicator = API_NI_POSSIBLE;
 	codecs->NoOfCodecs = 2;
@@ -411,7 +416,9 @@ static void setup_cfm(busmail_t *m) {
 
 
 
-// PCM-bus audio format setup was changed
+//-------------------------------------------------------------
+// Send a list of audio codecs we support to
+// handset and play a dial tone.
 static void audio_format_cfm(busmail_t *m) {
 	ApiFpSetAudioFormatCfmType *p = (ApiFpSetAudioFormatCfmType *) &m->mail_header;
 	ApiSystemCallIdType SystemCallId;
@@ -420,12 +427,17 @@ static void audio_format_cfm(busmail_t *m) {
 	ApiCallStatusType call_status;
 	ApiCodecListType *codecs;
 	struct call_t *call;
+	char term[15];
 
 	ie_block_len = 0;
 	ie_block = NULL;
 	print_status(p->Status);
 	call = find_call_by_endpoint_id(p->DestinationId);
 	if(!call) return;
+
+	// Send message to Asterisk to start PCM audio		
+	snprintf(term, sizeof(term), "%d", call->epId);
+	ubus_send_string_api("dect.api.setup_ind", "terminal", term);
 
 	SystemCallId.ApiSubId = API_SUB_CALL_ID;
 	SystemCallId.ApiSystemCallId = call->SystemCallId;
