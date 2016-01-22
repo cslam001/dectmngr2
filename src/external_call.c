@@ -15,11 +15,26 @@
 #include "ubus.h"
 #include "natalie_utils.h"
 
+
+//-------------------------------------------------------------
 #define MAX_CALLS	4
+
+enum cc_states_t {												// CC states as defined in ETSI EN 300 175-5 
+	F00_NULL,
+	F01_INITIATED,
+	F02_OVERLAP_SEND,
+	F03_PROCEEDING,
+	F04_DELIVERED,
+	F06_PRESENT,
+	F07_RECEIVED,
+	F10_ACTIVE,
+	F19_RELEASE_PEND,
+};
 
 
 struct call_t {
-	ApiCallStatusStateType state;
+	enum cc_states_t state;
+	int idx;
 
 	/* "Call ID’s are assigned by the FP and are uniquely defined
 	 * system-wide. This allows proper handling of asynchronous
@@ -38,25 +53,27 @@ struct call_t {
 };
 
 
-/* Module scope variables */
+
+//-------------------------------------------------------------
+static const char *cc_state_names[] = {							// Human readable CC states. Must match order of "enum cc_states_t"!
+	"F00-null",
+	"F01-initiated",
+	"F02-overlap sending",
+	"F03-call proceeding",
+	"F04-call delivered",
+	"F06-call present",
+	"F07-call received",
+	"F10-active",
+	"F19-release pending"
+};
+
+
 static struct call_t calls[MAX_CALLS];
-//static ApiCallReferenceType incoming_call;
-//static ApiCallReferenceType outgoing_call;
-//static ApiSystemCallIdType * external_call;
-//static ApiSystemCallIdType * system_call_id;
-//static ApiLineIdValueType * outgoing_line_id;
-//static char nbwbCodecList[NBWB_CODECLIST_LENGTH]={0x01, 0x02, 0x03, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x04};
-//static char nbCodecList[]={0x01, 0x01, 0x02, 0x00, 0x00, 0x04};
-//static char wbCodecList[]={0x01, 0x01, 0x03, 0x00, 0x00, 0x01};
-//static rsuint8 NarrowCodecArr[30];
-//static rsuint8 WideCodecArr[30];
-//static ApiInfoElementType * NarrowBandCodecIe = (ApiInfoElementType*) NarrowCodecArr;
-//static const rsuint16 NarrowBandCodecIeLen = (RSOFFSETOF(ApiInfoElementType, IeData) + 6);
-//static ApiInfoElementType * WideBandCodecIe = (ApiInfoElementType*) WideCodecArr;
-//static const rsuint16 WideBandCodecIeLen = (RSOFFSETOF(ApiInfoElementType, IeData) + 6);
 static void * dect_bus;
 
 
+//-------------------------------------------------------------
+static int audio_format_req(struct call_t *call);
 
 
 
@@ -154,7 +171,8 @@ static struct call_t* find_free_call_slot(void) {
 	int i;
 
 	for(i = 0; i < MAX_CALLS; i++) {
-		if(!calls[i].SystemCallId && !calls[i].CallReference.Value) {
+		if(calls[i].state == F00_NULL && !calls[i].SystemCallId && 
+				!calls[i].CallReference.Value) {
 			printf("[%llu] Allocating call slot %d\n", timeSinceStart(), i);
 			return &calls[i];
 		}
@@ -216,101 +234,69 @@ static struct call_t* find_call_by_ref(ApiCallReferenceType *CallReference) {
 //-------------------------------------------------------------
 static void free_call_slot(struct call_t *call) {
 	memset(call, 0, sizeof(struct call_t));
+	call->state = F00_NULL;
 }
 
 
-#if 0
-static void dect_codec_init(void)
-{
-	NarrowBandCodecIe->Ie = API_IE_CODEC_LIST;
-	NarrowBandCodecIe->IeLength = 6;
-	NarrowBandCodecIe->IeData[0] = 0x01; // NegotiationIndicator, Negotiation possible
-	NarrowBandCodecIe->IeData[1] = 0x01; // NoOfCodecs
-	NarrowBandCodecIe->IeData[2] = 0x02; // API_CT_G726 API_MDS_1_MD
-	NarrowBandCodecIe->IeData[3] = 0x00;  // MacDlcService
-	NarrowBandCodecIe->IeData[4] = 0x00;  // CplaneRouting  API_CPR_CS
-	NarrowBandCodecIe->IeData[5] = 0x04;  // SlotSize API_SS_FS fullslot
 
-	WideBandCodecIe->Ie = API_IE_CODEC_LIST;
-	WideBandCodecIe->IeLength  = 6;
-	WideBandCodecIe->IeData[0] = 0x01;
-	WideBandCodecIe->IeData[1] = 0x01;
-	WideBandCodecIe->IeData[2] = 0x03;
-	WideBandCodecIe->IeData[3] = 0x00;
-	WideBandCodecIe->IeData[4] = 0x00;
-	WideBandCodecIe->IeData[5] = 0x01;
-
-	return;
-}
-#endif
-
-
-/* Caller dials */
-static void setup_ind(busmail_t *m) {
+//-------------------------------------------------------------
+// Handle state F-01 call initiated (see ETSI EN 300 175-5).
+static int setup_ind(busmail_t *m) {
 	ApiFpCcSetupIndType * p = (ApiFpCcSetupIndType *) &m->mail_header;
-	ApiFpSetAudioFormatReqType pcmFormat;
 	ApiFpCcSetupResType reply;
 	struct call_t *call;
 	
-	printf("[%llu] CallReference: host %x Fp %x\n", timeSinceStart(),
-		p->CallReference.Instance.Host, p->CallReference.Instance.Fp);
-	printf("TerminalIdInitiating: %d\n", p->TerminalId);
-	printf("InfoElementLength: %d\n", p->InfoElementLength);
-	printf("BasicService (voice quality): %d\n", p->BasicService);
-	printf("CallClass: %d\n", p->CallClass);
-
+	// First check prerequisites. Can the call switch to next state?
 	reply.Primitive = API_FP_CC_SETUP_RES;
 	reply.CallReference.Instance.Fp = p->CallReference.Instance.Fp;
 	reply.CallReference.Instance.Host = p->TerminalId;
 	reply.AudioId.IntExtAudio = API_IEA_EXT;
 	reply.AudioId.AudioEndPointId = p->TerminalId - 1;
 
-	/* Don't accept source terminal ID higher than
-	 * can fit into four bit reply.CallReference.Instance.Host */
+	/* Don't accept source terminal ID higher than can fit into
+	 * the four bit field "reply.CallReference.Instance.Host" */
 	if(p->TerminalId > 15) {
-		printf("Error, terminal ID to high\n");
-		reply.Primitive = RSS_FAILED;
+		printf("Error, invalid terminal ID\n");
+		reply.Status = RSS_FAILED;
 		mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
-		return;
+		return -1;
 	}
-	else if(!p->InfoElementLength) {
+
+	// Did FP allocate a system call ID?
+	if(!p->InfoElementLength || 
+			!ApiGetInfoElement(p->InfoElement, p->InfoElementLength,
+			API_IE_SYSTEM_CALL_ID)) {
 		printf("Error, got no system call ID\n");
 		reply.Status = RSS_MISSING_PARAMETER;
 		mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
-		return;
+		return -1;
 	}
 
+	// OK, we accept the request. Try to setup a new phone call.
 	call = find_free_call_slot();
 	if(!call) {
 		printf("Error, no free call slot\n");
 		reply.Status = RSS_NO_RESOURCE;
 		mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
-		return;
+		return -1;
 	}
 
-	call->state = API_CSS_CALL_SETUP;
+	printf("Call %d state change from %s to %s\n", call->idx,
+		cc_state_names[call->state], cc_state_names[F01_INITIATED]);
+	call->state = F01_INITIATED;
 	call->CallReference = reply.CallReference;
 	call->TerminalId = p->TerminalId;
 	call->BasicService = p->BasicService;
 	call->epId = reply.AudioId.AudioEndPointId;
 	call->SystemCallId = get_system_call_id(
 		(ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
-
-//	codecs = get_codecs((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
-
-	printf("API_FP_CC_SETUP_RES\n");
 	reply.Status = RSS_SUCCESS;
 	mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
 
-	/* Tell FP what audio format PCMx should use.
-	 * TODO: change endpoint parameters in
-	 * build_dir/target-arm_v7-a_uClibc-0.9.33.2_eabi/bcmkernel/bcm963xx/shared/opensource/boardparms/bcm963xx/boardparms_voice.c
-	 * to wideband, so we can pass 16kHz samplerate. */
-	pcmFormat.Primitive = API_FP_SET_AUDIO_FORMAT_REQ;
-	pcmFormat.DestinationId = reply.AudioId.AudioEndPointId;
-	pcmFormat.AudioDataFormat = AP_DATA_FORMAT_LINEAR_8kHz;
-	printf("API_FP_SET_AUDIO_FORMAT_REQ\n");
-	mailProto.send(dect_bus, (uint8_t *) &pcmFormat, sizeof(pcmFormat));
+	// Request PCM audio format
+	if(audio_format_req(call)) return -1;
+
+	return 0;
 }
 
 
@@ -412,6 +398,35 @@ static void setup_cfm(busmail_t *m) {
 	call = find_call_by_ref(&p->CallReference);
 	printf("callref2: %x\n", call->CallReference.Value);
 	call->SystemCallId = p->SystemCallId;
+}
+
+
+
+//-------------------------------------------------------------
+// Tell FP what audio format PCMx should use.
+// TODO: change endpoint parameters in
+// build_dir/target-arm_v7-a_uClibc-0.9.33.2_eabi/bcmkernel/bcm963xx/shared/opensource/boardparms/bcm963xx/boardparms_voice.c
+// to wideband, so we can pass 16kHz samplerate.
+static int audio_format_req(struct call_t *call) {
+	ApiFpSetAudioFormatReqType pcmFormat;
+
+	switch(call->state) {
+		case F01_INITIATED:
+		case F06_PRESENT:
+			pcmFormat.AudioDataFormat = AP_DATA_FORMAT_LINEAR_8kHz;
+			break;
+
+		default:
+			pcmFormat.AudioDataFormat = AP_DATA_FORMAT_NONE;
+			break;
+	}			
+
+	pcmFormat.Primitive = API_FP_SET_AUDIO_FORMAT_REQ;
+	pcmFormat.DestinationId = call->epId;
+	printf("API_FP_SET_AUDIO_FORMAT_REQ\n");
+	mailProto.send(dect_bus, (uint8_t *) &pcmFormat, sizeof(pcmFormat));
+
+	return 0;
 }
 
 
@@ -805,73 +820,87 @@ static void pinging_call(int handset) {
 
 
 
-void external_call_handler(packet_t *p) {
-	busmail_t * m = (busmail_t *) &p->data[0];
+//-------------------------------------------------------------
+// Handle incomming mail messages from external Dect FP
+void external_call_mail_handler(packet_t *p) {
+	busmail_t *m = (busmail_t*) p->data;
 
+	// Is the mail intended for us?
 	if (m->task_id != 1) return;
 
-	/* Application command */
 	switch (m->mail_header) {
-
-	case API_FP_CC_SETUP_IND:
-		setup_ind(m);
-		break;
-
-	case API_FP_CC_RELEASE_IND:
-		release_ind(m);
-		break;
-
-	case API_FP_CC_RELEASE_CFM:
-		release_cfm(m);
-		break;
-
-	case API_FP_CC_SETUP_CFM:
-		setup_cfm(m);
-		break;
-
-	case API_FP_CC_REJECT_IND:
-		reject_ind(m);
-		break;
-
-	case API_FP_CC_CONNECT_IND:
-		connect_ind(m);
-		break;
-
-	case API_FP_CC_CONNECT_CFM:
-		connect_cfm(m);
-		break;
-
-	case API_FP_CC_ALERT_IND:
-		alert_ind(m);
-		break;
-
-	case API_FP_CC_ALERT_CFM:
-		alert_cfm(m);
-		break;
-
-	case API_FP_CC_SETUP_ACK_CFM:
-		setup_ack_cfm(m);
-		break;
-
-	case API_FP_CC_INFO_IND:
-		info_ind(m);
-		break;
-
-	case API_FP_SET_AUDIO_FORMAT_CFM:
-		audio_format_cfm(m);
-		break;
-
-	case API_FP_CC_CALL_PROC_CFM:
-		call_proc_cfm(m);
-		break;
-
+		case API_FP_CC_SETUP_IND:
+			setup_ind(m);
+			break;
+	
+		case API_FP_CC_RELEASE_IND:
+			release_ind(m);
+			break;
+	
+		case API_FP_CC_RELEASE_CFM:
+			release_cfm(m);
+			break;
+	
+		case API_FP_CC_SETUP_CFM:
+			setup_cfm(m);	
+			break;
+	
+		case API_FP_CC_REJECT_IND:
+			reject_ind(m);
+			break;
+	
+		case API_FP_CC_CONNECT_IND:
+			connect_ind(m);
+			break;
+	
+		case API_FP_CC_CONNECT_CFM:
+			connect_cfm(m);
+			break;
+	
+		case API_FP_CC_ALERT_IND:
+			alert_ind(m);
+			break;
+	
+		case API_FP_CC_ALERT_CFM:
+			alert_cfm(m);
+			break;
+	
+		case API_FP_CC_SETUP_ACK_CFM:
+			setup_ack_cfm(m);
+			break;
+	
+		case API_FP_CC_INFO_IND:
+			info_ind(m);
+			break;
+	
+		case API_FP_SET_AUDIO_FORMAT_CFM:
+			audio_format_cfm(m);
+			break;
+	
+		case API_FP_CC_CALL_PROC_CFM:
+			call_proc_cfm(m);
+			break;
+	
 	}
 }
 
 
-void external_call_init(void * bus) {
-	dect_bus = bus;
-	memset(calls, 0, sizeof(calls));
 
-	mailProto.add_handler(bus, external_call_handler);
+
+
+
+//-------------------------------------------------------------
+void external_call_init(void * bus) {
+	int i;
+
+	dect_bus = bus;
+
+	memset(calls, 0, sizeof(calls));
+	for(i = 0; i < MAX_CALLS; i++) {
+		calls[i].state = F00_NULL;
+		calls[i].idx = i;
+	}
+
+	mailProto.add_handler(bus, external_call_mail_handler);
 }
+
