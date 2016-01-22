@@ -14,7 +14,7 @@ endif
 
 
 CFLAGS += -Wall -Werror=implicit-function-declaration
-CFLAGS += -Wextra
+CFLAGS += -Wextra -std=gnu99
 # For debug during development
 #CFLAGS += -g -fstack-protector -L $(STAGING_DIR)/target-*/root-brcm*/usr/lib/
 
