@@ -64,3 +64,10 @@ int tty_open(const char * s) {
 
 	return fd;
 }
+
+
+int tty_drain(int fd) {
+	return tcdrain(fd);
+}
+
+

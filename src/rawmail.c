@@ -43,7 +43,7 @@ int rawmail_send(void * _self, uint8_t *data, int size) {
 		chunkSize = size - writtenLen;
 
 		len = write(bus->fd, data + writtenLen, chunkSize);
-		if (len == -1) {
+		if (len == -1 && errno != EINTR) {
 			perror("Error writing to internal Dect");
 			return -1;
 		}

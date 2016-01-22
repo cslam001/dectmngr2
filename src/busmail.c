@@ -10,6 +10,7 @@
 #include "fifo.h"
 #include "list.h"
 #include "event.h"
+#include "tty.h"
 
 
 typedef struct {
@@ -98,11 +99,27 @@ static uint8_t * make_tx_packet(uint8_t * tx, void * packet, int data_size) {
 static void send_packet(void * data, int data_size, int fd) {
 
   int tx_size = data_size + BUSMAIL_PACKET_OVER_HEAD;
+  int len, writtenLen, chunkSize;
   uint8_t * tx = malloc(tx_size);
-  
+
+  writtenLen = 0;
   make_tx_packet(tx, data, data_size);
   util_dump(tx, tx_size, "[WRITE to dect]");
-  write(fd, tx, tx_size);
+
+  while(writtenLen < tx_size) {
+    chunkSize = tx_size - writtenLen;
+
+    len = write(fd, tx + writtenLen, chunkSize);
+    if (len == -1 && errno != EINTR) {
+      perror("Error writing to external Dect");
+      break;
+    }
+		
+    writtenLen += len;
+  }
+
+  if(tty_drain(fd)) perror("Error draining to external Dect");
+
   free(tx);
 }
 
