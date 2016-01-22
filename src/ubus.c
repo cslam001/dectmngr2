@@ -236,8 +236,9 @@ static void call_answer(struct ubus_request *req, int type, struct blob_attr *ms
 				 * handsets, otherwise off. */
 				printf("Uci setting radio active when handsets registered\n");
 				connection.uciRadioConf = RADIO_AUTO;
-				list_handsets();
 			}
+
+			list_handsets();
 		}
 	}
 }
@@ -249,6 +250,13 @@ static void call_answer(struct ubus_request *req, int type, struct blob_attr *ms
 static void call_complete(struct ubus_request *req, int ret)
 {
 	ubus_call_complete_callback cb = (ubus_call_complete_callback) req->priv;
+
+	if(uciId == req->peer && req->status_code != UBUS_STATUS_OK) {
+		/* Got answer from a _failed_ UCI query and thus, we
+		 * can't query UCI for users radio settings. Do
+		 * something sane as default. */
+		list_handsets();
+	}
 
 	if(cb) cb(ret);
 	free(req);
@@ -393,7 +401,7 @@ int ubus_reply_handset_list(int retErrno, const struct handsets_t const *handset
 {
 	struct blob_buf blob;
 	void *list1, *tbl, *list2;
-	int i;
+	int i, j;
 
 	if(!querier.inUse) return -1;
 
@@ -412,6 +420,29 @@ int ubus_reply_handset_list(int retErrno, const struct handsets_t const *handset
 		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[3]);
 		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[4]);
 		blobmsg_close_table(&blob, list2);
+
+		list2 = blobmsg_open_array(&blob, "codecs");
+		for(j = 0; j < handsets->terminal[i].codecs->NoOfCodecs; j++) {
+			switch(handsets->terminal[i].codecs->Codec[j].Codec) {
+				case API_CT_G726:
+					blobmsg_add_string(&blob,  NULL, "G.726");
+					break;
+				case API_CT_G722:
+					blobmsg_add_string(&blob,  NULL, "G.722");
+					break;
+				case API_CT_G711A:
+					blobmsg_add_string(&blob,  NULL, "G.711A");
+					break;
+				case API_CT_G711U:
+					blobmsg_add_string(&blob,  NULL, "G.711U");
+					break;
+				case API_CT_G7291:
+					blobmsg_add_string(&blob,  NULL, "G.791");
+					break;
+			}
+		}
+		blobmsg_close_table(&blob, list2);
+
 		blobmsg_close_table(&blob, tbl);
 	}
 	blobmsg_close_table(&blob, list1);
