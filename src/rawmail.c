@@ -11,6 +11,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <errno.h>
 
 #include "error.h"
 #include "rawmail.h"
