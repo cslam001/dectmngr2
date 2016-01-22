@@ -49,6 +49,7 @@ static void get_handset_ipui(int handsetId)
 static void got_handset_ipui(busmail_t *m)
 {
 	ApiFpMmGetHandsetIpuiCfmType *resp;
+	ApiInfoElementType *ie;
 	int i;
 
 	resp = (ApiFpMmGetHandsetIpuiCfmType*) &m->mail_header;
@@ -64,8 +65,17 @@ static void got_handset_ipui(busmail_t *m)
 	for(i = 0; i < MAX_NR_HANDSETS &&
 			handsets.terminal[i].id != resp->TerminalId; i++);
 
+	// Copy unique address
 	memcpy(handsets.terminal[i].ipui, resp->IPUI,
 		sizeof(handsets.terminal[0].ipui));
+
+	// Copy list of codecs the handset support
+	ie = ApiGetInfoElement((ApiInfoElementType*) resp->InfoElement,
+		resp->InfoElementLength, API_IE_CODEC_LIST);
+	if (ie && ie->IeLength) {
+		handsets.terminal[i].codecs = malloc(ie->IeLength);
+		memcpy(handsets.terminal[i].codecs, ie->IeData, ie->IeLength);
+	}
 
 	/* Query next handset if we yet
 	 * haven't got them all. */
@@ -115,6 +125,7 @@ static void got_registration_count(busmail_t *m)
 	}
 	if(resp->TerminalIdCount > resp->MaxNoHandsets) return;
 
+	for(i = 0; i < MAX_NR_HANDSETS; i++) free(handsets.terminal[i].codecs);
 	handsets.termCount = resp->TerminalIdCount;
 	memset(handsets.terminal, 0, sizeof(struct terminal_t) * MAX_NR_HANDSETS);
 	printf("There are %d registered handsets\n", handsets.termCount);
@@ -215,6 +226,8 @@ static void handset_handler(packet_t *p)
 //-------------------------------------------------------------
 void handset_init(void * bus)
 {
+	memset(&handsets, 0, sizeof(handsets));
+
 	dect_bus = bus;
 	mailProto.add_handler(bus, handset_handler);
 }

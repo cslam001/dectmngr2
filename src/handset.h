@@ -2,6 +2,9 @@
 #ifndef HANDSET_H
 #define HANDSET_H
 
+#include <Api/RsStandard.h>
+#include <Api/Types/ApiTypes.h>
+
 
 //-------------------------------------------------------------
 #define MAX_NR_HANDSETS 20
@@ -9,6 +12,7 @@
 struct terminal_t {
 	uint32_t id;
 	uint8_t ipui[5];
+	ApiCodecListType *codecs;
 };
 
 
