@@ -1,4 +1,10 @@
 
+#ifndef NATALIE_UTILS_H
+#define NATALIE_UTILS_H
+
+#include <Api/RsStandard.h>
+#include <Api/Types/ApiTypes.h>
+
 
 
 ApiInfoElementType *
@@ -28,3 +34,5 @@ void ApiBuildInfoElement(ApiInfoElementType **IeBlockPtr,
 
 #define SINGLE_CODECLIST_LENGTH         (sizeof(ApiCodecListType))
 #define NBWB_CODECLIST_LENGTH           (SINGLE_CODECLIST_LENGTH + sizeof(ApiCodecInfoType))
+
+#endif
