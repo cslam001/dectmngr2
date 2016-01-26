@@ -99,7 +99,6 @@ static void connection_init_handler(packet_t *p) {
 			printf("WRITE: API_FP_GET_FW_VERSION_REQ\n");
 			ApiFpGetFwVersionReqType m1 = { .Primitive = API_FP_GET_FW_VERSION_REQ, };
 			mailProto.send(dect_bus, (uint8_t *)&m1, sizeof(ApiFpGetFwVersionReqType));
-
 		}
 		break;
 
@@ -155,8 +154,10 @@ static void connection_init_handler(packet_t *p) {
 		}
 		break;	
 
+	case API_FP_GET_FW_VERSION_CFM:												// External Dect has initialized
+		fw_version_cfm(m);
+		// fall through
 	case API_LINUX_INIT_CFM:													// Internal Dect has initialized
-	case API_FP_GET_FW_VERSION_CFM:												// External Dext has initialized
 		{
 			/* Setup terminal id */
 			printf("WRITE: API_FP_FEATURES_REQ\n");
