@@ -74,6 +74,7 @@ static void * dect_bus;
 
 //-------------------------------------------------------------
 static int audio_format_req(struct call_t *call);
+static int parse_info_elements(struct call_t *call, rsuint8 *InfoElements, rsuint16 InfoElementLength);
 
 
 
@@ -243,33 +244,33 @@ static void free_call_slot(struct call_t *call) {
 // Handle an outgoing call from handset to outer world.
 // State F-01 call initiated (ETSI EN 300 175-5).
 static int setup_ind(busmail_t *m) {
-	ApiFpCcSetupIndType * p = (ApiFpCcSetupIndType *) &m->mail_header;
+	ApiFpCcSetupIndType *msgIn = (ApiFpCcSetupIndType *) &m->mail_header;
 	ApiFpCcSetupResType reply;
 	struct call_t *call;
 	
 	// First check prerequisites. Can the call switch to next state?
 	reply.Primitive = API_FP_CC_SETUP_RES;
-	reply.CallReference.Instance.Fp = p->CallReference.Instance.Fp;
-	reply.CallReference.Instance.Host = p->TerminalId;
+	reply.CallReference.Instance.Fp = msgIn->CallReference.Instance.Fp;
+	reply.CallReference.Instance.Host = msgIn->TerminalId;
 	reply.AudioId.IntExtAudio = API_IEA_EXT;
-	reply.AudioId.AudioEndPointId = p->TerminalId - 1;
+	reply.AudioId.AudioEndPointId = msgIn->TerminalId - 1;
 
 	/* Don't accept source terminal ID higher than can fit into
 	 * the four bit field "reply.CallReference.Instance.Host" */
-	if(p->TerminalId > 15) {
+	if(msgIn->TerminalId > 15) {
 		printf("Error, invalid terminal ID\n");
 		reply.Status = RSS_FAILED;
-		mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
+		mailProto.send(dect_bus, (uint8_t *) &reply, sizeof(ApiFpCcSetupResType));
 		return -1;
 	}
 
 	// Did FP allocate a system call ID?
-	if(!p->InfoElementLength || 
-			!ApiGetInfoElement(p->InfoElement, p->InfoElementLength,
-			API_IE_SYSTEM_CALL_ID)) {
+	if(!msgIn->InfoElementLength || 
+			!ApiGetInfoElement((ApiInfoElementType*) msgIn->InfoElement,
+			msgIn->InfoElementLength, API_IE_SYSTEM_CALL_ID)) {
 		printf("Error, got no system call ID\n");
 		reply.Status = RSS_MISSING_PARAMETER;
-		mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
+		mailProto.send(dect_bus, (uint8_t *) &reply, sizeof(ApiFpCcSetupResType));
 		return -1;
 	}
 
@@ -278,7 +279,7 @@ static int setup_ind(busmail_t *m) {
 	if(!call) {
 		printf("Error, no free call slot\n");
 		reply.Status = RSS_NO_RESOURCE;
-		mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
+		mailProto.send(dect_bus, (uint8_t *) &reply, sizeof(ApiFpCcSetupResType));
 		return -1;
 	}
 
@@ -286,11 +287,11 @@ static int setup_ind(busmail_t *m) {
 		cc_state_names[call->state], cc_state_names[F01_INITIATED]);
 	call->state = F01_INITIATED;
 	call->CallReference = reply.CallReference;
-	call->TerminalId = p->TerminalId;
-	call->BasicService = p->BasicService;
+	call->TerminalId = msgIn->TerminalId;
+	call->BasicService = msgIn->BasicService;
 	call->epId = reply.AudioId.AudioEndPointId;
 	call->SystemCallId = get_system_call_id(
-		(ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
+		(ApiInfoElementType*) msgIn->InfoElement, msgIn->InfoElementLength);
 	reply.Status = RSS_SUCCESS;
 	mailProto.send(dect_bus, (uint8_t *)&reply, sizeof(ApiFpCcSetupResType));
 
@@ -329,13 +330,13 @@ const char number[] = { '0', '1', '2', '3', '4' };
 	// Send "call setup"
 	status.CallStatusSubId = API_SUB_CALL_STATUS;
 	status.CallStatusValue.State = API_CSS_CALL_SETUP;
-	ApiBuildInfoElement(&buf, &bufLen, API_IE_CALL_STATUS,
-		sizeof(status), (rsuint8*) &status);
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_CALL_STATUS, sizeof(status), (rsuint8*) &status);
 
 	line.ApiSubId = API_SUB_LINE_ID_EXT_LINE_ID;
 	line.ApiLineValue.Value = 1;
-	ApiBuildInfoElement(&buf, &bufLen, API_IE_LINE_ID,
-		sizeof(line), (rsuint8*) &line);
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_LINE_ID, sizeof(line), (rsuint8*) &line);
 
 	// Send callers phone number
 	callerNumber.NumberType = ANT_NATIONAL;
@@ -344,8 +345,9 @@ const char number[] = { '0', '1', '2', '3', '4' };
 	callerNumber.ScreeningInd = API_USER_PROVIDED_NOT_SCREENED;
 	callerNumber.NumberLength = sizeof(number);
 	memcpy(callerNumber.Number, number, sizeof(number));
-	ApiBuildInfoElement(&buf, &bufLen, API_IE_CALLING_PARTY_NUMBER,
-		sizeof(callerNumber) + sizeof(number), (rsuint8*) &callerNumber);
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_CALLING_PARTY_NUMBER, sizeof(callerNumber) + sizeof(number),
+		(rsuint8*) &callerNumber);
 
 	// Send list of codecs we support to handset
 	codecs = malloc(sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType));
@@ -359,8 +361,9 @@ const char number[] = { '0', '1', '2', '3', '4' };
 	codecs->Codec[1].MacDlcService = API_MDS_1_MD;
 	codecs->Codec[1].CplaneRouting = API_CPR_CS;
 	codecs->Codec[1].SlotSize = API_SS_FS;
-	ApiBuildInfoElement(&buf, &bufLen, API_IE_CODEC_LIST,
-		sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType), (rsuint8 *) codecs);
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_CODEC_LIST, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType),
+		(rsuint8*) codecs);
 
 	msg = calloc(1, sizeof(ApiFpCcSetupReqType) - 1 + bufLen);
 	msg->Primitive = API_FP_CC_SETUP_REQ;
@@ -434,7 +437,7 @@ static int audio_format_req(struct call_t *call) {
 //-------------------------------------------------------------
 // Send a list of audio codecs we support to
 // handset and play a dial tone.
-static void audio_format_cfm(busmail_t *m) {
+static int audio_format_cfm(busmail_t *m) {
 	ApiAudioDataFormatListType *pcmFormat;
 	ApiFpSetAudioFormatCfmType *msgIn;
 	ApiFpCcConnectResType *msgConRes;
@@ -456,8 +459,9 @@ static void audio_format_cfm(busmail_t *m) {
 	// Send system call ID
 	SystemCallId.ApiSubId = API_SUB_CALL_ID;
 	SystemCallId.ApiSystemCallId = call->SystemCallId;
-	ApiBuildInfoElement(&buf, &bufLen, API_IE_SYSTEM_CALL_ID,
-		sizeof(ApiSystemCallIdType), (rsuint8 *) &SystemCallId);
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_SYSTEM_CALL_ID, sizeof(ApiSystemCallIdType),
+		(rsuint8*) &SystemCallId);
 
 	// Send the codecs we want the handset to use
 	codecs = malloc(sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType));
@@ -473,9 +477,9 @@ static void audio_format_cfm(busmail_t *m) {
 	codecs->Codec[1].MacDlcService = API_MDS_1_MD;
 	codecs->Codec[1].CplaneRouting = API_CPR_CS;
 	codecs->Codec[1].SlotSize = API_SS_FS;
-	ApiBuildInfoElement(&buf, &bufLen, API_IE_CODEC_LIST,
-		sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType) * 
-		(codecs->NoOfCodecs - 1), (rsuint8 *) codecs);
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_CODEC_LIST, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType) *
+		(codecs->NoOfCodecs - 1), (rsuint8*) codecs);
 
 	// Send the "air codec to pcm format translation" map
 	pcmFormat = malloc(sizeof(ApiAudioDataFormatListType) +
@@ -487,16 +491,16 @@ static void audio_format_cfm(busmail_t *m) {
 	pcmFormat->ApiAudioDataFormatInfo[1].Codec = API_CT_G726;
 	pcmFormat->ApiAudioDataFormatInfo[1].ApiAudioDataFormat = 
 		AP_DATA_FORMAT_LINEAR_8kHz;
-	ApiBuildInfoElement(&buf, &bufLen, API_IE_AUDIO_DATA_FORMAT,
-		sizeof(ApiAudioDataFormatListType) +
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_AUDIO_DATA_FORMAT, sizeof(ApiAudioDataFormatListType) +
 		sizeof(ApiAudioDataFormatInfoType) * (pcmFormat->NoOfCodecs - 1),
-		(rsuint8 *) pcmFormat);
+		(rsuint8*) pcmFormat);
 
 	// Send "call should become connected"
 	status.CallStatusSubId = API_SUB_CALL_STATUS;
 	status.CallStatusValue.State = API_CSS_CALL_CONNECT;
-	ApiBuildInfoElement(&buf, &bufLen, API_IE_CALL_STATUS,
-		sizeof(status), (rsuint8*) &status);
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_CALL_STATUS, sizeof(status), (rsuint8*) &status);
 
 	msgConRes = malloc(sizeof(ApiFpCcConnectResType) - 1 + bufLen);
 	msgConRes->Primitive = API_FP_CC_CONNECT_RES;
@@ -521,6 +525,7 @@ static void audio_format_cfm(busmail_t *m) {
 			snprintf(term, sizeof(term), "%d", call->epId);
 			ubus_send_string_api("dect.api.setup_ind", "terminal", term);
 			break;
+
 		case F01_INITIATED:
 			printf("[%llu] API_FP_CC_CONNECT_REQ\n", timeSinceStart());
 			memcpy(msgConReq->InfoElement, buf, bufLen);
@@ -530,6 +535,13 @@ static void audio_format_cfm(busmail_t *m) {
 			snprintf(term, sizeof(term), "%d", call->epId);
 			ubus_send_string_api("dect.api.setup_ind", "terminal", term);
 			break;
+
+		case F00_NULL:
+			snprintf(term, sizeof(term), "%d", call->epId);
+			ubus_send_string_api("dect.api.release_ind", "terminal", term);
+			free_call_slot(call);
+			break;
+
 		default:
 			printf("Error, invalid state in %s\n", __FUNCTION__);
 //release_req();
@@ -608,7 +620,7 @@ static void audio_format_cfm(busmail_t *m) {
 	free(ie_block);	
 	free(ra);
 }
-#endif
+
 
 
 static void setup_ack_cfm(busmail_t *m) {
@@ -619,37 +631,39 @@ static void setup_ack_cfm(busmail_t *m) {
 		p->CallReference.Instance.Fp);
 	print_status(p->Status);
 }
+#endif
 
 
 
-static void info_ind(busmail_t *m) {
-	ApiFpCcInfoIndType * p = (ApiFpCcInfoIndType *) &m->mail_header;
-	ApiSystemCallIdType SystemCallId;
-	rsuint16 ie_block_len;
-	ApiInfoElementType *ie_block;
-	ApiCallStatusType call_status;
+//-------------------------------------------------------------
+// We receive various data such as dialed number etc.
+static int info_ind(busmail_t *m) {
+	ApiFpCcInfoIndType *msgIn;
+//	ApiSystemCallIdType SystemCallId;
+//	rsuint16 ie_block_len;
+//	ApiInfoElementType *ie_block;
+//	ApiCallStatusType call_status;
 	char json[100];
 	char* dialed_nr = NULL;
 	struct call_t *call;
 
-	ie_block_len = 0;
-	ie_block = NULL;
-	call = find_call_by_ref(&p->CallReference);
-	if(!call) return;
+	msgIn = (ApiFpCcInfoIndType*) &m->mail_header;
+	call = find_call_by_ref(&msgIn->CallReference);
+	if(!call) return -1;
 
-	printf("Got INFO_IND element %d len %d\n", p->InfoElement[0], p->InfoElementLength);
-	printf("[%llu] CallReference: %d\n", timeSinceStart(),
-		call->CallReference.Instance.Fp);
-	
+	printf("Got INFO_IND element %d len %d\n", msgIn->InfoElement[0], msgIn->InfoElementLength);
+parse_info_elements(call, msgIn->InfoElement, msgIn->InfoElementLength);
+
 	/* Did user dial a number? Then send it
 	 * to asterisk, otherwise do nothing. */
-	dialed_nr = get_dialed_nr((ApiInfoElementType *) p->InfoElement, p->InfoElementLength);
-	if(!dialed_nr) return;
+	dialed_nr = get_dialed_nr((ApiInfoElementType*) msgIn->InfoElement, msgIn->InfoElementLength);
+	if(!dialed_nr) return -1;
 	snprintf(json, sizeof(json), "{ \"terminal\": \"%d\", \"dialed_nr\": \"%s\" }",
 		call->epId, dialed_nr);
 	printf("string: %s\n", json);
 	ubus_send_json_string("dect.api.info_ind", json);
 
+#if 0
 	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
 	call_status.CallStatusValue.State = API_CSS_CALL_PROC;
 	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_CALL_STATUS,
@@ -674,9 +688,47 @@ static void info_ind(busmail_t *m) {
 
 	free(ie_block);
 	free(req);
+#endif
 	free(dialed_nr);
+
+	return 0;
 }
 
+
+
+// Ie is in little endian inside the infoElement
+// list while all arguments to function are in bigEndian */
+static int parse_info_elements(struct call_t *call, rsuint8 *InfoElements, rsuint16 InfoElementLength) {
+	ApiInfoElementType *InfoElement;
+	ApiIa5CharType *keyPress;
+
+	InfoElement = (ApiInfoElementType*) InfoElements;
+
+	while(InfoElementLength > sizeof(ApiInfoElementType)) {
+		printf("Info element %x, len %u\n", InfoElement->Ie, InfoElement->IeLength);
+
+		switch(InfoElement->Ie) {
+			case API_IE_MULTIKEYPAD:
+				keyPress = calloc(1, InfoElement->IeLength + 1);
+				memcpy(keyPress, InfoElement->IeData, InfoElement->IeLength);
+				printf("Terminal %d pressed keys %s\n",
+					call->TerminalId, keyPress);
+				//ubus_send_json_string("dect.api.info_ind", json);
+				free(keyPress);
+				break;
+
+			default:
+				break;
+		}
+
+		InfoElementLength -= (rsuint16) InfoElement->IeLength;
+		InfoElementLength -= (rsuint16) sizeof(ApiInfoElementType) - 1;
+		InfoElement = (ApiInfoElementType*) ((uint8_t*) InfoElement +
+			InfoElement->IeLength);
+	}
+
+	return 0;
+}
 
 
 static void call_proc_cfm(busmail_t *m) {
@@ -871,42 +923,76 @@ static void reject_ind(busmail_t *m) {
 
 
 
-static void release_cfm(busmail_t *m) {
-	ApiFpCcReleaseCfmType * p = (ApiFpCcReleaseCfmType *) &m->mail_header;
+//-------------------------------------------------------------
+// We have disconnected a call and the phone acknowledges it
+static int release_cfm(busmail_t *m) {
+	ApiFpCcReleaseCfmType *msgIn;
+	struct call_t *call;
 
-	printf("CallReference: %x\n", p->CallReference.Value);
-	print_status(p->Status);
+	msgIn = (ApiFpCcReleaseCfmType *) &m->mail_header;
+	call = find_call_by_ref(&msgIn->CallReference);
+	if(!call) return -1;
+
+	switch(call->state) {
+		case F19_RELEASE_PEND:
+			printf("Call %d state change from %s to %s\n", call->idx,
+				cc_state_names[call->state], cc_state_names[F00_NULL]);
+			call->state = F00_NULL;
+			// Request shut down of PCM audio
+			if(audio_format_req(call)) return -1;
+
+		default:
+			break;
+	}
+
+	return 0;
 }
 
 
-static void release_ind(busmail_t *m) {
-	ApiFpCcReleaseIndType * p = (ApiFpCcReleaseIndType *) &m->mail_header;
-	ApiCallReferenceType terminate_call;
-	char term[15];
+
+//-------------------------------------------------------------
+// PP user has pressed the on hook key, we disconnect the call.
+static int release_ind(busmail_t *m) {
+	ApiSystemCallIdType SystemCallId;
+	ApiFpCcReleaseResType *msgOut;
+	ApiFpCcReleaseIndType *msgIn;
 	struct call_t *call;
+	rsuint16 bufLen;
+	rsuint8 *buf;
 
-	call = find_call_by_ref(&p->CallReference);
-	if(!call) return;
+	msgIn = (ApiFpCcReleaseIndType*) &m->mail_header;
+	call = find_call_by_ref(&msgIn->CallReference);
+	if(!call) return -1;
 
-	printf("[%llu] CallReference: %x\n", timeSinceStart(),
-		p->CallReference.Value);
-	printf("Reason: %x\n", p->Reason);
-	
-	ApiFpCcReleaseResType res = {
-		.Primitive = API_FP_CC_RELEASE_RES,
-		.CallReference = p->CallReference,
-		.Status = RSS_SUCCESS,
-		.InfoElementLength = 0,
-	};
-	
+	buf = NULL;
+	bufLen = 0;
+	// Send system call ID
+	SystemCallId.ApiSubId = API_SUB_CALL_ID;
+	SystemCallId.ApiSystemCallId = call->SystemCallId;
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_SYSTEM_CALL_ID, sizeof(ApiSystemCallIdType),
+		(rsuint8*) &SystemCallId);
+
+	// Send acknowledge, we will disconnect the call
+	msgOut = malloc(sizeof(ApiFpCcReleaseResType) - 1 + bufLen);
+	msgOut->Primitive = API_FP_CC_RELEASE_RES;
+	msgOut->CallReference = call->CallReference;
+	msgOut->InfoElementLength = bufLen;
+	msgOut->Status = RSS_SUCCESS;
+
+	memcpy(msgOut->InfoElement, buf, bufLen);
 	printf("API_FP_CC_RELEASE_RES\n");
-	mailProto.send(dect_bus, (uint8_t *)&res, sizeof(res));
+	mailProto.send(dect_bus, (uint8_t*) msgOut,
+		sizeof(ApiFpCcReleaseResType) - 1 + bufLen);
 
-	snprintf(term, sizeof(term), "%d", call->epId);
+	printf("Call %d state change from %s to %s\n", call->idx,
+		cc_state_names[call->state], cc_state_names[F00_NULL]);
+	call->state = F00_NULL;
 
-	ubus_send_string_api("dect.api.release_ind", "terminal", term);
+	// Request shut down of PCM audio
+	if(audio_format_req(call)) return -1;
 
-	free_call_slot(call);
+	return 0;
 }
 
 
@@ -982,9 +1068,9 @@ void external_call_mail_handler(packet_t *p) {
 			alert_cfm(m);
 			break;
 	
-		case API_FP_CC_SETUP_ACK_CFM:
-			setup_ack_cfm(m);
-			break;
+//		case API_FP_CC_SETUP_ACK_CFM:
+//			setup_ack_cfm(m);
+//			break;
 	
 		case API_FP_CC_INFO_IND:
 			info_ind(m);
