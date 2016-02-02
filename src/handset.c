@@ -49,7 +49,9 @@ static void get_handset_ipui(int handsetId)
 static void got_handset_ipui(busmail_t *m)
 {
 	ApiFpMmGetHandsetIpuiCfmType *resp;
+	ApiBasicTermCapsType *basicCaps;
 	ApiInfoElementType *ie;
+	ApiTermCapsType *caps;
 	int i;
 
 	resp = (ApiFpMmGetHandsetIpuiCfmType*) &m->mail_header;
@@ -77,6 +79,24 @@ static void got_handset_ipui(busmail_t *m)
 		memcpy(handsets.terminal[i].codecs, ie->IeData, ie->IeLength);
 	}
 
+	// Terminal capabilites	
+	ie = ApiGetInfoElement((ApiInfoElementType*) resp->InfoElement,
+		resp->InfoElementLength, API_IE_TERMCAPS);
+	if (ie && ie->IeLength) {
+		caps = (ApiTermCapsType*) ie->IeData;
+		handsets.terminal[i].BasicService = (caps->Byte4f & 2u) ? 
+			API_WIDEBAND_SPEECH : API_BASIC_SPEECH;
+	}
+
+	ie = ApiGetInfoElement((ApiInfoElementType*) resp->InfoElement,
+		resp->InfoElementLength, API_IE_BASIC_TERMCAPS);
+	if (ie && ie->IeLength) {
+		basicCaps = (ApiBasicTermCapsType*) ie->IeData;
+		handsets.terminal[i].BasicService = (basicCaps->Flags0 & 3u) ? 
+			API_WIDEBAND_SPEECH : API_BASIC_SPEECH;
+	}
+
+
 	/* Query next handset if we yet
 	 * haven't got them all. */
 	i++;
@@ -87,6 +107,86 @@ static void got_handset_ipui(busmail_t *m)
 	else {
 		get_handset_ipui(handsets.terminal[i].id);
 	}
+}
+
+
+
+//-------------------------------------------------------------
+// A handset has been deleted from the list of registereds
+static int handset_delete_cfm(busmail_t *m)
+{
+	ApiFpMmDeleteRegistrationCfmType *msgIn;
+	int i;
+
+	msgIn = (ApiFpMmDeleteRegistrationCfmType*) &m->mail_header;
+	if(msgIn->Status != RSS_SUCCESS) return -1;
+	if(!handsets.termCount) return -1;
+
+	for(i = 0; i < MAX_NR_HANDSETS; i++) {
+		if(handsets.terminal[i].id == msgIn->TerminalId) {
+			free(handsets.terminal[i].codecs);
+			memset(&handsets.terminal[i], 0, sizeof(struct terminal_t));
+			handsets.termCount--;
+			perhaps_disable_radio();
+			ubus_send_string("handset", "remove");
+			break;
+		}
+	}
+
+	return 0;
+}
+
+
+
+//-------------------------------------------------------------
+// A new handset has been registered
+static int handset_registerd_cfm(busmail_t *m)
+{
+	ApiFpMmRegistrationCompleteIndType *msgIn;
+	ApiBasicTermCapsType *basicCaps;
+	ApiTermCapsType *caps;
+	ApiInfoElementType *ie;
+	int i;
+
+	msgIn = (ApiFpMmRegistrationCompleteIndType*) &m->mail_header;
+	if(msgIn->Status != RSS_SUCCESS) return -1;
+	if(handsets.termCount == MAX_NR_HANDSETS) return -1;
+
+	/* Find a free slot in the list of registered
+	 * handset and add its' properties. */
+	for(i = 0; i < MAX_NR_HANDSETS && handsets.terminal[i].id; i++);
+	handsets.terminal[i].id = msgIn->TerminalId;
+
+	// Codecs
+	ie = ApiGetInfoElement((ApiInfoElementType*) msgIn->InfoElement,
+		msgIn->InfoElementLength, API_IE_CODEC_LIST);
+	if (ie && ie->IeLength) {
+		handsets.terminal[i].codecs = malloc(ie->IeLength);
+		memcpy(handsets.terminal[i].codecs, ie->IeData, ie->IeLength);
+	}
+
+	// Terminal capabilites	
+	ie = ApiGetInfoElement((ApiInfoElementType*) msgIn->InfoElement,
+		msgIn->InfoElementLength, API_IE_TERMCAPS);
+	if (ie && ie->IeLength) {
+		caps = (ApiTermCapsType*) ie->IeData;
+		handsets.terminal[i].BasicService = (caps->Byte4f & 2u) ? 
+			API_WIDEBAND_SPEECH : API_BASIC_SPEECH;
+	}
+
+	ie = ApiGetInfoElement((ApiInfoElementType*) msgIn->InfoElement,
+		msgIn->InfoElementLength, API_IE_BASIC_TERMCAPS);
+	if (ie && ie->IeLength) {
+		basicCaps = (ApiBasicTermCapsType*) ie->IeData;
+		handsets.terminal[i].BasicService = (basicCaps->Flags0 & 3u) ? 
+			API_WIDEBAND_SPEECH : API_BASIC_SPEECH;
+	}
+	
+	handsets.termCount++;
+	ubus_send_string("handset", "add");
+	perhaps_disable_radio();
+
+	return 0;
 }
 
 
@@ -184,7 +284,6 @@ int page_all_handsets(void) {
 static void handset_handler(packet_t *p)
 {
 	busmail_t * m = (busmail_t *) &p->data[0];
-	ApiFpMmGetIdCfmType *resp = (ApiFpMmGetIdCfmType*) &m->mail_header;			// For get in "Status" of those structs who has it
 
 	if (m->task_id != 1) return;
 	
@@ -203,19 +302,11 @@ static void handset_handler(packet_t *p)
 			break;
 
 		case API_FP_MM_REGISTRATION_COMPLETE_IND:
-			if(resp->Status == RSS_SUCCESS) {
-				if(handsets.termCount < MAX_NR_HANDSETS) handsets.termCount++;
-				ubus_send_string("handset", "add");
-			}
-			perhaps_disable_radio();
+			handset_registerd_cfm(m);
 			break;
 
 		case API_FP_MM_DELETE_REGISTRATION_CFM:
-			if(resp->Status == RSS_SUCCESS) {
-				if(handsets.termCount) handsets.termCount--;
-				perhaps_disable_radio();
-				ubus_send_string("handset", "remove");
-			}
+			handset_delete_cfm(m);
 			break;
 	}
 }

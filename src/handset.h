@@ -12,7 +12,8 @@
 struct terminal_t {
 	uint32_t id;
 	uint8_t ipui[5];
-	ApiCodecListType *codecs;
+	ApiCcBasicServiceType BasicService;						// supports wideband
+	ApiCodecListType *codecs;								// supported codecs
 };
 
 
