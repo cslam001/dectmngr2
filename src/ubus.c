@@ -129,18 +129,18 @@ static struct querier_t querier;												// Handle to deferred RPC request
 
 
 //-------------------------------------------------------------
-// We transmitt a public ubus string event
-int ubus_send_string(const char *msgKey, const char *msgVal)
+// We transmitt many strings as an ubus event to the specified path
+int ubus_send_strings(const char *path, const char *msgKey[], const char *msgVal[], int len)
 {
 	struct blob_buf blob;
-	int res = 0;
+	int i, res = 0;
 
 	memset(&blob, 0, sizeof(blob));
 	if(blob_buf_init(&blob, 0)) return -1;
-	blobmsg_add_string(&blob, msgKey, msgVal);
+	for(i = 0; i < len; i++) blobmsg_add_string(&blob, msgKey[i], msgVal[i]);
 
-	if(ubus_send_event(ubusContext, ubusSenderId, blob.head) != UBUS_STATUS_OK) {
-		printf("Error sending ubus message %s %s\n", msgKey, msgVal);
+	if(ubus_send_event(ubusContext, path, blob.head) != UBUS_STATUS_OK) {
+		printf("Error sending ubus message %s %s\n", msgKey[0], msgVal[0]);
 			res = -1;
 	}
 
@@ -148,28 +148,24 @@ int ubus_send_string(const char *msgKey, const char *msgVal)
 
 	return res;
 }
+
 
 
 //-------------------------------------------------------------
-// We transmitt a public ubus string event with sender id
-int ubus_send_string_api(const char *sender, const char *msgKey, const char *msgVal)
+// We transmitt one string to as an ubus event to the specified path
+int ubus_send_string_to(const char *path, const char *msgKey, const char *msgVal)
 {
-	struct blob_buf blob;
-	int res = 0;
-
-	memset(&blob, 0, sizeof(blob));
-	if(blob_buf_init(&blob, 0)) return -1;
-	blobmsg_add_string(&blob, msgKey, msgVal);
-
-	if(ubus_send_event(ubusContext, sender, blob.head) != UBUS_STATUS_OK) {
-		printf("Error sending ubus message %s %s\n", msgKey, msgVal);
-			res = -1;
-	}
-
-	blob_buf_free(&blob);
-
-	return res;
+	return ubus_send_strings(path, &msgKey, &msgVal, 1);
 }
+
+
+
+//-------------------------------------------------------------
+// We transmitt one string as a public (to all) ubus event
+int ubus_send_string(const char *msgKey, const char *msgVal) {
+	return ubus_send_string_to(ubusSenderId, msgKey, msgVal);	
+}
+
 
 
 //-------------------------------------------------------------
@@ -409,7 +405,9 @@ int ubus_reply_handset_list(int retErrno, const struct handsets_t const *handset
 	if(blobmsg_buf_init(&blob)) return -1;
 
 	list1 = blobmsg_open_array(&blob, "handsets");
-	for(i = 0; i < handsets->termCount; i++) {
+	for(i = 0; i < MAX_NR_HANDSETS; i++) {
+		if(!handsets->terminal[i].id) continue;
+
 		tbl = blobmsg_open_table(&blob, NULL);
 		blobmsg_add_u32(&blob, "id", handsets->terminal[i].id);
 
