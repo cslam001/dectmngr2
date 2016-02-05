@@ -1,0 +1,6 @@
+.built
+.built_check
+.configured_
+.dep_files
+.prepared_*
+ipkg-brcm63xx*
