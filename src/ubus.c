@@ -791,7 +791,7 @@ static int ubus_request_call(struct ubus_context *ubus_ctx, struct ubus_object *
 
 	// Did we get all arguments we need?
 	if(termId >= 0 && add && pcmId >= 0) {
-		if(setup_req(termId, pcmId)) {
+		if(setup_req((uint32_t) termId, pcmId)) {
 			res = ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
 		}
 		else {
