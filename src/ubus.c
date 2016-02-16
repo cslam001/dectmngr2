@@ -342,7 +342,7 @@ int uci_call_query(const char *option)
 
 
 //-------------------------------------------------------------
-// Send a busy reply that a request was successful
+// Send a reply that a request was successful
 static int ubus_reply_success(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
 {
@@ -354,7 +354,6 @@ static int ubus_reply_success(struct ubus_context *ubus_ctx, struct ubus_object 
 	blobmsg_add_u32(&isOkMsg, "errno", 0);
 	blobmsg_add_string(&isOkMsg, "errstr", strerror(0));
 	blobmsg_add_string(&isOkMsg, "method", methodName);
-//	blobmsg_add_blob(&isOkMsg, msg);
 
 	ubus_send_reply(ubus_ctx, req, isOkMsg.head);
 	blob_buf_free(&isOkMsg);
@@ -381,7 +380,6 @@ static int ubus_reply_busy(struct ubus_context *ubus_ctx, struct ubus_object *ob
 	blobmsg_add_u32(&isBusyMsg, "errno", EBUSY);
 	blobmsg_add_string(&isBusyMsg, "errstr", strerror(EBUSY));
 	blobmsg_add_string(&isBusyMsg, "method", methodName);
-//	blobmsg_add_blob(&isBusyMsg, msg);
 
 	ubus_send_reply(ubus_ctx, req, isBusyMsg.head);
 	blob_buf_free(&isBusyMsg);
@@ -767,12 +765,13 @@ static int ubus_request_status(struct ubus_context *ubus_ctx, struct ubus_object
 static int ubus_request_call(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
 {
+	int res, termId, pcmId, add, release;
 	struct blob_attr **keys;
-	int res, termId, pcmId, add;
 
 	termId = -1;
 	pcmId = -1;
 	add = 0;
+	release = 0;
 
 	// Tokenize message key/value paris into an array
 	res = keyTokenize(obj, methodName, msg, &keys);
@@ -786,17 +785,34 @@ static int ubus_request_call(struct ubus_context *ubus_ctx, struct ubus_object *
 	if(keys[CALL_ADD]) {
 		add = 1;
 		pcmId = blobmsg_get_u32(keys[CALL_ADD]);
-		printf("call pcm %d\n", pcmId);
+		printf("call add %d\n", pcmId);
 	}
 
+	if(keys[CALL_REL]) {
+		release = 1;
+		pcmId = blobmsg_get_u32(keys[CALL_ADD]);
+		printf("call release %d\n", pcmId);
+	}
+
+
 	// Did we get all arguments we need?
-	if(termId >= 0 && add && pcmId >= 0) {
-		if(setup_req((uint32_t) termId, pcmId)) {
-			res = ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
+	if(termId >= 0 && (add || release) && pcmId >= 0) {
+		if(release) {
+			if(release_req_async((uint32_t) termId, pcmId)) {
+				res = ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
+			}
+			else {
+				res = ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
+			}
 		}
-		else {
-			res = ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
-		}		
+		else if(add) {
+			if(setup_req((uint32_t) termId, pcmId)) {
+				res = ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
+			}
+			else {
+				res = ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
+			}
+		}
 	}
 	else {
 		res = ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
