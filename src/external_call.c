@@ -171,8 +171,9 @@ static struct call_t* find_free_call_slot(void) {
 	int i;
 
 	for(i = 0; i < MAX_CALLS; i++) {
-		if(calls[i].state == F00_NULL && !calls[i].SystemCallId && 
-				!calls[i].CallReference.Value) {
+		if(calls[i].state != F00_NULL) continue;
+
+		if(!calls[i].SystemCallId && !calls[i].CallReference.Value) {
 			printf("[%llu] Allocating call slot %d\n", timeSinceStart(), i);
 			return &calls[i];
 		}
@@ -187,6 +188,8 @@ static struct call_t* find_call_by_endpoint_id(ApiAudioEndPointIdType epId) {
 	int i;
 
 	for(i = 0; i < MAX_CALLS; i++) {
+		if(calls[i].state == F00_NULL) continue;
+
 		if(calls[i].CallReference.Value && calls[i].epId == epId) {
 			return &calls[i];
 		}
@@ -201,6 +204,8 @@ static struct call_t* find_call_by_sys_id(rsuint8 SystemCallId) {
 	int i;
 
 	for(i = 0; i < MAX_CALLS; i++) {
+		if(calls[i].state == F00_NULL) continue;
+
 		if(calls[i].CallReference.Value &&
 				calls[i].SystemCallId == SystemCallId) {
 			return &calls[i];
@@ -216,8 +221,9 @@ static struct call_t* find_call_by_ref(ApiCallReferenceType *CallReference) {
 	int i;
 
 	for(i = 0; i < MAX_CALLS; i++) {
-		if(calls[i].CallReference.Instance.Fp &&
-				calls[i].CallReference.Instance.Fp == CallReference->Instance.Fp) {
+		if(calls[i].state == F00_NULL) continue;
+
+		if(calls[i].CallReference.Instance.Fp == CallReference->Instance.Fp) {
 			return &calls[i];
 		}
 		else if(calls[i].CallReference.Instance.Host &&
@@ -569,18 +575,18 @@ static int audio_format_cfm(busmail_t *m) {
 			printf("Call %d state change from %s to %s\n", call->idx,
 				cc_state_names[call->state], cc_state_names[F10_ACTIVE]);
 			call->state = F10_ACTIVE;
-			// Send message to Asterisk to start PCM audio		
+			// Send message to Asterisk handset goes "off hook"
 			snprintf(term, sizeof(term), "%d", call->epId);
-//			ubus_send_string_to("dect.api.setup_ind", "terminal", term);
-printf("todo: asterisk audio open\n");
+			ubus_send_string_to("dect.api.setup_ind", "terminal", term);
+printf("todo: asterisk off hook\n");
 			break;
 
 		case F01_INITIATED:
-			printf("[%llu] API_FP_CC_CONNECT_REQ\n", timeSinceStart());
+			printf("API_FP_CC_CONNECT_REQ\n");
 			memcpy(msgConReq->InfoElement, buf, bufLen);
 			mailProto.send(dect_bus, (uint8_t*) msgConReq,
 				sizeof(ApiFpCcConnectReqType) - 1 + bufLen);
-			// Send message to Asterisk to start PCM audio		
+			// Send message to Asterisk handset goes "off hook"
 			snprintf(term, sizeof(term), "%d", call->epId);
 			ubus_send_string_to("dect.api.setup_ind", "terminal", term);
 			break;
@@ -960,6 +966,20 @@ static int release_req(struct call_t *call, ApiCcReleaseReasonType reason) {
 	}
 
 	return 0;	
+}
+
+
+
+//-------------------------------------------------------------
+// We have been asked by outside world (Asterisk)
+// to terminate a call.
+static int release_req_async(uint32_t termId, int pcmId) {
+	struct call_t *call;
+
+	call = find_call_by_endpoint_id(pcmId);
+	if(!call) return -1;
+
+	return release_req(call, API_RR_NORMAL)
 }
 
 
