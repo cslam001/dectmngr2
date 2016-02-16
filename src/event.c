@@ -14,11 +14,11 @@ typedef struct event {
 
 void * event_new(stream_t *stream) {
 	
-	event_t * e = (event_t *) calloc(sizeof(event_t), 1);
+	event_t * e = (event_t *) calloc(1, sizeof(event_t));
 	if (!e) err_exit("calloc");
 
 	if(stream->maxEventSize > 0) {	
-		e->in = (uint8_t *) calloc(stream->maxEventSize, 1);
+		e->in = (uint8_t *) calloc(1, stream->maxEventSize);
 		if (!e->in) err_exit("calloc");
 	
 		e->count = read(stream_get_fd(stream), e->in, stream->maxEventSize);
