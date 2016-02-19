@@ -39,8 +39,15 @@ enum {
 	SETTING_RADIO,
 };
 
+enum {
+	AST_TERM,
+	AST_PCM,
+	AST_ERR,
+};
+
 
 static uint32_t uciId;
+static uint32_t asteriskId;
 
 static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg);
@@ -54,7 +61,8 @@ static int ubus_request_call(struct ubus_context *ubus_ctx, struct ubus_object *
 
 
 //-------------------------------------------------------------
-static const char ubusSenderId[] = "dect";										// The UBUS type we transmitt
+static const char ubusSenderPath[] = "dect";										// The Ubus type we transmitt
+static const char ubusPathAsterisk[] = "asterisk.dect.api";						// The Ubus type for Asterisk
 const char ubusStrActive[] = "active";											// The "bool" we transmitt for service is on/enabled/operational
 const char ubusStrInActive[] = "inactive";
 const char strOn[] = "on";
@@ -62,6 +70,7 @@ const char strOff[] = "off";
 const char strAuto[] = "auto";
 const char strPressed[] = "pressed";											// Button pressed string
 const char strReleased[] = "released";
+const char strErrno[] = "errno";
 const char butnShrt1[] = "button.DECT";
 const char butnShrt2[] = "button.DECTS";										// Ubus button event names
 const char butnLong[] = "button.DECTL";
@@ -98,7 +107,7 @@ static const struct ubus_method ubusMethods[] = {								// ubus RPC methods
 
 
 static struct ubus_object_type rpcType[] = {
-	UBUS_OBJECT_TYPE(ubusSenderId, ubusMethods)
+	UBUS_OBJECT_TYPE(ubusSenderPath, ubusMethods)
 };
 
 
@@ -112,9 +121,14 @@ static const struct blobmsg_policy uciKeys[] = {
 	[SETTING_RADIO] = { .name = "value", .type = BLOBMSG_TYPE_STRING },
 };
 
+static const struct blobmsg_policy asteriskKeys[] = {
+	[AST_TERM] = { .name = "terminal", .type = BLOBMSG_TYPE_INT32 },
+	[AST_PCM] = { .name = "pcm", .type = BLOBMSG_TYPE_INT32 },
+	[AST_ERR] = { .name = strErrno, .type = BLOBMSG_TYPE_INT32 },
+};
 
 static struct ubus_object rpcObj = {
-	.name = ubusSenderId,
+	.name = ubusSenderPath,
 	.type = rpcType,
 	.methods = ubusMethods,
 	.n_methods = ARRAY_SIZE(ubusMethods)
@@ -163,7 +177,7 @@ int ubus_send_string_to(const char *path, const char *msgKey, const char *msgVal
 //-------------------------------------------------------------
 // We transmitt one string as a public (to all) ubus event
 int ubus_send_string(const char *msgKey, const char *msgVal) {
-	return ubus_send_string_to(ubusSenderId, msgKey, msgVal);	
+	return ubus_send_string_to(ubusSenderPath, msgKey, msgVal);	
 }
 
 
@@ -196,7 +210,10 @@ int ubus_send_json_string(const char *sender_id, const char *json_string)
 // Callback for: a ubus call (invocation) has replied with some data
 static void call_answer(struct ubus_request *req, int type, struct blob_attr *msg)
 {
-	struct blob_attr *keys[ARRAY_SIZE(uciKeys)];
+	unsigned int maxKeys = ARRAY_SIZE(uciKeys);
+	if(ARRAY_SIZE(asteriskKeys) > maxKeys) maxKeys = ARRAY_SIZE(asteriskKeys);
+	struct blob_attr *keys[maxKeys];
+	int termId, pcmId, err;
 	const char *strVal;
 
 	if(type != UBUS_MSG_DATA) return;
@@ -236,6 +253,35 @@ static void call_answer(struct ubus_request *req, int type, struct blob_attr *ms
 
 			list_handsets();
 		}
+	}
+
+	// Got answer from an Asterisk query?
+	else if(asteriskId == req->peer) {
+		termId = pcmId = err = -1;
+printf("Got incomming ubus answer\n");
+
+		// Tokenize message key/value paris into an array
+		if(blobmsg_parse(asteriskKeys, ARRAY_SIZE(asteriskKeys), keys, 
+				blob_data(msg), blob_len(msg))) {
+			return;
+		}
+
+		if(keys[AST_TERM]) {
+			termId = blobmsg_get_u32(keys[AST_TERM]);
+printf("Call answer terminal %d\n", termId);
+		}
+
+		if(keys[AST_PCM]) {
+			pcmId = blobmsg_get_u32(keys[AST_PCM]);
+printf("Call answer pcm %d\n", pcmId);
+		}
+
+		if(keys[AST_ERR]) {
+			err = blobmsg_get_u32(keys[AST_ERR]);
+printf("Call answer err %d\n", err);
+		}
+
+		asterisk_cfm(termId, pcmId, err);
 	}
 }
 
@@ -332,13 +378,40 @@ int uci_call_query(const char *option)
 	res = 0;
 	memset(&blob, 0, sizeof(blob));
 	if(blob_buf_init(&blob, 0)) return -1;
-	blobmsg_add_string(&blob, "config", ubusSenderId);
-	blobmsg_add_string(&blob, "section", ubusSenderId);
+	blobmsg_add_string(&blob, "config", ubusSenderPath);
+	blobmsg_add_string(&blob, "section", ubusSenderPath);
 	blobmsg_add_string(&blob, "option", option);
 
 	return ubus_call_blob(uciId, "get", &blob, 0);
 }
 
+
+
+//-------------------------------------------------------------
+// Send a ubus request to Asterisk. The reply arrives in call_answer().
+int asterisk_call(int terminal, int add, int release, const char *cid)
+{
+	struct blob_buf blob;
+	int res;
+
+	// Find id number for ubus "path"
+	res = ubus_lookup_id(ubusContext, ubusPathAsterisk, &asteriskId);
+	if(res != UBUS_STATUS_OK) {
+		printf("Error searching for usbus path %s\n", ubusPathAsterisk);
+		return -1;
+	}
+
+	// Create a binary ubus message
+	memset(&blob, 0, sizeof(blob));
+	if(blob_buf_init(&blob, 0)) return -1;
+	if(terminal >= 0) blobmsg_add_u32(&blob, ubusCallKeys[CALL_TERM].name, terminal);
+	if(add >= 0) blobmsg_add_u32(&blob, ubusCallKeys[CALL_ADD].name, add);
+	if(release >= 0) blobmsg_add_u32(&blob, ubusCallKeys[CALL_REL].name, release);
+	if(cid) blobmsg_add_string(&blob, ubusCallKeys[CALL_CID].name, cid);
+
+printf("Sending ubus request %d %d %d\n", terminal, add, release);
+	return ubus_call_blob(asteriskId, "call", &blob, 0);
+}
 
 
 //-------------------------------------------------------------
@@ -773,6 +846,7 @@ static int ubus_request_call(struct ubus_context *ubus_ctx, struct ubus_object *
 	add = 0;
 	release = 0;
 
+printf("Got incomming ubus request\n");
 	// Tokenize message key/value paris into an array
 	res = keyTokenize(obj, methodName, msg, &keys);
 	if(res != UBUS_STATUS_OK) goto out;
@@ -790,13 +864,13 @@ static int ubus_request_call(struct ubus_context *ubus_ctx, struct ubus_object *
 
 	if(keys[CALL_REL]) {
 		release = 1;
-		pcmId = blobmsg_get_u32(keys[CALL_ADD]);
+		pcmId = blobmsg_get_u32(keys[CALL_REL]);
 		printf("call release %d\n", pcmId);
 	}
 
 
 	// Did we get all arguments we need?
-	if(termId >= 0 && (add || release) && pcmId >= 0) {
+	if((add || release) && pcmId >= 0) {
 		if(release) {
 			if(release_req_async((uint32_t) termId, pcmId)) {
 				res = ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
@@ -806,7 +880,7 @@ static int ubus_request_call(struct ubus_context *ubus_ctx, struct ubus_object *
 			}
 		}
 		else if(add) {
-			if(setup_req((uint32_t) termId, pcmId)) {
+			if(termId >= 0 && setup_req((uint32_t) termId, pcmId)) {
 				res = ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
 			}
 			else {
@@ -843,8 +917,8 @@ void ubus_init(void * base, config_t * config) {
 	memset(&stateListener, 0, sizeof(stateListener));
 	stateListener.cb = ubus_event_state;
 	if(ubus_register_event_handler(ubusContext, &stateListener,
-			ubusSenderId) != UBUS_STATUS_OK) {
-		exit_failure("Error registering ubus event handler %s", ubusSenderId);
+			ubusSenderPath) != UBUS_STATUS_OK) {
+		exit_failure("Error registering ubus event handler %s", ubusSenderPath);
 	}
 
 	/* Register event handler (not calls) for:
