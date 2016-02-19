@@ -14,6 +14,7 @@
 #include "busmail.h"
 #include "ubus.h"
 #include "natalie_utils.h"
+#include "dect.h"
 
 
 //-------------------------------------------------------------
@@ -188,7 +189,8 @@ static struct call_t* find_call_by_endpoint_id(ApiAudioEndPointIdType epId) {
 	int i;
 
 	for(i = 0; i < MAX_CALLS; i++) {
-		if(calls[i].state == F00_NULL) continue;
+		// Do NOT check for calls[i].state == F00_NULL here!
+		//if(calls[i].state == F00_NULL) continue;
 
 		if(calls[i].CallReference.Value && calls[i].epId == epId) {
 			return &calls[i];
@@ -239,8 +241,13 @@ static struct call_t* find_call_by_ref(ApiCallReferenceType *CallReference) {
 
 //-------------------------------------------------------------
 static void free_call_slot(struct call_t *call) {
+	int idx;
+
+	idx = call->idx;															// Save the index number past mem clear
+	printf("Freeing call slot %d\n", idx);
 	memset(call, 0, sizeof(struct call_t));
 	call->state = F00_NULL;
+	call->idx = idx;
 }
 
 
@@ -330,6 +337,12 @@ const char number[] = { '0', '1', '2', '3', '4' };
 	terminal = &handsets.terminal[i];
 
 	// Put the call in our list of current ongoing calls
+	call = find_call_by_endpoint_id(pcmId);
+	if(call && call->TerminalId == termId && call->state != F00_NULL) {
+printf("TODO: second time CID arrives, save it for later!\n");
+		return 0;
+	}
+
 	call = find_free_call_slot();
 	if(!call) return -1;
 	call->CallReference.Instance.Fp = 0;
@@ -386,6 +399,7 @@ const char number[] = { '0', '1', '2', '3', '4' };
 	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
 		API_IE_CODEC_LIST, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType) *
 		(codecs->NoOfCodecs - 1), (rsuint8*) codecs);
+//TODO: reduce code duplication
 
 	msg = calloc(1, sizeof(ApiFpCcSetupReqType) - 1 + bufLen);
 	msg->Primitive = API_FP_CC_SETUP_REQ;
@@ -488,7 +502,6 @@ static int audio_format_cfm(busmail_t *m) {
 	ApiAudioDataFormatListType *pcmFormat;
 	ApiFpSetAudioFormatCfmType *msgIn;
 	ApiFpCcConnectResType *msgConRes;
-	ApiFpCcConnectReqType *msgConReq;
 	ApiSystemCallIdType SystemCallId;
 	ApiCallStatusType status;
 	ApiCodecListType *codecs;
@@ -496,11 +509,13 @@ static int audio_format_cfm(busmail_t *m) {
 	rsuint16 bufLen;
 	rsuint8 *buf;
 	char term[32];
+	int res;
 
 	msgIn = (ApiFpSetAudioFormatCfmType*) &m->mail_header;
 	call = find_call_by_endpoint_id(msgIn->DestinationId);
 	if(!call) return -1;
 
+	res = 0;
 	buf = NULL;
 	bufLen = 0;
 	// Send system call ID
@@ -534,6 +549,150 @@ static int audio_format_cfm(busmail_t *m) {
 	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
 		API_IE_CODEC_LIST, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType) *
 		(codecs->NoOfCodecs - 1), (rsuint8*) codecs);
+//TODO: reduce code duplication
+
+	// Send the "air codec to pcm format translation" map
+	pcmFormat = malloc(sizeof(ApiAudioDataFormatListType) +
+		sizeof(ApiAudioDataFormatInfoType));
+	pcmFormat->NoOfCodecs = 2;
+	pcmFormat->ApiAudioDataFormatInfo[0].Codec = API_CT_G722;
+	pcmFormat->ApiAudioDataFormatInfo[0].ApiAudioDataFormat = 
+		AP_DATA_FORMAT_LINEAR_8kHz;
+	pcmFormat->ApiAudioDataFormatInfo[1].Codec = API_CT_G726;
+	pcmFormat->ApiAudioDataFormatInfo[1].ApiAudioDataFormat = 
+		AP_DATA_FORMAT_LINEAR_8kHz;
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_AUDIO_DATA_FORMAT, sizeof(ApiAudioDataFormatListType) +
+		sizeof(ApiAudioDataFormatInfoType) * (pcmFormat->NoOfCodecs - 1),
+		(rsuint8*) pcmFormat);
+
+	// Send "call should become connected"
+	status.CallStatusSubId = API_SUB_CALL_STATUS;
+	status.CallStatusValue.State = API_CSS_CALL_CONNECT;
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_CALL_STATUS, sizeof(status), (rsuint8*) &status);
+
+	msgConRes = malloc(sizeof(ApiFpCcConnectResType) - 1 + bufLen);
+	msgConRes->Primitive = API_FP_CC_CONNECT_RES;
+	msgConRes->CallReference = call->CallReference;
+	msgConRes->InfoElementLength = bufLen;
+
+	// Send connect request or response
+	switch(call->state) {
+		case F06_PRESENT:
+			memcpy(msgConRes->InfoElement, buf, bufLen);
+			mailProto.send(dect_bus, (uint8_t*) msgConRes,
+				sizeof(ApiFpCcConnectResType) - 1 + bufLen);
+			printf("Call %d state change from %s to %s\n", call->idx,
+				cc_state_names[call->state], cc_state_names[F10_ACTIVE]);
+			call->state = F10_ACTIVE;
+			// Send message to Asterisk handset goes "off hook"
+//			snprintf(term, sizeof(term), "%d", call->epId);
+//			ubus_send_string_to("dect.api.setup_ind", "terminal", term);
+res = asterisk_call(call->TerminalId, call->epId, -1, NULL);
+			break;
+
+		case F01_INITIATED:
+			// Send message to Asterisk handset goes "off hook"
+//			snprintf(term, sizeof(term), "%d", call->epId);
+//			ubus_send_string_to("dect.api.setup_ind", "terminal", term);
+res = asterisk_call(call->TerminalId, call->epId, -1, NULL);
+			break;
+
+		case F00_NULL:
+//			snprintf(term, sizeof(term), "%d", call->epId);
+//			ubus_send_string_to("dect.api.release_ind", "terminal", term);
+res = asterisk_call(call->TerminalId, -1, call->epId, NULL);
+			free_call_slot(call);
+			break;
+
+		case F19_RELEASE_PEND:
+			release_req(call, API_RR_NORMAL);
+			break;
+
+		default:
+			printf("Error, invalid state in %s\n", __FUNCTION__);
+			release_req(call, API_RR_UNKNOWN);
+			break;
+	}
+
+	free(msgConRes);
+	free(pcmFormat);
+	free(codecs);
+	free(buf);
+
+	return res;
+}
+
+
+
+//-------------------------------------------------------------
+// Asterisk has replied to a ubus call we made
+int asterisk_cfm(int termId, int pcmId, int err) {
+	ApiAudioDataFormatListType *pcmFormat;
+	ApiFpSetAudioFormatCfmType *msgIn;
+	ApiFpCcConnectResType *msgConRes;
+	ApiFpCcConnectReqType *msgConReq;
+	ApiSystemCallIdType SystemCallId;
+	ApiCallStatusType status;
+	ApiCodecListType *codecs;
+	struct call_t *call;
+	rsuint16 bufLen;
+	rsuint8 *buf;
+	char term[32];
+	int res;
+
+	call = NULL;
+	res = 0;
+	buf = NULL;
+	bufLen = 0;
+
+	// Sanity check data from Asterisk
+	if(pcmId >= 0 && pcmId < MAX_NR_PCM) {
+		call = find_call_by_endpoint_id(pcmId);
+		if(!call) return -1;
+	}
+	else if(err) {
+		printf("NACK from Asterisk, terminating call\n");
+		if(call) return release_req(call, API_RR_NORMAL);
+	}
+	else if(!call || pcmId < 0 || pcmId > MAX_NR_PCM - 1) {
+		printf("Warning, invalid PCM %d\n", pcmId);
+		return -1;
+	}
+
+	// Send system call ID
+	SystemCallId.ApiSubId = API_SUB_CALL_ID;
+	SystemCallId.ApiSystemCallId = call->SystemCallId;
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_SYSTEM_CALL_ID, sizeof(ApiSystemCallIdType),
+		(rsuint8*) &SystemCallId);
+
+	// Send the codecs we want the handset to use
+	codecs = calloc(1, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType));
+	codecs->NegotiationIndicator = API_NI_POSSIBLE;
+	if(call->BasicService == API_WIDEBAND_SPEECH) {
+		codecs->NoOfCodecs = 2;
+		codecs->Codec[0].Codec = API_CT_G722;
+		codecs->Codec[0].MacDlcService = API_MDS_1_MD;
+		codecs->Codec[0].CplaneRouting = API_CPR_CS;
+		codecs->Codec[0].SlotSize = API_SS_LS640;
+		codecs->Codec[1].Codec = API_CT_G726;
+		codecs->Codec[1].MacDlcService = API_MDS_1_MD;
+		codecs->Codec[1].CplaneRouting = API_CPR_CS;
+		codecs->Codec[1].SlotSize = API_SS_FS;
+	}
+	else {
+		codecs->NoOfCodecs = 1;
+		codecs->Codec[0].Codec = API_CT_G726;
+		codecs->Codec[0].MacDlcService = API_MDS_1_MD;
+		codecs->Codec[0].CplaneRouting = API_CPR_CS;
+		codecs->Codec[0].SlotSize = API_SS_FS;
+	}
+	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
+		API_IE_CODEC_LIST, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType) *
+		(codecs->NoOfCodecs - 1), (rsuint8*) codecs);
+//TODO: reduce code duplication
 
 	// Send the "air codec to pcm format translation" map
 	pcmFormat = malloc(sizeof(ApiAudioDataFormatListType) +
@@ -566,39 +725,17 @@ static int audio_format_cfm(busmail_t *m) {
 	msgConReq->CallReference = call->CallReference;
 	msgConReq->InfoElementLength = bufLen;
 
-	// Send connect request or response
 	switch(call->state) {
-		case F06_PRESENT:
-			memcpy(msgConRes->InfoElement, buf, bufLen);
-			mailProto.send(dect_bus, (uint8_t*) msgConRes,
-				sizeof(ApiFpCcConnectResType) - 1 + bufLen);
-			printf("Call %d state change from %s to %s\n", call->idx,
-				cc_state_names[call->state], cc_state_names[F10_ACTIVE]);
-			call->state = F10_ACTIVE;
-			// Send message to Asterisk handset goes "off hook"
-			snprintf(term, sizeof(term), "%d", call->epId);
-			ubus_send_string_to("dect.api.setup_ind", "terminal", term);
-printf("todo: asterisk off hook\n");
-			break;
-
 		case F01_INITIATED:
 			printf("API_FP_CC_CONNECT_REQ\n");
 			memcpy(msgConReq->InfoElement, buf, bufLen);
 			mailProto.send(dect_bus, (uint8_t*) msgConReq,
 				sizeof(ApiFpCcConnectReqType) - 1 + bufLen);
-			// Send message to Asterisk handset goes "off hook"
-			snprintf(term, sizeof(term), "%d", call->epId);
-			ubus_send_string_to("dect.api.setup_ind", "terminal", term);
 			break;
 
+		case F10_ACTIVE:
+		case F06_PRESENT:
 		case F00_NULL:
-			snprintf(term, sizeof(term), "%d", call->epId);
-			ubus_send_string_to("dect.api.release_ind", "terminal", term);
-			free_call_slot(call);
-			break;
-
-		case F19_RELEASE_PEND:
-			release_req(call, API_RR_NORMAL);
 			break;
 
 		default:
@@ -608,7 +745,6 @@ printf("todo: asterisk off hook\n");
 	}
 
 	free(msgConRes);
-	free(msgConReq);
 	free(pcmFormat);
 	free(codecs);
 	free(buf);
@@ -938,7 +1074,9 @@ static int release_req(struct call_t *call, ApiCcReleaseReasonType reason) {
 	ApiFpCcReleaseReqType *msgOut;
 	rsuint16 bufLen;
 	rsuint8 *buf;
+	int res;
 
+	res = 0;
 	buf = NULL;
 	bufLen = 0;
 	// Send system call ID
@@ -963,9 +1101,10 @@ static int release_req(struct call_t *call, ApiCcReleaseReasonType reason) {
 		printf("Call %d state change from %s to %s\n", call->idx,
 			cc_state_names[call->state], cc_state_names[F19_RELEASE_PEND]);
 		call->state = F19_RELEASE_PEND;
+		res = asterisk_call(call->TerminalId, -1, call->epId, NULL);
 	}
 
-	return 0;	
+	return res;
 }
 
 
@@ -973,13 +1112,13 @@ static int release_req(struct call_t *call, ApiCcReleaseReasonType reason) {
 //-------------------------------------------------------------
 // We have been asked by outside world (Asterisk)
 // to terminate a call.
-static int release_req_async(uint32_t termId, int pcmId) {
+int release_req_async(uint32_t termId, int pcmId) {
 	struct call_t *call;
 
 	call = find_call_by_endpoint_id(pcmId);
 	if(!call) return -1;
 
-	return release_req(call, API_RR_NORMAL)
+	return release_req(call, API_RR_NORMAL);
 }
 
 
