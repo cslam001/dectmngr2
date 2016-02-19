@@ -6,7 +6,7 @@
 #define MAX_LISTENERS 10
 #define PKT_DATA_SIZE 100
 #define MAX_NR_HANDSETS 20
-#define MAX_NR_PHONES 4
+#define MAX_NR_PCM 4
 
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 
