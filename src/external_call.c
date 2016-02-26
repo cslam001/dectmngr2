@@ -30,6 +30,7 @@ enum cc_states_t {												// CC states as defined in ETSI EN 300 175-5
 	F07_RECEIVED,
 	F10_ACTIVE,
 	F19_RELEASE_PEND,
+	Q22_CC_RELEASE_COM,
 };
 
 
@@ -65,7 +66,8 @@ static const char *cc_state_names[] = {							// Human readable CC states. Must 
 	"F06-call present",
 	"F07-call received",
 	"F10-active",
-	"F19-release pending"
+	"F19-release pending",
+	"Q22-release received",
 };
 
 
@@ -331,18 +333,19 @@ const char number[] = { '0', '1', '2', '3', '4' };
 	rsuint8 *buf;
 	int i;
 
+	call = find_call_by_endpoint_id(pcmId);
+	if(call) {
+		termId = call->TerminalId;
+printf("TODO: send CID to handset second time\n");
+		return 0;
+	}
+
 	// Find the handset in our list of registereds
 	for(i = 0; i < MAX_NR_HANDSETS && handsets.terminal[i].id != termId; i++);
 	if(i == MAX_NR_HANDSETS) return -1;
 	terminal = &handsets.terminal[i];
 
 	// Put the call in our list of current ongoing calls
-	call = find_call_by_endpoint_id(pcmId);
-	if(call && call->TerminalId == termId && call->state != F00_NULL) {
-printf("TODO: second time CID arrives, save it for later!\n");
-		return 0;
-	}
-
 	call = find_free_call_slot();
 	if(!call) return -1;
 	call->CallReference.Instance.Fp = 0;
@@ -599,6 +602,10 @@ res = asterisk_call(call->TerminalId, call->epId, -1, NULL);
 res = asterisk_call(call->TerminalId, call->epId, -1, NULL);
 			break;
 
+		case Q22_CC_RELEASE_COM:
+res = asterisk_call(call->TerminalId, -1, call->epId, NULL);
+			break;
+
 		case F00_NULL:
 //			snprintf(term, sizeof(term), "%d", call->epId);
 //			ubus_send_string_to("dect.api.release_ind", "terminal", term);
@@ -733,6 +740,11 @@ int asterisk_cfm(int termId, int pcmId, int err) {
 				sizeof(ApiFpCcConnectReqType) - 1 + bufLen);
 			break;
 
+		case Q22_CC_RELEASE_COM:
+			free_call_slot(call);
+			break;
+
+		case F19_RELEASE_PEND:
 		case F10_ACTIVE:
 		case F06_PRESENT:
 		case F00_NULL:
@@ -1051,8 +1063,8 @@ static int release_cfm(busmail_t *m) {
 	switch(call->state) {
 		case F19_RELEASE_PEND:
 			printf("Call %d state change from %s to %s\n", call->idx,
-				cc_state_names[call->state], cc_state_names[F00_NULL]);
-			call->state = F00_NULL;
+				cc_state_names[call->state], cc_state_names[Q22_CC_RELEASE_COM]);
+			call->state = Q22_CC_RELEASE_COM;
 			// Request shut down of PCM audio
 			return audio_format_req(call);
 			break;
@@ -1101,7 +1113,7 @@ static int release_req(struct call_t *call, ApiCcReleaseReasonType reason) {
 		printf("Call %d state change from %s to %s\n", call->idx,
 			cc_state_names[call->state], cc_state_names[F19_RELEASE_PEND]);
 		call->state = F19_RELEASE_PEND;
-		res = asterisk_call(call->TerminalId, -1, call->epId, NULL);
+//		res = asterisk_call(call->TerminalId, -1, call->epId, NULL);
 	}
 
 	return res;
