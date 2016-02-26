@@ -13,6 +13,7 @@
 #include "event_base.h"
 #include "connection_init.h"
 #include "external_call.h"
+#include "dect.h"
 
 
 //-------------------------------------------------------------
@@ -183,30 +184,6 @@ int ubus_send_string(const char *msgKey, const char *msgVal) {
 
 
 //-------------------------------------------------------------
-// We transmitt an entire json object to ubus
-int ubus_send_json_string(const char *sender_id, const char *json_string)
-{
-	struct json_object *jsonObj, *jsonVal;
-	struct blob_buf blob;
-	int res = 0;
-
-	memset(&blob, 0, sizeof(blob));
-	if(blob_buf_init(&blob, 0)) return -1;
-
-	if(!blobmsg_add_json_from_string(&blob, json_string)) {
-		res = -1;
-	}
-	else if(ubus_send_event(ubusContext, sender_id, blob.head) != UBUS_STATUS_OK) {
-		printf("Error sending ubus message %s\n", json_string);
-	}
-
-	blob_buf_free(&blob);
-	return res;
-}
-
-
-
-//-------------------------------------------------------------
 // Callback for: a ubus call (invocation) has replied with some data
 static void call_answer(struct ubus_request *req, int type, struct blob_attr *msg)
 {
@@ -220,7 +197,7 @@ static void call_answer(struct ubus_request *req, int type, struct blob_attr *ms
 	if(req->status_code != UBUS_STATUS_OK) printf("Got error answer\n");
 
 	// Got answer from an UCI query?
-	if(uciId == req->peer) {
+	if(req->peer == uciId) {
 
 		// Tokenize message key/value paris into an array
 		if(blobmsg_parse(uciKeys, ARRAY_SIZE(uciKeys), keys, 
@@ -256,7 +233,7 @@ static void call_answer(struct ubus_request *req, int type, struct blob_attr *ms
 	}
 
 	// Got answer from an Asterisk query?
-	else if(asteriskId == req->peer) {
+	else if(req->peer == asteriskId) {
 		termId = pcmId = err = -1;
 printf("Got incomming ubus answer\n");
 
@@ -359,7 +336,7 @@ int ubus_call_string(const char *path, const char* method, const char *key,
 	// Find id number for ubus "path"
 	res = ubus_lookup_id(ubusContext, path, &id);
 	if(res != UBUS_STATUS_OK) {
-		printf("Error searching for usbus path\n");
+		printf("Error searching for usbus path %s\n", path);
 		return -1;
 	}
 
@@ -373,9 +350,7 @@ int ubus_call_string(const char *path, const char* method, const char *key,
 int uci_call_query(const char *option)
 {
 	struct blob_buf blob;
-	int res;
 
-	res = 0;
 	memset(&blob, 0, sizeof(blob));
 	if(blob_buf_init(&blob, 0)) return -1;
 	blobmsg_add_string(&blob, "config", ubusSenderPath);
@@ -416,8 +391,8 @@ printf("Sending ubus request %d %d %d\n", terminal, add, release);
 
 //-------------------------------------------------------------
 // Send a reply that a request was successful
-static int ubus_reply_success(struct ubus_context *ubus_ctx, struct ubus_object *obj,
-		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
+static int ubus_reply_success(struct ubus_context *ubus_ctx,
+		struct ubus_request_data *req, const char *methodName)
 {
 	struct blob_buf isOkMsg;
 
@@ -437,27 +412,34 @@ static int ubus_reply_success(struct ubus_context *ubus_ctx, struct ubus_object 
 
 
 
+//-------------------------------------------------------------
+// Send an error indicator as reply to a call invocation
+static int ubus_reply_err(struct ubus_context *ubus_ctx,
+		struct ubus_request_data *req, const char *methodName, uint32_t err)
+{
+	struct blob_buf msg;
+
+	memset(&msg, 0, sizeof(msg));
+	if(blobmsg_buf_init(&msg)) return -1;
+
+	blobmsg_add_u32(&msg, "errno", err);
+	blobmsg_add_string(&msg, "errstr", strerror(err));
+	blobmsg_add_string(&msg, "method", methodName);
+
+	ubus_send_reply(ubus_ctx, req, msg.head);
+	blob_buf_free(&msg);
+
+	return 0;
+}
 
 
 //-------------------------------------------------------------
 // Send a busy reply that "we can't handle caller
 // request at the moment. Please retry later."
-static int ubus_reply_busy(struct ubus_context *ubus_ctx, struct ubus_object *obj,
-		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
+static int ubus_reply_busy(struct ubus_context *ubus_ctx,
+		struct ubus_request_data *req, const char *methodName)
 {
-	struct blob_buf isBusyMsg;
-
-	memset(&isBusyMsg, 0, sizeof(isBusyMsg));
-	if(blobmsg_buf_init(&isBusyMsg)) return -1;
-
-	blobmsg_add_u32(&isBusyMsg, "errno", EBUSY);
-	blobmsg_add_string(&isBusyMsg, "errstr", strerror(EBUSY));
-	blobmsg_add_string(&isBusyMsg, "method", methodName);
-
-	ubus_send_reply(ubus_ctx, req, isBusyMsg.head);
-	blob_buf_free(&isBusyMsg);
-
-	return 0;
+	return ubus_reply_err(ubus_ctx, req, methodName, EBUSY);
 }
 
 
@@ -700,11 +682,11 @@ static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object 
 		strVal = blobmsg_get_string(keys[STATE_RADIO]);
 		if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
 			connection_set_radio(1);
-			ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
+			ubus_reply_success(ubus_ctx, req, methodName);
 		}
 		else if(strncmp(strVal, strOff, sizeof(strOff)) == 0) {
 			connection_set_radio(0);
-			ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
+			ubus_reply_success(ubus_ctx, req, methodName);
 		}
 	}
 
@@ -714,11 +696,11 @@ static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object 
 		strVal = blobmsg_get_string(keys[STATE_REGISTRATION]);
 		if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
 			connection_set_registration(1);
-			ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
+			ubus_reply_success(ubus_ctx, req, methodName);
 		}
 		else if(strncmp(strVal, strOff, sizeof(strOff)) == 0) {
 			connection_set_registration(0);
-			ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
+			ubus_reply_success(ubus_ctx, req, methodName);
 		}
 	}
 
@@ -752,7 +734,7 @@ static int ubus_request_handset(struct ubus_context *ubus_ctx, struct ubus_objec
 	// Are we ready for another deferred request?
 	perhaps_reply_deferred_timeout();
 	if(querier.inUse) {
-		ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
+		ubus_reply_busy(ubus_ctx, req, methodName);
 		res = UBUS_STATUS_NO_DATA;
 		goto out;
 	}
@@ -761,7 +743,7 @@ static int ubus_request_handset(struct ubus_context *ubus_ctx, struct ubus_objec
 	// ubus call dect handset '{ "list": "" }'
 	if(keys[HANDSET_LIST]) {
 		if(list_handsets()) {
-			ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
+			ubus_reply_busy(ubus_ctx, req, methodName);
 			res = UBUS_STATUS_NO_DATA;
 		}
 		else {
@@ -868,28 +850,30 @@ printf("Got incomming ubus request\n");
 		printf("call release %d\n", pcmId);
 	}
 
+	if(pcmId < 0 || pcmId > MAX_NR_PCM || (!add && !release)) {
+		res = ubus_reply_err(ubus_ctx, req, methodName, EINVAL);
+		return 0;
+	}
 
 	// Did we get all arguments we need?
-	if((add || release) && pcmId >= 0) {
-		if(release) {
-			if(release_req_async((uint32_t) termId, pcmId)) {
-				res = ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
-			}
-			else {
-				res = ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
-			}
+	if(release) {
+		if(release_req_async((uint32_t) termId, pcmId)) {
+			res = ubus_reply_err(ubus_ctx, req, methodName, EINVAL);
 		}
-		else if(add) {
-			if(termId >= 0 && setup_req((uint32_t) termId, pcmId)) {
-				res = ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
-			}
-			else {
-				res = ubus_reply_success(ubus_ctx, obj, req, methodName, msg);
-			}
+		else {
+			res = ubus_reply_success(ubus_ctx, req, methodName);
+		}
+	}
+	else if(add && termId >= 0) {
+		if(setup_req((uint32_t) termId, pcmId)) {
+			res = ubus_reply_busy(ubus_ctx, req, methodName);
+		}
+		else {
+			res = ubus_reply_success(ubus_ctx, req, methodName);
 		}
 	}
 	else {
-		res = ubus_reply_busy(ubus_ctx, obj, req, methodName, msg);
+		res = ubus_reply_err(ubus_ctx, req, methodName, EINVAL);
 	}
 	
 out:

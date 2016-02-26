@@ -28,8 +28,6 @@ typedef void (*ubus_call_complete_callback)(int ret);
 int ubus_send_strings(const char *path, const char *msgKey[], const char *msgVal[], int len);
 int ubus_send_string_to(const char *path, const char *msgKey, const char *msgVal);
 int ubus_send_string(const char *msgKey, const char *msgVal);
-
-int ubus_send_json_string(const char *sender_id, const char *json_string);
 int ubus_call_string(const char *path, const char* method, const char *key, 
 	const char *val, ubus_call_complete_callback cb);
 int uci_call_query(const char *option);
