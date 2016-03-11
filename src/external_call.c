@@ -82,93 +82,6 @@ static int release_req(struct call_t *call, ApiCcReleaseReasonType reason);
 
 
 
-#if 0
-//-------------------------------------------------------------
-// Extract SystemCallId which FP should have assigned for us
-static rsuint8 get_system_call_id(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
-	ApiInfoElementType * info;
-	ApiSystemCallIdType * callid;
-
-	info = ApiGetInfoElement(InfoElement, InfoElementLength, API_IE_SYSTEM_CALL_ID);
-	if (info && info->IeLength) {
-		callid = (ApiSystemCallIdType *) &info->IeData[0];
-		printf("API_IE_SYSTEM_CALL_ID %d\n", callid->ApiSystemCallId);
-
-		switch (callid->ApiSubId) {
-			case API_SUB_CALL_ID:
-			case API_SUB_CALL_ID_UPDATE:
-				return callid->ApiSystemCallId;
-				break;
-			
-			default:
-				break;
-			}
-	}
-
-	return 0;
-}
-
-static char* get_dialed_nr(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
-	ApiInfoElementType * info;
-	ApiMultikeyPadType * keypad = NULL;
-	int keypad_len;
-	char * keypad_str;
-	
-	info = ApiGetInfoElement(InfoElement, InfoElementLength, API_IE_MULTIKEYPAD);
-	if(!info) return NULL;
-	if(!info->IeLength) return NULL;
-
-	printf("API_IE_MULTIKEYPAD\n");
-	keypad = (ApiCodecListType*) &info->IeData[0];
-	keypad_len = info->IeLength;
-	keypad_str = (char*) malloc(keypad_len + 1);
-	memcpy(keypad_str, keypad, keypad_len);
-	keypad_str[keypad_len] = '\0';
-	printf("keypad: %s\n", keypad_str);
-
-	return keypad_str;
-}
-
-static ApiCodecListType * get_codecs(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
-	ApiInfoElementType * info;
-	ApiCodecListType * list;
-	
-	info = ApiGetInfoElement(InfoElement, InfoElementLength, API_IE_CODEC_LIST);
-	if ( info && info->IeLength > 0 ) {
-		printf("API_IE_CODEC_LIST\n");
-		list = (ApiCodecListType*) &info->IeData[0];
-		printf("NegotiationIndicator: %x\n", list->NegotiationIndicator);
-		printf("NoOfCodecs: %x\n", list->NoOfCodecs);
-
-		list = malloc(info->IeLength);
-		memcpy(list, &info->IeData[0], info->IeLength);
-		
-		return list;
-	}
-
-	return NULL;
-}
-
-
-static ApiLineIdValueType * get_line_id(ApiInfoElementType * InfoElement, rsuint16 InfoElementLength) {
-	ApiInfoElementType * info;
-	ApiCodecListType * list;
-	ApiLineIdValueType * line_id;
-	
-	info = ApiGetInfoElement(InfoElement, InfoElementLength, API_IE_LINE_ID);
-	if ( info && info->IeLength > 0 ) {
-		printf("GotLineId\n");
-		line_id = malloc(sizeof(ApiLineIdValueType));
-		memcpy(line_id, &info->IeData[0], info->IeLength);
-
-		return line_id;
-	}
-	return NULL;
-}
-#endif
-
-
-
 //-------------------------------------------------------------
 static struct call_t* find_free_call_slot(void) {
 	int i;
@@ -590,26 +503,20 @@ static int audio_format_cfm(busmail_t *m) {
 				cc_state_names[call->state], cc_state_names[F10_ACTIVE]);
 			call->state = F10_ACTIVE;
 			// Send message to Asterisk handset goes "off hook"
-//			snprintf(term, sizeof(term), "%d", call->epId);
-//			ubus_send_string_to("dect.api.setup_ind", "terminal", term);
-res = asterisk_call(call->TerminalId, call->epId, -1, NULL);
+			res = asterisk_call(call->TerminalId, call->epId, -1, NULL);
 			break;
 
 		case F01_INITIATED:
 			// Send message to Asterisk handset goes "off hook"
-//			snprintf(term, sizeof(term), "%d", call->epId);
-//			ubus_send_string_to("dect.api.setup_ind", "terminal", term);
-res = asterisk_call(call->TerminalId, call->epId, -1, NULL);
+			res = asterisk_call(call->TerminalId, call->epId, -1, NULL);
 			break;
 
 		case Q22_CC_RELEASE_COM:
-res = asterisk_call(call->TerminalId, -1, call->epId, NULL);
+			res = asterisk_call(call->TerminalId, -1, call->epId, NULL);
 			break;
 
 		case F00_NULL:
-//			snprintf(term, sizeof(term), "%d", call->epId);
-//			ubus_send_string_to("dect.api.release_ind", "terminal", term);
-res = asterisk_call(call->TerminalId, -1, call->epId, NULL);
+			res = asterisk_call(call->TerminalId, -1, call->epId, NULL);
 			free_call_slot(call);
 			break;
 
@@ -859,96 +766,6 @@ static int parse_info_elements(struct call_t *call, rsuint8 *InfoElements, rsuin
 }
 
 
-#if 0
-static void call_proc_cfm(busmail_t *m) {
-	ApiFpCcCallProcCfmType *p = (ApiFpCcCallProcCfmType*) &m->mail_header;
-	ApiSystemCallIdType SystemCallId;
-	rsuint16 ie_block_len;
-	ApiInfoElementType *ie_block;
-	ApiCallStatusType call_status;
-	struct call_t *call;
-	
-	ie_block_len = 0;
-	ie_block = NULL;
-	printf("[%llu] CallReference: %d\n", timeSinceStart(),
-		p->CallReference.Instance.Fp);
-	print_status(p->Status);
-
-	call = find_call_by_ref(&p->CallReference);
-	if(!call) return;
-	
-	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
-	call_status.CallStatusValue.State = API_CSS_CALL_ALERTING;
-	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_CALL_STATUS,
-		sizeof(ApiCallStatusType), (rsuint8*) &call_status);
-
-	SystemCallId.ApiSubId = API_SUB_CALL_ID;
-	SystemCallId.ApiSystemCallId = call->SystemCallId;
-	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_SYSTEM_CALL_ID,
-		sizeof(call->SystemCallId), (rsuint8*) &SystemCallId);
-
-	call->state = API_CSS_CALL_ALERTING;
-	ApiFpCcAlertReqType * r = malloc(sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
-	r->Primitive = API_FP_CC_ALERT_REQ;
-	r->CallReference = call->CallReference;
-	r->Signal = API_CC_SIGNAL_CUSTOM_NONE;
-	r->ProgressInd = API_IN_BAND_NOT_AVAILABLE;
-	r->InfoElementLength = ie_block_len;
-	memcpy(r->InfoElement,(rsuint8*)ie_block, ie_block_len);	
-	printf("API_FP_CC_ALERT_REQ in call_proc_cfm()\n");
-	mailProto.send(dect_bus, (uint8_t*) r,
-		sizeof(ApiFpCcAlertReqType) - 1 + ie_block_len);
-
-	free(ie_block);
-	free(r);
-}
-#endif
-
-#if 0
-static void alert_cfm(busmail_t *m) {
-	ApiFpCcAlertCfmType *p = (ApiFpCcAlertCfmType*) &m->mail_header;
-	ApiSystemCallIdType SystemCallId;
-	rsuint16 ie_block_len;
-	ApiInfoElementType *ie_block;
-	ApiCallStatusType call_status;
-	struct call_t *call;
-
-	ie_block_len = 0;
-	ie_block = NULL;
-	printf("[%llu] CallReference: val %d instancefp %d received\n", timeSinceStart(),
-		p->CallReference.Value, p->CallReference.Instance.Fp);
-	print_status(p->Status);
-
-	call = find_call_by_ref(&p->CallReference);
-	if(!call) return;
-
-	/* Connect handset */
-	call_status.CallStatusSubId = API_SUB_CALL_STATUS;
-	call_status.CallStatusValue.State = API_CSS_CALL_CONNECT;
-	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_CALL_STATUS,
-		sizeof(ApiCallStatusType), (rsuint8*) &call_status);
-	
-	SystemCallId.ApiSubId = API_SUB_CALL_ID;
-	SystemCallId.ApiSystemCallId = call->SystemCallId;
-	ApiBuildInfoElement(&ie_block, &ie_block_len, API_IE_SYSTEM_CALL_ID,
-		sizeof(call->SystemCallId), (rsuint8*) &SystemCallId);
-
-	call->state = API_CSS_CALL_CONNECT;
-	ApiFpCcConnectReqType * req = (ApiFpCcConnectReqType*)
-		malloc((sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len));
-	req->Primitive = API_FP_CC_CONNECT_REQ;
-	req->CallReference = call->CallReference;
-	req->InfoElementLength = ie_block_len;
-	memcpy(req->InfoElement,(rsuint8*)ie_block, ie_block_len);
-	printf("[%llu] API_FP_CC_CONNECT_REQ\n", timeSinceStart());
-	mailProto.send(dect_bus, (uint8_t*) req,
-		sizeof(ApiFpCcConnectReqType) - 1 + ie_block_len);
-
-	free(ie_block);
-	free(req);
-}
-#endif
-
 
 //-------------------------------------------------------------
 // Handset alert us when it start ringing
@@ -1113,7 +930,6 @@ static int release_req(struct call_t *call, ApiCcReleaseReasonType reason) {
 		printf("Call %d state change from %s to %s\n", call->idx,
 			cc_state_names[call->state], cc_state_names[F19_RELEASE_PEND]);
 		call->state = F19_RELEASE_PEND;
-//		res = asterisk_call(call->TerminalId, -1, call->epId, NULL);
 	}
 
 	return res;
@@ -1183,32 +999,6 @@ static int release_ind(busmail_t *m) {
 
 
 
-
-
-#if 0
-static void pinging_call(int handset) {
-
-	/* Connection request to dialed handset */
-	ApiFpCcSetupReqType req = {
-		.Primitive = API_FP_CC_SETUP_REQ,
-		.TerminalId = handset,
-		.AudioId.SourceTerminalId = 0, /* 0 is the base station id */
-		.BasicService = API_BASIC_SPEECH,
-		.CallClass = API_CC_NORMAL,
-		.Signal = API_CC_SIGNAL_ALERT_ON_PATTERN_2,
-		.InfoElementLength = 0,
-	};
-
-	printf("pinging_call\n");
-	printf("API_FP_CC_SETUP_REQ\n");
-	mailProto.send(dect_bus, (uint8_t*)&req, sizeof(ApiFpCcSetupReqType));
-	return;
-}
-#endif
-
-
-
-
 //-------------------------------------------------------------
 // Handle incomming mail messages from external Dect FP
 static void external_call_mail_handler(packet_t *p) {
@@ -1254,14 +1044,6 @@ static void external_call_mail_handler(packet_t *p) {
 			res = alert_ind(msgIn);
 			break;
 	
-//		case API_FP_CC_ALERT_CFM:
-//			alert_cfm(m);
-			break;
-	
-//		case API_FP_CC_SETUP_ACK_CFM:
-//			setup_ack_cfm(m);
-//			break;
-	
 		case API_FP_CC_INFO_IND:
 			res = info_ind(msgIn);
 			break;
@@ -1270,10 +1052,6 @@ static void external_call_mail_handler(packet_t *p) {
 			res = audio_format_cfm(msgIn);
 			break;
 	
-//		case API_FP_CC_CALL_PROC_CFM:
-//			call_proc_cfm(m);
-//			break;
-
 		default:
 			break;	
 	}
