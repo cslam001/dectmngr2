@@ -258,7 +258,7 @@ printf("Call answer pcm %d\n", pcmId);
 printf("Call answer err %d\n", err);
 		}
 
-		asterisk_cfm(termId, pcmId, err);
+		asterisk_cfm(pcmId, err);
 	}
 }
 
