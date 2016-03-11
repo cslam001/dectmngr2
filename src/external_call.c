@@ -38,10 +38,13 @@ struct call_t {
 	enum cc_states_t state;
 	int idx;
 
+	/* Caller id (caller number) */
+	char *cid;
+
 	/* "Call ID’s are assigned by the FP and are uniquely defined
 	 * system-wide. This allows proper handling of asynchronous
 	 * messages (ApiSystemCallIdType)." */
-	rsuint8 SystemCallId;
+	ApiSystemCallIdType SystemCallId;
 
 	/* "Seen from the host the connections to the handsets
 	 * are referenced by the handset number (ApiCallReferenceType)" */
@@ -78,6 +81,7 @@ static void * dect_bus;
 //-------------------------------------------------------------
 static int audio_format_req(struct call_t *call);
 static int parse_info_elements(struct call_t *call, rsuint8 *InfoElements, rsuint16 InfoElementLength);
+static int fill_info_elements(struct call_t *call, rsuint8 **buf, rsuint16 *bufLen);
 static int release_req(struct call_t *call, ApiCcReleaseReasonType reason);
 
 
@@ -89,7 +93,8 @@ static struct call_t* find_free_call_slot(void) {
 	for(i = 0; i < MAX_CALLS; i++) {
 		if(calls[i].state != F00_NULL) continue;
 
-		if(!calls[i].SystemCallId && !calls[i].CallReference.Value) {
+		if(calls[i].SystemCallId.ApiSubId == API_SUB_CALL_ID_INVALID &&
+				!calls[i].CallReference.Value) {
 			printf("[%llu] Allocating call slot %d\n", timeSinceStart(), i);
 			return &calls[i];
 		}
@@ -108,23 +113,6 @@ static struct call_t* find_call_by_endpoint_id(ApiAudioEndPointIdType epId) {
 		//if(calls[i].state == F00_NULL) continue;
 
 		if(calls[i].CallReference.Value && calls[i].epId == epId) {
-			return &calls[i];
-		}
-	}
-
-	return NULL;
-}
-
-
-//-------------------------------------------------------------
-static struct call_t* find_call_by_sys_id(rsuint8 SystemCallId) {
-	int i;
-
-	for(i = 0; i < MAX_CALLS; i++) {
-		if(calls[i].state == F00_NULL) continue;
-
-		if(calls[i].CallReference.Value &&
-				calls[i].SystemCallId == SystemCallId) {
 			return &calls[i];
 		}
 	}
@@ -160,9 +148,11 @@ static void free_call_slot(struct call_t *call) {
 
 	idx = call->idx;															// Save the index number past mem clear
 	printf("Freeing call slot %d\n", idx);
+	free(call->cid);
 	memset(call, 0, sizeof(struct call_t));
 	call->state = F00_NULL;
 	call->idx = idx;
+	call->SystemCallId.ApiSubId = API_SUB_CALL_ID_INVALID;
 }
 
 
@@ -234,12 +224,8 @@ static int setup_ind(busmail_t *m) {
 // Initiate an incomming external call from outer world
 // going to a handset.
 int setup_req(uint32_t termId, int pcmId) {
-const char number[] = { '0', '1', '2', '3', '4' };
-	ApiCallingNumberType callerNumber;
 	struct terminal_t *terminal;
 	ApiCallStatusType status;
-	ApiCodecListType *codecs;
-	ApiLineIdType line;
 	ApiFpCcSetupReqType *msg;
 	struct call_t *call;
 	rsuint16 bufLen;
@@ -269,53 +255,13 @@ printf("TODO: send CID to handset second time\n");
 
 	buf = NULL;
 	bufLen = 0;
+	if(fill_info_elements(call, &buf, &bufLen)) return -1;
+
 	// Send "call setup"
 	status.CallStatusSubId = API_SUB_CALL_STATUS;
 	status.CallStatusValue.State = API_CSS_CALL_SETUP;
 	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
 		API_IE_CALL_STATUS, sizeof(status), (rsuint8*) &status);
-
-	line.ApiSubId = API_SUB_LINE_ID_EXT_LINE_ID;
-	line.ApiLineValue.Value = 1;
-	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
-		API_IE_LINE_ID, sizeof(line), (rsuint8*) &line);
-
-	// Send callers phone number
-	callerNumber.NumberType = ANT_NATIONAL;
-	callerNumber.Npi = ANPI_NATIONAL;
-	callerNumber.PresentationInd = API_PRESENTATION_ALLOWED;
-	callerNumber.ScreeningInd = API_USER_PROVIDED_NOT_SCREENED;
-	callerNumber.NumberLength = sizeof(number);
-	memcpy(callerNumber.Number, number, sizeof(number));
-	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
-		API_IE_CALLING_PARTY_NUMBER, sizeof(callerNumber) + sizeof(number),
-		(rsuint8*) &callerNumber);
-
-	// Send list of codecs we support to handset
-	codecs = calloc(1, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType));
-	codecs->NegotiationIndicator = API_NI_POSSIBLE;
-	if(terminal->BasicService == API_WIDEBAND_SPEECH) {
-		codecs->NoOfCodecs = 2;
-		codecs->Codec[0].Codec = API_CT_G722;
-		codecs->Codec[0].MacDlcService = API_MDS_1_MD;
-		codecs->Codec[0].CplaneRouting = API_CPR_CS;
-		codecs->Codec[0].SlotSize = API_SS_LS640;
-		codecs->Codec[1].Codec = API_CT_G726;
-		codecs->Codec[1].MacDlcService = API_MDS_1_MD;
-		codecs->Codec[1].CplaneRouting = API_CPR_CS;
-		codecs->Codec[1].SlotSize = API_SS_FS;
-	}
-	else {
-		codecs->NoOfCodecs = 1;
-		codecs->Codec[0].Codec = API_CT_G726;
-		codecs->Codec[0].MacDlcService = API_MDS_1_MD;
-		codecs->Codec[0].CplaneRouting = API_CPR_CS;
-		codecs->Codec[0].SlotSize = API_SS_FS;
-	}
-	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
-		API_IE_CODEC_LIST, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType) *
-		(codecs->NoOfCodecs - 1), (rsuint8*) codecs);
-//TODO: reduce code duplication
 
 	msg = calloc(1, sizeof(ApiFpCcSetupReqType) - 1 + bufLen);
 	msg->Primitive = API_FP_CC_SETUP_REQ;
@@ -337,7 +283,6 @@ printf("TODO: send CID to handset second time\n");
 		cc_state_names[call->state], cc_state_names[F06_PRESENT]);
 	call->state = F06_PRESENT;
 
-	free(codecs);
 	free(buf);
 	free(msg);
 
@@ -360,7 +305,8 @@ static int setup_cfm(busmail_t *m) {
 
 	/* Save the unique system call ID the
 	 * FP generated for us. */
-	call->SystemCallId = msgIn->SystemCallId;
+	call->SystemCallId.ApiSystemCallId = msgIn->SystemCallId;
+	call->SystemCallId.ApiSubId = API_SUB_CALL_ID;
 	call->CallReference = msgIn->CallReference;
 	call->BasicService = msgIn->BasicService;
 
@@ -411,20 +357,17 @@ static int audio_format_req(struct call_t *call) {
 }
 
 
+
 //-------------------------------------------------------------
 // Send a list of audio codecs we support to handset
 // and tell Asterisk to open audio channel.
 static int audio_format_cfm(busmail_t *m) {
-	ApiAudioDataFormatListType *pcmFormat;
 	ApiFpSetAudioFormatCfmType *msgIn;
 	ApiFpCcConnectResType *msgConRes;
-	ApiSystemCallIdType SystemCallId;
 	ApiCallStatusType status;
-	ApiCodecListType *codecs;
 	struct call_t *call;
 	rsuint16 bufLen;
 	rsuint8 *buf;
-	char term[32];
 	int res;
 
 	msgIn = (ApiFpSetAudioFormatCfmType*) &m->mail_header;
@@ -434,53 +377,7 @@ static int audio_format_cfm(busmail_t *m) {
 	res = 0;
 	buf = NULL;
 	bufLen = 0;
-	// Send system call ID
-	SystemCallId.ApiSubId = API_SUB_CALL_ID;
-	SystemCallId.ApiSystemCallId = call->SystemCallId;
-	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
-		API_IE_SYSTEM_CALL_ID, sizeof(ApiSystemCallIdType),
-		(rsuint8*) &SystemCallId);
-
-	// Send the codecs we want the handset to use
-	codecs = calloc(1, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType));
-	codecs->NegotiationIndicator = API_NI_POSSIBLE;
-	if(call->BasicService == API_WIDEBAND_SPEECH) {
-		codecs->NoOfCodecs = 2;
-		codecs->Codec[0].Codec = API_CT_G722;
-		codecs->Codec[0].MacDlcService = API_MDS_1_MD;
-		codecs->Codec[0].CplaneRouting = API_CPR_CS;
-		codecs->Codec[0].SlotSize = API_SS_LS640;
-		codecs->Codec[1].Codec = API_CT_G726;
-		codecs->Codec[1].MacDlcService = API_MDS_1_MD;
-		codecs->Codec[1].CplaneRouting = API_CPR_CS;
-		codecs->Codec[1].SlotSize = API_SS_FS;
-	}
-	else {
-		codecs->NoOfCodecs = 1;
-		codecs->Codec[0].Codec = API_CT_G726;
-		codecs->Codec[0].MacDlcService = API_MDS_1_MD;
-		codecs->Codec[0].CplaneRouting = API_CPR_CS;
-		codecs->Codec[0].SlotSize = API_SS_FS;
-	}
-	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
-		API_IE_CODEC_LIST, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType) *
-		(codecs->NoOfCodecs - 1), (rsuint8*) codecs);
-//TODO: reduce code duplication
-
-	// Send the "air codec to pcm format translation" map
-	pcmFormat = malloc(sizeof(ApiAudioDataFormatListType) +
-		sizeof(ApiAudioDataFormatInfoType));
-	pcmFormat->NoOfCodecs = 2;
-	pcmFormat->ApiAudioDataFormatInfo[0].Codec = API_CT_G722;
-	pcmFormat->ApiAudioDataFormatInfo[0].ApiAudioDataFormat = 
-		AP_DATA_FORMAT_LINEAR_8kHz;
-	pcmFormat->ApiAudioDataFormatInfo[1].Codec = API_CT_G726;
-	pcmFormat->ApiAudioDataFormatInfo[1].ApiAudioDataFormat = 
-		AP_DATA_FORMAT_LINEAR_8kHz;
-	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
-		API_IE_AUDIO_DATA_FORMAT, sizeof(ApiAudioDataFormatListType) +
-		sizeof(ApiAudioDataFormatInfoType) * (pcmFormat->NoOfCodecs - 1),
-		(rsuint8*) pcmFormat);
+	if(fill_info_elements(call, &buf, &bufLen)) return -1;
 
 	// Send "call should become connected"
 	status.CallStatusSubId = API_SUB_CALL_STATUS;
@@ -512,11 +409,13 @@ static int audio_format_cfm(busmail_t *m) {
 			break;
 
 		case Q22_CC_RELEASE_COM:
-			res = asterisk_call(call->TerminalId, -1, call->epId, NULL);
+			if(asterisk_call(call->TerminalId, -1, call->epId, NULL)) {
+				free_call_slot(call);
+			}
 			break;
 
 		case F00_NULL:
-			res = asterisk_call(call->TerminalId, -1, call->epId, NULL);
+			asterisk_call(call->TerminalId, -1, call->epId, NULL);				// Ignore error since it would trigger a loop
 			free_call_slot(call);
 			break;
 
@@ -526,13 +425,13 @@ static int audio_format_cfm(busmail_t *m) {
 
 		default:
 			printf("Error, invalid state in %s\n", __FUNCTION__);
-			release_req(call, API_RR_UNKNOWN);
+			res = -1;
 			break;
 	}
 
+	if(res) release_req(call, API_RR_UNKNOWN);
+
 	free(msgConRes);
-	free(pcmFormat);
-	free(codecs);
 	free(buf);
 
 	return res;
@@ -542,22 +441,14 @@ static int audio_format_cfm(busmail_t *m) {
 
 //-------------------------------------------------------------
 // Asterisk has replied to a ubus call we made
-int asterisk_cfm(int termId, int pcmId, int err) {
-	ApiAudioDataFormatListType *pcmFormat;
-	ApiFpSetAudioFormatCfmType *msgIn;
-	ApiFpCcConnectResType *msgConRes;
+int asterisk_cfm(int pcmId, int err) {
 	ApiFpCcConnectReqType *msgConReq;
-	ApiSystemCallIdType SystemCallId;
 	ApiCallStatusType status;
-	ApiCodecListType *codecs;
 	struct call_t *call;
 	rsuint16 bufLen;
 	rsuint8 *buf;
-	char term[32];
-	int res;
 
 	call = NULL;
-	res = 0;
 	buf = NULL;
 	bufLen = 0;
 
@@ -566,73 +457,24 @@ int asterisk_cfm(int termId, int pcmId, int err) {
 		call = find_call_by_endpoint_id(pcmId);
 		if(!call) return -1;
 	}
-	else if(err) {
+
+	if(err) {
 		printf("NACK from Asterisk, terminating call\n");
-		if(call) return release_req(call, API_RR_NORMAL);
+		if(call) return release_req(call, API_RR_INSUFFICIENT_RESOURCES);
 	}
-	else if(!call || pcmId < 0 || pcmId > MAX_NR_PCM - 1) {
+
+	if(!call || pcmId < 0 || pcmId > MAX_NR_PCM - 1) {
 		printf("Warning, invalid PCM %d\n", pcmId);
 		return -1;
 	}
 
-	// Send system call ID
-	SystemCallId.ApiSubId = API_SUB_CALL_ID;
-	SystemCallId.ApiSystemCallId = call->SystemCallId;
-	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
-		API_IE_SYSTEM_CALL_ID, sizeof(ApiSystemCallIdType),
-		(rsuint8*) &SystemCallId);
-
-	// Send the codecs we want the handset to use
-	codecs = calloc(1, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType));
-	codecs->NegotiationIndicator = API_NI_POSSIBLE;
-	if(call->BasicService == API_WIDEBAND_SPEECH) {
-		codecs->NoOfCodecs = 2;
-		codecs->Codec[0].Codec = API_CT_G722;
-		codecs->Codec[0].MacDlcService = API_MDS_1_MD;
-		codecs->Codec[0].CplaneRouting = API_CPR_CS;
-		codecs->Codec[0].SlotSize = API_SS_LS640;
-		codecs->Codec[1].Codec = API_CT_G726;
-		codecs->Codec[1].MacDlcService = API_MDS_1_MD;
-		codecs->Codec[1].CplaneRouting = API_CPR_CS;
-		codecs->Codec[1].SlotSize = API_SS_FS;
-	}
-	else {
-		codecs->NoOfCodecs = 1;
-		codecs->Codec[0].Codec = API_CT_G726;
-		codecs->Codec[0].MacDlcService = API_MDS_1_MD;
-		codecs->Codec[0].CplaneRouting = API_CPR_CS;
-		codecs->Codec[0].SlotSize = API_SS_FS;
-	}
-	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
-		API_IE_CODEC_LIST, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType) *
-		(codecs->NoOfCodecs - 1), (rsuint8*) codecs);
-//TODO: reduce code duplication
-
-	// Send the "air codec to pcm format translation" map
-	pcmFormat = malloc(sizeof(ApiAudioDataFormatListType) +
-		sizeof(ApiAudioDataFormatInfoType));
-	pcmFormat->NoOfCodecs = 2;
-	pcmFormat->ApiAudioDataFormatInfo[0].Codec = API_CT_G722;
-	pcmFormat->ApiAudioDataFormatInfo[0].ApiAudioDataFormat = 
-		AP_DATA_FORMAT_LINEAR_8kHz;
-	pcmFormat->ApiAudioDataFormatInfo[1].Codec = API_CT_G726;
-	pcmFormat->ApiAudioDataFormatInfo[1].ApiAudioDataFormat = 
-		AP_DATA_FORMAT_LINEAR_8kHz;
-	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
-		API_IE_AUDIO_DATA_FORMAT, sizeof(ApiAudioDataFormatListType) +
-		sizeof(ApiAudioDataFormatInfoType) * (pcmFormat->NoOfCodecs - 1),
-		(rsuint8*) pcmFormat);
+	if(fill_info_elements(call, &buf, &bufLen)) return -1;
 
 	// Send "call should become connected"
 	status.CallStatusSubId = API_SUB_CALL_STATUS;
 	status.CallStatusValue.State = API_CSS_CALL_CONNECT;
 	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
 		API_IE_CALL_STATUS, sizeof(status), (rsuint8*) &status);
-
-	msgConRes = malloc(sizeof(ApiFpCcConnectResType) - 1 + bufLen);
-	msgConRes->Primitive = API_FP_CC_CONNECT_RES;
-	msgConRes->CallReference = call->CallReference;
-	msgConRes->InfoElementLength = bufLen;
 
 	msgConReq = malloc(sizeof(ApiFpCcConnectReqType) - 1 + bufLen);
 	msgConReq->Primitive = API_FP_CC_CONNECT_REQ;
@@ -663,9 +505,7 @@ int asterisk_cfm(int termId, int pcmId, int err) {
 			break;
 	}
 
-	free(msgConRes);
-	free(pcmFormat);
-	free(codecs);
+	free(msgConReq);
 	free(buf);
 
 	return 0;
@@ -733,7 +573,7 @@ static int parse_info_elements(struct call_t *call, rsuint8 *InfoElements, rsuin
 				snprintf(ubusVals[0], maxUbusValLen, "%u", call->epId);
 				snprintf(ubusVals[1], calledNum->NumberLength + 1,
 					"%s", calledNum->Number);
-				ubus_send_strings(ubusInfoIndPath, ubusDialKeys,
+ubus_send_strings(ubusInfoIndPath, ubusDialKeys,
 					(const char**) ubusVals, 2);
 				break;
 
@@ -743,8 +583,10 @@ static int parse_info_elements(struct call_t *call, rsuint8 *InfoElements, rsuin
 				switch(sysId->ApiSubId) {
 					case API_SUB_CALL_ID:
 					case API_SUB_CALL_ID_UPDATE:
-						call->SystemCallId = sysId->ApiSystemCallId;
-						printf("API_IE_SYSTEM_CALL_ID %d\n", call->SystemCallId);
+						call->SystemCallId.ApiSystemCallId = sysId->ApiSystemCallId;
+						call->SystemCallId.ApiSubId = API_SUB_CALL_ID;
+						printf("API_IE_SYSTEM_CALL_ID %d\n",
+							call->SystemCallId.ApiSystemCallId);
 						break;
 					default:
 						break;
@@ -761,6 +603,102 @@ static int parse_info_elements(struct call_t *call, rsuint8 *InfoElements, rsuin
 	}
 
 	for(i = 0; i < maxUbusValCnt; i++) free(ubusVals[i]);
+
+	return 0;
+}
+
+
+
+//-------------------------------------------------------------
+// Create a list of embedded info elements for next mail
+// message. Don't bother to select any particula data,
+// just send everything we've got that handset might
+// have use for.
+static int fill_info_elements(struct call_t *call, rsuint8 **buf, rsuint16 *bufLen) {
+	ApiAudioDataFormatListType *pcmFormat;
+	ApiCallingNumberType callerNumber;
+	ApiSystemCallIdType SystemCallId;
+	struct terminal_t *terminal;
+	ApiCodecListType *codecs;
+	ApiLineIdType line;
+	int i;
+
+	// Find the handset in our list of registereds
+	for(i = 0; i < MAX_NR_HANDSETS &&
+		handsets.terminal[i].id != call->TerminalId; i++);
+	if(i == MAX_NR_HANDSETS) return -1;
+	terminal = &handsets.terminal[i];
+
+	// Send system call ID
+	if(call->SystemCallId.ApiSubId == API_SUB_CALL_ID) {
+		SystemCallId.ApiSubId = API_SUB_CALL_ID;
+		SystemCallId.ApiSystemCallId = call->SystemCallId.ApiSystemCallId;
+		ApiBuildInfoElement((ApiInfoElementType**) buf, bufLen,
+			API_IE_SYSTEM_CALL_ID, sizeof(ApiSystemCallIdType),
+			(rsuint8*) &SystemCallId);
+	}
+
+	line.ApiSubId = API_SUB_LINE_ID_EXT_LINE_ID;
+	line.ApiLineValue.Value = 1;
+	ApiBuildInfoElement((ApiInfoElementType**) buf, bufLen,
+		API_IE_LINE_ID, sizeof(line), (rsuint8*) &line);
+
+	// Send the codecs we want the handset to use
+	codecs = calloc(1, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType));
+	codecs->NegotiationIndicator = API_NI_POSSIBLE;
+	if(call->BasicService == API_WIDEBAND_SPEECH ||
+			terminal->BasicService == API_WIDEBAND_SPEECH) {
+		codecs->NoOfCodecs = 2;
+		codecs->Codec[0].Codec = API_CT_G722;
+		codecs->Codec[0].MacDlcService = API_MDS_1_MD;
+		codecs->Codec[0].CplaneRouting = API_CPR_CS;
+		codecs->Codec[0].SlotSize = API_SS_LS640;
+		codecs->Codec[1].Codec = API_CT_G726;
+		codecs->Codec[1].MacDlcService = API_MDS_1_MD;
+		codecs->Codec[1].CplaneRouting = API_CPR_CS;
+		codecs->Codec[1].SlotSize = API_SS_FS;
+	}
+	else {
+		codecs->NoOfCodecs = 1;
+		codecs->Codec[0].Codec = API_CT_G726;
+		codecs->Codec[0].MacDlcService = API_MDS_1_MD;
+		codecs->Codec[0].CplaneRouting = API_CPR_CS;
+		codecs->Codec[0].SlotSize = API_SS_FS;
+	}
+	ApiBuildInfoElement((ApiInfoElementType**) buf, bufLen,
+		API_IE_CODEC_LIST, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType) *
+		(codecs->NoOfCodecs - 1), (rsuint8*) codecs);
+
+	// Send callers phone number
+	if(call->cid) {
+		callerNumber.NumberType = ANT_NATIONAL;
+		callerNumber.Npi = ANPI_NATIONAL;
+		callerNumber.PresentationInd = API_PRESENTATION_ALLOWED;
+		callerNumber.ScreeningInd = API_USER_PROVIDED_NOT_SCREENED;
+		callerNumber.NumberLength = strlen(call->cid);
+		memcpy(callerNumber.Number, call->cid, strlen(call->cid));
+		ApiBuildInfoElement((ApiInfoElementType**) buf, bufLen,
+			API_IE_CALLING_PARTY_NUMBER, sizeof(callerNumber) +
+			strlen(call->cid), (rsuint8*) &callerNumber);
+	}
+
+	// Send the "air codec to pcm format translation" map
+	pcmFormat = malloc(sizeof(ApiAudioDataFormatListType) +
+		sizeof(ApiAudioDataFormatInfoType));
+	pcmFormat->NoOfCodecs = 2;
+	pcmFormat->ApiAudioDataFormatInfo[0].Codec = API_CT_G722;
+	pcmFormat->ApiAudioDataFormatInfo[0].ApiAudioDataFormat = 
+		AP_DATA_FORMAT_LINEAR_8kHz;
+	pcmFormat->ApiAudioDataFormatInfo[1].Codec = API_CT_G726;
+	pcmFormat->ApiAudioDataFormatInfo[1].ApiAudioDataFormat = 
+		AP_DATA_FORMAT_LINEAR_8kHz;
+	ApiBuildInfoElement((ApiInfoElementType**) buf, bufLen,
+		API_IE_AUDIO_DATA_FORMAT, sizeof(ApiAudioDataFormatListType) +
+		sizeof(ApiAudioDataFormatInfoType) * (pcmFormat->NoOfCodecs - 1),
+		(rsuint8*) pcmFormat);
+
+	free(pcmFormat);
+	free(codecs);
 
 	return 0;
 }
@@ -834,6 +772,9 @@ static int connect_cfm(busmail_t *m) {
 					cc_state_names[call->state], cc_state_names[F10_ACTIVE]);
 				call->state = F10_ACTIVE;
 			}
+			else {
+				return release_req(call, API_RR_UNKNOWN);
+			}
 			break;
 	}
 
@@ -899,7 +840,7 @@ static int release_cfm(busmail_t *m) {
 // We ask the handset to terminate a call and
 // set the call to "pending release".
 static int release_req(struct call_t *call, ApiCcReleaseReasonType reason) {
-	ApiSystemCallIdType SystemCallId;
+// 	ApiSystemCallIdType SystemCallId;
 	ApiFpCcReleaseReqType *msgOut;
 	rsuint16 bufLen;
 	rsuint8 *buf;
@@ -908,12 +849,7 @@ static int release_req(struct call_t *call, ApiCcReleaseReasonType reason) {
 	res = 0;
 	buf = NULL;
 	bufLen = 0;
-	// Send system call ID
-	SystemCallId.ApiSubId = API_SUB_CALL_ID;
-	SystemCallId.ApiSystemCallId = call->SystemCallId;
-	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
-		API_IE_SYSTEM_CALL_ID, sizeof(ApiSystemCallIdType),
-		(rsuint8*) &SystemCallId);
+	if(fill_info_elements(call, &buf, &bufLen)) return -1;
 
 	msgOut = malloc(sizeof(ApiFpCcReleaseReqType) - 1 + bufLen);
 	msgOut->Primitive = API_FP_CC_RELEASE_REQ;
@@ -931,6 +867,8 @@ static int release_req(struct call_t *call, ApiCcReleaseReasonType reason) {
 			cc_state_names[call->state], cc_state_names[F19_RELEASE_PEND]);
 		call->state = F19_RELEASE_PEND;
 	}
+
+	free(msgOut);
 
 	return res;
 }
@@ -954,7 +892,7 @@ int release_req_async(uint32_t termId, int pcmId) {
 //-------------------------------------------------------------
 // Handset user has pressed the on hook key, we terminate the call.
 static int release_ind(busmail_t *m) {
-	ApiSystemCallIdType SystemCallId;
+// 	ApiSystemCallIdType SystemCallId;
 	ApiFpCcReleaseResType *msgOut;
 	ApiFpCcReleaseIndType *msgIn;
 	struct call_t *call;
@@ -970,12 +908,7 @@ static int release_ind(busmail_t *m) {
 
 	buf = NULL;
 	bufLen = 0;
-	// Send system call ID
-	SystemCallId.ApiSubId = API_SUB_CALL_ID;
-	SystemCallId.ApiSystemCallId = call->SystemCallId;
-	ApiBuildInfoElement((ApiInfoElementType**) &buf, &bufLen,
-		API_IE_SYSTEM_CALL_ID, sizeof(ApiSystemCallIdType),
-		(rsuint8*) &SystemCallId);
+	if(fill_info_elements(call, &buf, &bufLen)) return -1;
 
 	// Send acknowledge, we will disconnect the call
 	msgOut = malloc(sizeof(ApiFpCcReleaseResType) - 1 + bufLen);
@@ -992,6 +925,8 @@ static int release_ind(busmail_t *m) {
 	printf("Call %d state change from %s to %s\n", call->idx,
 		cc_state_names[call->state], cc_state_names[F00_NULL]);
 	call->state = F00_NULL;
+
+	free(msgOut);
 
 	// Request shut down of PCM audio
 	return audio_format_req(call);
@@ -1063,9 +998,6 @@ static void external_call_mail_handler(packet_t *p) {
 
 
 
-
-
-
 //-------------------------------------------------------------
 void external_call_init(void * bus) {
 	int i;
@@ -1076,6 +1008,7 @@ void external_call_init(void * bus) {
 	for(i = 0; i < MAX_CALLS; i++) {
 		calls[i].state = F00_NULL;
 		calls[i].idx = i;
+		calls[i].SystemCallId.ApiSubId = API_SUB_CALL_ID_INVALID;
 	}
 
 	mailProto.add_handler(bus, external_call_mail_handler);
