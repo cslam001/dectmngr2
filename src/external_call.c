@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <stdint.h>
 #include <string.h>
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
@@ -11,6 +10,7 @@
 #include <Api/FpAudio/ApiFpAudio.h>
 #include <Api/RsStandard.h>
 
+#include "external_call.h"
 #include "busmail.h"
 #include "ubus.h"
 #include "natalie_utils.h"
