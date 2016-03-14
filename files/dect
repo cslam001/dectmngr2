@@ -4,11 +4,19 @@
 #
 
 START=70
+STOP=12
+
+USE_PROCD=1
+NAME=dectmngr2
+PROG=/usr/sbin/dectmngr2
 
 
 
-start() {
-	dectmngr2 --app > /tmp/log/dectmngr2 2>&1 &
+start_service() {
+	procd_open_instance
+	procd_set_param command "$PROG" --app
+	procd_set_param respawn
+	procd_close_instance
 }
 
 boot() {
