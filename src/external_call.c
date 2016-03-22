@@ -1,3 +1,7 @@
+
+// (C) Inteno 2015-2016
+// Ronny Nilsson
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -538,6 +542,9 @@ static int info_ind(busmail_t *m) {
 
 
 
+//-------------------------------------------------------------
+// Extract dialed digits from FP message and store
+// as ASCII digits (exept for R and pause).
 static int get_valid_keys(rsuint8 *inBuf, int len, char *outBuf) {
 	int i, j;
 
@@ -547,7 +554,6 @@ static int get_valid_keys(rsuint8 *inBuf, int len, char *outBuf) {
 				inBuf[i] == STAR_KEY || inBuf[i] == R_KEY ||
 				inBuf[i] == PAUSE_KEY) {
 			outBuf[j++] = inBuf[i];
-printf("Key: %c\n", inBuf[i]);
 		}
 	}
 
@@ -592,7 +598,7 @@ static int parse_info_elements(struct call_t *call, rsuint8 *InfoElements, rsuin
 					"%s", InfoElement->IeData);
 				ubus_send_strings(ubusSenderPath, ubusDialKeys,
 					(const char**) ubusVals, 2);
-asterisk_call(call->TerminalId, call->epId, -1, ubusVals[1]);
+				asterisk_call(call->TerminalId, call->epId, -1, ubusVals[1]);
 				break;
 
 			// Extract the number handset dialed and send to Asterisk
@@ -608,7 +614,7 @@ asterisk_call(call->TerminalId, call->epId, -1, ubusVals[1]);
 					"%s", InfoElement->IeData);
 				ubus_send_strings(ubusSenderPath, ubusDialKeys,
 					(const char**) ubusVals, 2);
-asterisk_call(call->TerminalId, call->epId, -1, ubusVals[1]);
+				asterisk_call(call->TerminalId, call->epId, -1, ubusVals[1]);
 				break;
 
 			// Extract SystemCallId which FP should have assigned for us
@@ -874,7 +880,6 @@ static int release_cfm(busmail_t *m) {
 // We ask the handset to terminate a call and
 // set the call to "pending release".
 static int release_req(struct call_t *call, ApiCcReleaseReasonType reason) {
-// 	ApiSystemCallIdType SystemCallId;
 	ApiFpCcReleaseReqType *msgOut;
 	rsuint16 bufLen;
 	rsuint8 *buf;
@@ -926,7 +931,6 @@ int release_req_async(uint32_t termId, int pcmId) {
 //-------------------------------------------------------------
 // Handset user has pressed the on hook key, we terminate the call.
 static int release_ind(busmail_t *m) {
-// 	ApiSystemCallIdType SystemCallId;
 	ApiFpCcReleaseResType *msgOut;
 	ApiFpCcReleaseIndType *msgIn;
 	struct call_t *call;
