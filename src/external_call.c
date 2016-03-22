@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
@@ -19,6 +20,11 @@
 
 //-------------------------------------------------------------
 #define MAX_CALLS	4
+#define PAUSE_KEY	0x05
+#define R_KEY		0x15
+#define POUND_KEY	0x23
+#define STAR_KEY	0x2a
+
 
 enum cc_states_t {												// CC states as defined in ETSI EN 300 175-5 
 	F00_NULL,
@@ -532,11 +538,28 @@ static int info_ind(busmail_t *m) {
 
 
 
+static int get_valid_keys(rsuint8 *inBuf, int len, char *outBuf) {
+	int i, j;
+
+	j = 0;	
+	for(i = 0; i < len; i++) {
+		if(isalnum(inBuf[i]) || inBuf[i] == POUND_KEY ||
+				inBuf[i] == STAR_KEY || inBuf[i] == R_KEY ||
+				inBuf[i] == PAUSE_KEY) {
+			outBuf[j++] = inBuf[i];
+printf("Key: %c\n", inBuf[i]);
+		}
+	}
+
+	return j;
+}
+
+
+
 //-------------------------------------------------------------
 // Parse list of embedded info elements in mail message
 static int parse_info_elements(struct call_t *call, rsuint8 *InfoElements, rsuint16 InfoElementLength) {
-	const char *ubusDialKeys[] = { "terminal", "dialed_nr" };
-	const char ubusInfoIndPath[] = "dect.api.info_ind";
+	const char *ubusDialKeys[] = { "terminal", "dialed" };
 	const unsigned int maxUbusValLen = 64;
 	const unsigned int maxUbusValCnt = 4;
 	ApiInfoElementType *InfoElement;
@@ -548,10 +571,12 @@ static int parse_info_elements(struct call_t *call, rsuint8 *InfoElements, rsuin
 
 	InfoElement = (ApiInfoElementType*) InfoElements;
 	readLen = 0;
-	for(i = 0; i < maxUbusValCnt; i++) ubusVals[i] = malloc(maxUbusValLen);
+	for(i = 0; i < maxUbusValCnt; i++) ubusVals[i] = calloc(1, maxUbusValLen);
 
 	while((unsigned int) InfoElementLength - readLen >= sizeof(ApiInfoElementType)) {
 		printf("Info element 0x%x, len %u tot len %u\n", InfoElement->Ie, InfoElement->IeLength, InfoElementLength);
+
+		calledNum = (ApiCalledNumberType*) InfoElement->IeData;
 
 		switch(InfoElement->Ie) {
 			// Extract the number handset dialed and send to Asterisk
@@ -559,22 +584,31 @@ static int parse_info_elements(struct call_t *call, rsuint8 *InfoElements, rsuin
 				if(call->state == F00_NULL || call->state == F19_RELEASE_PEND) break;
 				if(maxUbusValLen < (unsigned int) InfoElement->IeLength + 1) break;	// To many digits?
 				snprintf(ubusVals[0], maxUbusValLen, "%u", call->epId);
+
+				if(!get_valid_keys(InfoElement->IeData,
+						InfoElement->IeLength, ubusVals[1])) break;
+
 				snprintf(ubusVals[1], InfoElement->IeLength + 1,
 					"%s", InfoElement->IeData);
-				ubus_send_strings(ubusInfoIndPath, ubusDialKeys,
+				ubus_send_strings(ubusSenderPath, ubusDialKeys,
 					(const char**) ubusVals, 2);
+asterisk_call(call->TerminalId, call->epId, -1, ubusVals[1]);
 				break;
 
 			// Extract the number handset dialed and send to Asterisk
 			case API_IE_CALLED_NUMBER:
 				if(call->state == F00_NULL || call->state == F19_RELEASE_PEND) break;
-				calledNum = (ApiCalledNumberType*) InfoElement->IeData;
-				if(maxUbusValLen < (unsigned int) InfoElement->IeLength + 1) break;	// To many digits?
+				if(maxUbusValLen < (unsigned int) calledNum->NumberLength + 1) break;	// To many digits?
 				snprintf(ubusVals[0], maxUbusValLen, "%u", call->epId);
-				snprintf(ubusVals[1], calledNum->NumberLength + 1,
-					"%s", calledNum->Number);
-ubus_send_strings(ubusInfoIndPath, ubusDialKeys,
+
+				if(!get_valid_keys(calledNum->Number,
+						calledNum->NumberLength, ubusVals[1])) break;
+
+				snprintf(ubusVals[1], InfoElement->IeLength + 1,
+					"%s", InfoElement->IeData);
+				ubus_send_strings(ubusSenderPath, ubusDialKeys,
 					(const char**) ubusVals, 2);
+asterisk_call(call->TerminalId, call->epId, -1, ubusVals[1]);
 				break;
 
 			// Extract SystemCallId which FP should have assigned for us
