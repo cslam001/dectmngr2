@@ -62,7 +62,7 @@ static int ubus_request_call(struct ubus_context *ubus_ctx, struct ubus_object *
 
 
 //-------------------------------------------------------------
-static const char ubusSenderPath[] = "dect";										// The Ubus type we transmitt
+const char ubusSenderPath[] = "dect";											// The Ubus type we transmitt
 static const char ubusPathAsterisk[] = "asterisk.dect.api";						// The Ubus type for Asterisk
 const char ubusStrActive[] = "active";											// The "bool" we transmitt for service is on/enabled/operational
 const char ubusStrInActive[] = "inactive";
@@ -384,7 +384,7 @@ int asterisk_call(int terminal, int add, int release, const char *cid)
 	if(release >= 0) blobmsg_add_u32(&blob, ubusCallKeys[CALL_REL].name, release);
 	if(cid) blobmsg_add_string(&blob, ubusCallKeys[CALL_CID].name, cid);
 
-printf("Sending ubus request %d %d %d\n", terminal, add, release);
+printf("Sending ubus request %d %d %d %s\n", terminal, add, release, cid);
 	return ubus_call_blob(asteriskId, "call", &blob, 0);
 }
 

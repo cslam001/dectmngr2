@@ -17,9 +17,9 @@ struct querier_t {
 };
 
 
+extern const char ubusSenderPath[];
 extern const char ubusStrActive[];
 extern const char ubusStrInActive[];
-
 
 typedef void (*ubus_call_complete_callback)(int ret);
 
