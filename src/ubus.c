@@ -822,11 +822,13 @@ static int ubus_request_call(struct ubus_context *ubus_ctx, struct ubus_object *
 {
 	int res, termId, pcmId, add, release;
 	struct blob_attr **keys;
+	const char *cid;
 
 	termId = -1;
 	pcmId = -1;
 	add = 0;
 	release = 0;
+	cid = NULL;
 
 printf("Got incomming ubus request\n");
 	// Tokenize message key/value paris into an array
@@ -850,6 +852,11 @@ printf("Got incomming ubus request\n");
 		printf("call release %d\n", pcmId);
 	}
 
+	if(keys[CALL_CID]) {
+		cid = blobmsg_get_string(keys[CALL_CID]);
+		printf("call cid %s\n", cid);
+	}
+
 	if(pcmId < 0 || pcmId > MAX_NR_PCM || (!add && !release)) {
 		res = ubus_reply_err(ubus_ctx, req, methodName, EINVAL);
 		return 0;
@@ -865,7 +872,7 @@ printf("Got incomming ubus request\n");
 		}
 	}
 	else if(add && termId >= 0) {
-		if(setup_req((uint32_t) termId, pcmId)) {
+		if(setup_req((uint32_t) termId, pcmId, cid)) {
 			res = ubus_reply_busy(ubus_ctx, req, methodName);
 		}
 		else {

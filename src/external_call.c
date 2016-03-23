@@ -233,21 +233,15 @@ static int setup_ind(busmail_t *m) {
 //-------------------------------------------------------------
 // Initiate an incomming external call from outer world
 // going to a handset.
-int setup_req(uint32_t termId, int pcmId) {
+int setup_req(uint32_t termId, int pcmId, const char *cid) {
 	struct terminal_t *terminal;
 	ApiCallStatusType status;
 	ApiFpCcSetupReqType *msg;
 	struct call_t *call;
 	rsuint16 bufLen;
 	rsuint8 *buf;
+	char *cidBuf;
 	int i;
-
-	call = find_call_by_endpoint_id(pcmId);
-	if(call) {
-		termId = call->TerminalId;
-printf("TODO: send CID to handset second time\n");
-		return 0;
-	}
 
 	// Find the handset in our list of registereds
 	for(i = 0; i < MAX_NR_HANDSETS && handsets.terminal[i].id != termId; i++);
@@ -262,6 +256,11 @@ printf("TODO: send CID to handset second time\n");
 	call->epId = pcmId;
 	call->TerminalId = termId;
 	call->BasicService = terminal->BasicService;
+	if(cid) {
+		cidBuf = calloc(1, strlen(cid) + 1);
+		strcat(cidBuf, cid);
+		call->cid = cidBuf;
+	}
 
 	buf = NULL;
 	bufLen = 0;
