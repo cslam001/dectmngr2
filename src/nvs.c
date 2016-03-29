@@ -267,7 +267,7 @@ int nvs_file_write(uint32_t offset, uint32_t len, uint8_t *data) {
 	nvsFd = open("/etc/dect/nvs", O_WRONLY | O_CREAT, S_IRUSR | 
 		S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 	if(nvsFd == -1) {
-		perror("Error opening NVS file");
+		perror("Error opening NVS file wr");
 		return -1;
 	}
 
@@ -303,6 +303,10 @@ int nvs_file_read(uint32_t *len, uint8_t *data) {
 	int nvsFd, maxLen;
 	ssize_t readLen;
 
+	nvsFd = 0;
+	maxLen = 0;
+	nvsPath = NULL;
+
 	// Find out where the NVS is stored in filesystem
 	if(access("/etc/dect/nvs", R_OK) == 0) {
 		nvsPath = "/etc/dect/nvs";
@@ -313,16 +317,12 @@ int nvs_file_read(uint32_t *len, uint8_t *data) {
 		nvsPath = "/etc/dect/nvs_default";
 		maxLen = DECT_NVS_SIZE;
 	}
-	else {
-		// Stack internal default
-		nvsPath = NULL;
-		maxLen = 0;
-	}
 
 	// Read NVS data from file
 	if(nvsPath) {
 		nvsFd = open(nvsPath, O_RDONLY);
 		if (nvsFd == -1) {
+			perror("Error opening NVS file rd");
 			return -1;
 		}
 
@@ -334,13 +334,50 @@ int nvs_file_read(uint32_t *len, uint8_t *data) {
 		}
 		
 		*len = readLen;
-		printf("Read %d bytes from NFS file\n", readLen);
+		printf("Read %d bytes from NVS file\n", readLen);
 	}
 
-	close(nvsFd);
+	if(nvsFd) close(nvsFd);
 
 	return 0;
 }
 
+
+// Read device unique RFPI from /proc/nvram and
+// store it into the NVS. To be run before uploading
+// data to internal Dect.
+int nvs_rfpi_patch(uint8_t *data) {
+	const char *rfpiPath = "/proc/nvram/rfpi";
+	unsigned int rfpi[5];
+	FILE *file;
+	int res;
+
+	file = fopen(rfpiPath, "r");
+	if(!file) {
+		perror("Error opening RFPI in nvram");
+		return -1;
+	}
+
+	res = fscanf(file, "%x %x %x %x %x", &rfpi[0], &rfpi[1],
+		&rfpi[2], &rfpi[3], &rfpi[4]);
+	if(res == -1) {
+		perror("Error reading RFPI from nvram");
+		return -1;
+	}
+	else if(res != 5) {
+		printf("Error reading RFPI from nvram %d", res);
+		return -1;
+	}
+
+	data[0] = rfpi[0];
+	data[1] = rfpi[1];
+	data[2] = rfpi[2];
+	data[3] = rfpi[3];
+	data[4] = rfpi[4];
+
+	fclose(file);
+
+	return 0;
+}
 
 
