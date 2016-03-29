@@ -15,6 +15,7 @@
 #include "stream.h"
 #include "event_base.h"
 #include "nvs.h"
+#include "app.h"
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
@@ -91,6 +92,7 @@ static void connection_init_handler(packet_t *p) {
 
 	case API_FP_RESET_IND:														// External Dect has reseted
 		if (reset_ind == 0) {
+			printf("External Dect found\n");
 			reset_ind = 1;
 			connection.radio = INACTIVE;
 			ubus_send_string("radio", ubusStrInActive);
@@ -107,19 +109,19 @@ static void connection_init_handler(packet_t *p) {
 			ApiLinuxInitGetSystemInfoCfmType *resp = 
 				(ApiLinuxInitGetSystemInfoCfmType*) &m->mail_header;
 
+			printf("Internal Dect found\n");
 			if(resp->NvsSize != DECT_NVS_SIZE) {
 				exit_failure("Invalid NVS size from driver, something is wrong!\n");
 			}
 			else if(resp->MaxMailSize == 0) {
 				/* Internal Dect has already been initialized previously
 				 * and we MUST only do the init once, so skip it. */
-				printf("WRITE: API_FP_FEATURES_REQ\n");
-				ApiFpCcFeaturesReqType req = {
-					.Primitive = API_FP_FEATURES_REQ,
-					.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
+				ApiFpGetFwVersionReqType m1 = {
+					.Primitive = API_FP_GET_FW_VERSION_REQ,
 				};
-
-				mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
+				printf("WRITE: API_FP_GET_FW_VERSION_REQ\n");
+				mailProto.send(dect_bus, (uint8_t *) &m1,
+					sizeof(ApiFpGetFwVersionReqType));
 			}
 			else {
 				// Initialization is needed, send NVS data to kernel driver
@@ -129,7 +131,7 @@ static void connection_init_handler(packet_t *p) {
 				req->Primitive = API_LINUX_INIT_REQ;
 	
 				if(nvs_file_read((uint32_t*) &req->LengthOfData, 
-						req->Data) == 0) {
+						req->Data) == 0 && nvs_rfpi_patch(req->Data) == 0) {
 					mailProto.send(dect_bus, (uint8_t*) req,
 						sizeof(ApiLinuxInitReqType) + req->LengthOfData - 1);
 				}
@@ -154,25 +156,39 @@ static void connection_init_handler(packet_t *p) {
 		}
 		break;	
 
-	case API_FP_GET_FW_VERSION_CFM:												// External Dect has initialized
-		fw_version_cfm(m);
-		// fall through
-	case API_LINUX_INIT_CFM:													// Internal Dect has initialized
+	case API_LINUX_INIT_CFM:													// Internal Dect has initialized for the first time
 		{
-			/* Setup terminal id */
-			printf("WRITE: API_FP_FEATURES_REQ\n");
+			ApiFpGetFwVersionReqType m1 = {
+				.Primitive = API_FP_GET_FW_VERSION_REQ,
+			};
+			printf("WRITE: API_FP_GET_FW_VERSION_REQ\n");
+			mailProto.send(dect_bus, (uint8_t *) &m1,
+				sizeof(ApiFpGetFwVersionReqType));
+		}
+		break;
+
+	case API_FP_GET_FW_VERSION_CFM:
+		{
 			ApiFpCcFeaturesReqType req = {
 				.Primitive = API_FP_FEATURES_REQ,
 				.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
 			};
+			fw_version_cfm(m);
 
+			printf("WRITE: API_FP_FEATURES_REQ\n");
 			mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
 		}
 		break;
 
 	case API_FP_FEATURES_CFM:
-		{
-			/* Init PCM bus */
+		if(hwIsInternal) {
+			/* Start protocol (the radio) if
+			 * it's configured by user. */
+			ubus_send_string("dectmngr", ubusStrActive);
+			if(uci_call_query("radio")) list_handsets();
+		}
+		else {
+			/* Init external Dect PCM bus */
 			printf("WRITE: API_FP_INIT_PCM_REQ\n");
 			ApiFpInitPcmReqType pcm_req =  { .Primitive = API_FP_INIT_PCM_REQ,
 							 .PcmEnable = 0x1,
@@ -198,10 +214,9 @@ static void connection_init_handler(packet_t *p) {
 			ApiFpInitPcmCfmType * resp = (ApiFpInitPcmCfmType *) &m->mail_header;
 			print_status(resp->Status);
 
-			ubus_send_string("dectmngr", ubusStrActive);
-
 			/* Start protocol (the radio) if
 			 * it's configured by user. */
+			ubus_send_string("dectmngr", ubusStrActive);
 			if(uci_call_query("radio")) list_handsets();
 		}
 		break;

@@ -67,7 +67,8 @@ int tty_open(const char * s) {
 
 
 int tty_drain(int fd) {
-	return tcdrain(fd);
+	if(isatty(fd)) return tcdrain(fd);
+	return 0;
 }
 
 

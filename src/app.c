@@ -60,7 +60,6 @@ void * client_list;
 void * client_bus;
 struct sigaction act;
 struct mail_protocol_t mailProto;
-int hwIsInternal;
 static config_t *conf;
 
 
@@ -246,30 +245,57 @@ static void debug_handler(void *stream, void *event) {
 //-------------------------------------------------------------
 void app_init(void * base, config_t * config) {
 	
-	int debug_sock;
+	int debug_sock, opts, res;
+	char buf[16];
 
 	printf("app_init\n");
 	conf = config;
-	
-	if(0 &&
-access("/dev/dect", R_OK | W_OK) == 0 &&
-			(dect_fd = open("/dev/dect", O_RDWR)) &&
-			(debug_int_fd = open("/dev/dectdbg", O_RDWR))) {
-		/* CPU internal Dect. It has a simple
-		 * protocol, we always get entire packets
-		 * all at once. */
-		hwIsInternal = 1;
-		mailProto.new = rawmail_new;
-		mailProto.add_handler = rawmail_add_handler;
-		mailProto.dispatch = rawmail_dispatch;
-		mailProto.send = rawmail_send;
-		mailProto.receive = rawmail_receive;
+	hwIsInternal = 0;
+
+	// Probe for internal or external Dect
+	if(access("/dev/dect", R_OK | W_OK) == 0 &&
+			access("/dev/dectdbg", R_OK | W_OK) == 0) {
+		dect_fd = open("/dev/dect", O_RDWR);
+		if(dect_fd == -1) {
+			perror("Error opening internal dect");
+		}
+		else {
+			opts = fcntl(dect_fd, F_GETFL);
+			fcntl(dect_fd, F_SETFL, opts | O_NONBLOCK);							// Set non-blocking mode
+			// Internal dect returns an error if it doesn't exist
+			res = read(dect_fd, buf, sizeof(buf));
+			if(res == -1 && errno == ENXIO) {
+				close(dect_fd);													// Close non-existing internal dect
+			}
+			else {
+				fcntl(dect_fd, F_SETFL, opts);									// Restore blocking mode
+				hwIsInternal = 1;
+			}
+		}
+	}
+
+	if(hwIsInternal) {
+		printf("Trying internal Dect...\n");
+		debug_int_fd = open("/dev/dectdbg", O_RDWR);
+		if(debug_int_fd == -1) {
+			perror("Error opening internal dect debug");
+		}
+		else {
+			/* CPU internal Dect. It has a simple
+			 * protocol, we always get entire packets
+			 * all at once. */
+			mailProto.new = rawmail_new;
+			mailProto.add_handler = rawmail_add_handler;
+			mailProto.dispatch = rawmail_dispatch;
+			mailProto.send = rawmail_send;
+			mailProto.receive = rawmail_receive;
+		}
 	}
 	else if(access("/dev/ttyS1", R_OK | W_OK) == 0) {
+		printf("Trying external Dect...\n");
 		/* External Dect chip, connected via
 		 * serial port. Packets arrive one byte
 		 * at a time which we need to buffer. */
-		hwIsInternal = 0;
 		dect_fd = tty_open("/dev/ttyS1");
 		tty_set_raw(dect_fd);
 		tty_set_baud(dect_fd, B115200);
