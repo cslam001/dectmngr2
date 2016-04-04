@@ -138,16 +138,21 @@ static struct call_t* find_call_by_ref(ApiCallReferenceType *CallReference) {
 	for(i = 0; i < MAX_CALLS; i++) {
 		if(calls[i].state == F00_NULL) continue;
 
-		if(calls[i].CallReference.Instance.Fp == CallReference->Instance.Fp) {
+		/* A cross compiler endian issue with bit C bit fields makes
+		 * binary struct ApiCallInstanceType invalid. We need to
+		 * parse fields manually. */
+		if((calls[i].CallReference.Value & 0x0fu) ==
+				(CallReference->Value & 0x0fu)) {
 			return &calls[i];
 		}
-		else if(calls[i].CallReference.Instance.Host &&
-				calls[i].CallReference.Instance.Host == CallReference->Instance.Host) {
+		else if((calls[i].CallReference.Value & 0xf0u) &&
+				(calls[i].CallReference.Value & 0xf0u) ==
+				(CallReference->Value & 0xf0u)) {
 			return &calls[i];
 		}
 	}
 
-	printf("Error, no call matches ref %d\n", CallReference->Instance.Fp);
+	printf("Error, no call matches ref %x\n", CallReference->Value);
 	return NULL;
 }
 
@@ -175,14 +180,21 @@ static int setup_ind(busmail_t *m) {
 	ApiFpCcSetupResType reply;
 	struct call_t *call;
 	
-	// First check prerequisites. Can the call switch to next state?
+	/* A cross compiler endian issue with bit C bit fields makes
+	 * binary struct ApiCallInstanceType invalid. We need to
+	 * create it manually. */
+	reply.CallReference = msgIn->CallReference;
+	if(!(reply.CallReference.Value & 0xf0u)) {
+		// FP wants us to generate a new internal ref
+		reply.CallReference.Value |= (msgIn->TerminalId << 4);
+	}
 	reply.Primitive = API_FP_CC_SETUP_RES;
-	reply.CallReference.Instance.Fp = msgIn->CallReference.Instance.Fp;
-	reply.CallReference.Instance.Host = msgIn->TerminalId;
+
 	reply.AudioId.IntExtAudio = API_IEA_EXT;
 	reply.AudioId.AudioEndPointId = msgIn->TerminalId - 1;
 
-	/* Don't accept source terminal ID higher than can fit into
+	/* Check prerequisites. Can the call switch to next state?
+	 * Don't accept source terminal ID higher than can fit into
 	 * the four bit field "reply.CallReference.Instance.Host" */
 	if(msgIn->TerminalId > 15) {
 		printf("Error, invalid terminal ID\n");
@@ -251,8 +263,6 @@ int setup_req(uint32_t termId, int pcmId, const char *cid) {
 	// Put the call in our list of current ongoing calls
 	call = find_free_call_slot();
 	if(!call) return -1;
-	call->CallReference.Instance.Fp = 0;
-	call->CallReference.Instance.Host = termId;
 	call->epId = pcmId;
 	call->TerminalId = termId;
 	call->BasicService = terminal->BasicService;
@@ -261,6 +271,11 @@ int setup_req(uint32_t termId, int pcmId, const char *cid) {
 		strcat(cidBuf, cid);
 		call->cid = cidBuf;
 	}
+
+	/* A cross compiler endian issue with bit C bit fields makes
+	 * binary struct ApiCallInstanceType invalid. We need to
+	 * create it manually. */
+	call->CallReference.Value = (termId << 4);
 
 	buf = NULL;
 	bufLen = 0;
@@ -327,8 +342,9 @@ static int setup_cfm(busmail_t *m) {
 	doProceed &= (call->state != F19_RELEASE_PEND);
 
 	if(!doProceed) {
-		printf("Call %d state change from %s to %s\n", call->idx,
-			cc_state_names[call->state], cc_state_names[F19_RELEASE_PEND]);
+		printf("Call %d state change from %s to %s, status %d\n", call->idx,
+			cc_state_names[call->state], cc_state_names[F19_RELEASE_PEND],
+			msgIn->Status);
 		call->state = F19_RELEASE_PEND;
 		return release_req(call, API_RR_NORMAL);
 	}
