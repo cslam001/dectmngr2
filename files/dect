@@ -13,10 +13,38 @@ PROG=/usr/sbin/dectmngr2
 
 
 start_service() {
+	# Create default Dect data storage if missing. The
+	# dectmngr2 will read RFPI from /proc/nvram.
+	if [ ! -s /etc/dect/nvs ]; then
+		cp /etc/dect/nvs_default /etc/dect/nvs
+
+		DECTANTDIV=`db get hw.board.DectAntennaDiversity`
+		case "$DECTANTDIV" in
+			1|off) echo -ne "\x01" > /tmp/dect_antenna_diversity ;;
+			2) echo -ne "\x02" > /tmp/dect_antenna_diversity ;;
+			*) echo -ne "\x00" > /tmp/dect_antenna_diversity ;;
+		esac
+
+		dd of=/etc/dect/nvs if=/tmp/dect_antenna_diversity conv=notrunc bs=1 seek=32
+		fsync /etc/dect/nvs
+	fi
+
 	procd_open_instance
 	procd_set_param command "$PROG" --app
 	procd_set_param respawn
 	procd_close_instance
+}
+
+stop_service() {
+	killall -q dectmngr2
+	sleep 1
+	rmmod dect
+	insmod /lib/modules/*/extra/dect.ko
+}
+
+restart_service() {
+	stop_service
+	start_service
 }
 
 boot() {
