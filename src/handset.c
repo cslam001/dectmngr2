@@ -103,6 +103,7 @@ static void got_handset_ipui(busmail_t *m)
 	if(i >= handsets.termCount) {
 		perhaps_disable_radio();
 		ubus_reply_handset_list(0, &handsets);
+		printf("Has updated the handset list\n");
 	}
 	else {
 		get_handset_ipui(handsets.terminal[i].id);
