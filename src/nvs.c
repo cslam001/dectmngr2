@@ -339,7 +339,7 @@ int nvs_file_read(uint32_t *len, uint8_t *data) {
 
 	if(nvsFd) close(nvsFd);
 
-	return 0;
+	return (*len < DECT_NVS_SIZE);
 }
 
 
@@ -374,6 +374,75 @@ int nvs_rfpi_patch(uint8_t *data) {
 	data[2] = rfpi[2];
 	data[3] = rfpi[3];
 	data[4] = rfpi[4];
+
+	fclose(file);
+
+	return 0;
+}
+
+
+// Read device unique calibrated frequency from /proc/nvram and
+// store it into the NVS. To be run before uploading
+// data to internal Dect.
+int nvs_freq_patch(uint8_t *data) {
+	const char *rfpiPath = "/proc/nvram/bcm_def_freq";
+	unsigned int freq[2];
+	FILE *file;
+	int res;
+
+	file = fopen(rfpiPath, "r");
+	if(!file) {
+		perror("Error opening freq in nvram");
+		return -1;
+	}
+
+	res = fscanf(file, "%x %x", &freq[0], &freq[1]);
+	if(res == -1) {
+		perror("Error reading freq from nvram");
+		return -1;
+	}
+	else if(res != 2) {
+		printf("Error reading freq from nvram %d", res);
+		return -1;
+	}
+
+	data[6] = freq[0];
+	data[7] = freq[1];
+
+	fclose(file);
+
+	return 0;
+}
+
+
+
+// Read device Dect EMC from /proc/nvram and
+// store it into the NVS. To be run before uploading
+// data to internal Dect.
+int nvs_emc_patch(uint8_t *data) {
+	const char *rfpiPath = "/proc/nvram/fixed_emc";
+	unsigned int emc[2];
+	FILE *file;
+	int res;
+
+	file = fopen(rfpiPath, "r");
+	if(!file) {
+		perror("Error opening fixed emc in nvram");
+		return -1;
+	}
+
+	res = fscanf(file, "%x %x", &emc[0], &emc[1]);
+	if(res == -1) {
+		perror("Error reading fixec emc from nvram");
+		return -1;
+	}
+	else if(res != 2) {
+		printf("Error reading fixed emc from nvram %d", res);
+		return -1;
+	}
+
+	data[9] = emc[0];
+	data[10] = emc[1];
 
 	fclose(file);
 
