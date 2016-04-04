@@ -131,9 +131,14 @@ static void connection_init_handler(packet_t *p) {
 				req->Primitive = API_LINUX_INIT_REQ;
 	
 				if(nvs_file_read((uint32_t*) &req->LengthOfData, 
-						req->Data) == 0 && nvs_rfpi_patch(req->Data) == 0) {
+						req->Data) == 0 && nvs_rfpi_patch(req->Data) == 0 &&
+						nvs_freq_patch(req->Data) == 0 &&
+						nvs_emc_patch(req->Data) == 0) {
 					mailProto.send(dect_bus, (uint8_t*) req,
 						sizeof(ApiLinuxInitReqType) + req->LengthOfData - 1);
+				}
+				else {
+					printf("Error initializing Dect with NVS\n");
 				}
 				free(req);
 			}
@@ -170,17 +175,17 @@ static void connection_init_handler(packet_t *p) {
 	case API_FP_GET_FW_VERSION_CFM:
 		{
 			ApiFpCcFeaturesReqType req = {
-				.Primitive = API_FP_FEATURES_REQ,
+				.Primitive = API_FP_CC_FEATURES_REQ,
 				.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
 			};
 			fw_version_cfm(m);
 
-			printf("WRITE: API_FP_FEATURES_REQ\n");
+			printf("WRITE: API_FP_CC_FEATURES_REQ\n");
 			mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
 		}
 		break;
 
-	case API_FP_FEATURES_CFM:
+	case API_FP_CC_FEATURES_CFM:
 		if(hwIsInternal) {
 			/* Start protocol (the radio) if
 			 * it's configured by user. */
