@@ -9,7 +9,7 @@ else
 INCLUDE_PATHS += -I$(NATALIE_DIR)/SrcHeaders
 INCLUDE_PATHS += -I$(NATALIE_DIR)/SrcHeaders/Phoenix
 INCLUDE_PATHS += -I$(BCM_KERNEL_DIR)/bcm963xx/shared/opensource/include/bcm963xx/
-INCLUDE_PATHS += -I$(BCM_KERNEL_DIR)/cm963xx/bcmdrivers/opensource/include/bcm963xx/
+INCLUDE_PATHS += -I$(BCM_KERNEL_DIR)/bcm963xx/bcmdrivers/opensource/include/bcm963xx/
 endif
 
 
