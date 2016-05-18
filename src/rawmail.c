@@ -35,6 +35,7 @@ struct rawmail_connection_t {
 int rawmail_send(void * _self, uint8_t *data, int size) {
 	int len, writtenLen, chunkSize;
 	struct rawmail_connection_t *bus;
+	struct timespec req, rem;
 
 	bus = (struct rawmail_connection_t *) _self;
 	writtenLen = 0;
@@ -51,6 +52,14 @@ int rawmail_send(void * _self, uint8_t *data, int size) {
 		
 		writtenLen += len;
 	}
+
+	/* Workaround for kernel code that does not seem to handle
+	 * multiple messages in the same read() call. This sleep
+	 * introduces a 50ms delay so that the current message hopefully
+	 * makes it into the kernel alone... */
+	req.tv_sec = 0;
+	req.tv_nsec = 50000000L;
+	while(nanosleep(&req, &rem) < 0 && errno == EINTR) req = rem;
 
 	return 0;
 }
