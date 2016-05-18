@@ -13,6 +13,10 @@ PROG=/usr/sbin/dectmngr2
 
 
 start_service() {
+	# Kernel Dect module is very sensitive for
+	# long periods of disabled interrupts.
+	echo 1 >/proc/sys/kernel/printk_with_interrupt_enabled
+
 	# Create default Dect data storage if missing. The
 	# dectmngr2 will read RFPI from /proc/nvram.
 	if [ ! -s /etc/dect/nvs ]; then
