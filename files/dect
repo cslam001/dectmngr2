@@ -19,7 +19,7 @@ start_service() {
 
 	# Create default Dect data storage if missing. The
 	# dectmngr2 will read RFPI from /proc/nvram.
-	if [ ! -s /etc/dect/nvs ]; then
+	if [ ! -s /etc/dect/nvs -a -s /etc/dect/nvs_default ]; then
 		cp /etc/dect/nvs_default /etc/dect/nvs
 
 		DECTANTDIV=`db get hw.board.DectAntennaDiversity`
@@ -40,15 +40,20 @@ start_service() {
 }
 
 stop_service() {
-	killall -q dectmngr2
+	killall -q $NAME
 	sleep 1
-	rmmod dect
-	insmod /lib/modules/*/extra/dect.ko
+	grep -q dect /proc/modules && rmmod dect
+	[ -s /lib/modules/*/extra/dect.ko ] && insmod /lib/modules/*/extra/dect.ko
 }
 
-restart_service() {
-	stop_service
-	start_service
+reload_service() {
+	stop
+	start
+}
+
+service_triggers()
+{
+	procd_add_reload_trigger dect
 }
 
 boot() {
