@@ -13,6 +13,9 @@ INCLUDE_PATHS += -I$(BCM_KERNEL_DIR)/bcm963xx/bcmdrivers/opensource/include/bcm9
 endif
 
 
+# Dectmngr2 misbehaves on MIPS with -fno-caller-saves
+# from global CFLAGS so revert it. /Ronny
+CFLAGS += -O2 -fcaller-saves
 CFLAGS += -Wall -Werror=implicit-function-declaration
 CFLAGS += -Wextra -std=gnu99
 # For debug during development
