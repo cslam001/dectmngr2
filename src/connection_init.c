@@ -412,6 +412,7 @@ int connection_set_registration(int onoff) {
 // Initialize SoC internal Dect
 int start_internal_dect(void) {
 	ApiLinuxInitGetSystemInfoReqType req;
+	DECTSHIMDRV_CHANNELCOUNT_PARAM chanCnt;
 	DECTSHIMDRV_INIT_PARAM parm;
 	int shimFd, r;
 
@@ -420,7 +421,17 @@ int start_internal_dect(void) {
 
 	memset(&parm, 0, sizeof(parm));
 	r = ioctl(shimFd, DECTSHIMIOCTL_INIT_CMD, &parm);
-	if (r != 0) exit_failure("%s: ioctl error %d\n", __FUNCTION__, errno);
+	if (r != 0) {
+		exit_failure("%s: ioctl error shm init%d\n", __FUNCTION__, errno);
+	}
+
+	memset(&chanCnt, 0, sizeof(chanCnt));
+	r = ioctl(shimFd, DECTSHIMIOCTL_GET_CHANNELS_CMD, &chanCnt);
+	if (r != 0) {
+		exit_failure("%s: ioctl error shm get channels%d\n",
+			__FUNCTION__, errno);
+	}
+	hwIsInternal = chanCnt.channel_count > 0;
 
 	close(shimFd);
 
