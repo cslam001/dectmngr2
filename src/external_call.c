@@ -192,6 +192,7 @@ static int setup_ind(busmail_t *m) {
 
 	reply.AudioId.IntExtAudio = API_IEA_EXT;
 	reply.AudioId.AudioEndPointId = msgIn->TerminalId - 1;
+	reply.AudioId.SourceTerminalId = 0;
 
 	/* Check prerequisites. Can the call switch to next state?
 	 * Don't accept source terminal ID higher than can fit into
@@ -485,7 +486,16 @@ int asterisk_cfm(int pcmId, int err) {
 
 	if(err) {
 		printf("NACK from Asterisk, terminating call\n");
-		if(call) return release_req(call, API_RR_INSUFFICIENT_RESOURCES);
+		if(call) {
+			if(call->state == Q22_CC_RELEASE_COM) {
+				// Don't re-release if already released
+				free_call_slot(call);
+				return 0;
+			}
+			else {
+				return release_req(call, API_RR_INSUFFICIENT_RESOURCES);
+			}
+		}
 	}
 
 	if(!call || pcmId < 0 || pcmId > MAX_NR_PCM - 1) {
