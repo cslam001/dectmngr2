@@ -42,7 +42,7 @@ start_service() {
 stop_service() {
 	killall -q $NAME
 	sleep 1
-	grep -q dect /proc/modules && rmmod dect
+	grep -q "^dect " /proc/modules && rmmod dect
 	[ -s /lib/modules/*/extra/dect.ko ] && insmod /lib/modules/*/extra/dect.ko
 }
 
