@@ -67,6 +67,13 @@ static void got_handset_ipui(busmail_t *m)
 	for(i = 0; i < MAX_NR_HANDSETS &&
 			handsets.terminal[i].id != resp->TerminalId; i++);
 
+	/* If the list has changed behind our back in the stack
+	 * we need to re-request it for a fresh update. */
+	if(i == MAX_NR_HANDSETS) {
+		list_handsets();
+		return;
+	}
+
 	// Copy unique address
 	memcpy(handsets.terminal[i].ipui, resp->IPUI,
 		sizeof(handsets.terminal[0].ipui));
