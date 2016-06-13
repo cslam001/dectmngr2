@@ -28,7 +28,7 @@
 #include <dectshimdrv.h>
 
 
-static int reset_ind = 0;
+static time_t reset_ind = 0;
 static void *dect_bus;
 struct connection_t connection;
 static int timer_fd;
@@ -91,9 +91,9 @@ static void connection_init_handler(packet_t *p) {
 	switch (m->mail_header) {
 
 	case API_FP_RESET_IND:														// External Dect has reseted
-		if (reset_ind == 0) {
+		if (abs(time(NULL) - reset_ind) > 8) {
 			printf("External Dect found\n");
-			reset_ind = 1;
+			reset_ind = time(NULL);
 			connection.radio = INACTIVE;
 			ubus_send_string("radio", ubusStrInActive);
 			ubus_call_string("led.dect", "set", "state", "off", NULL);
