@@ -25,6 +25,7 @@
 #include <Api/FpAudio/ApiFpAudio.h>
 #include <Api/RsStandard.h>
 #include <Api/Linux/ApiLinux.h>
+#include "PtCmdDef.h"
 #include <dectshimdrv.h>
 
 
@@ -174,11 +175,50 @@ static void connection_init_handler(packet_t *p) {
 
 	case API_FP_GET_FW_VERSION_CFM:
 		{
+			fw_version_cfm(m);
+
+			// Query device RFPI when it's external
+			if(hwIsInternal) {
+				ApiProdTestReqType req = {
+					.Primitive = API_PROD_TEST_REQ,
+					.Opcode = PT_CMD_GET_ID
+				};
+				printf("WRITE: API_FP_CC_FEATURES_REQ\n");
+				mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
+			}
+			else {
+				ApiFpCcFeaturesReqType req = {
+					.Primitive = API_FP_CC_FEATURES_REQ,
+					.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
+				};
+				printf("WRITE: PT_CMD_GET_ID\n");
+				mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
+			}
+		}
+		break;
+
+	case API_PROD_TEST_CFM:
+		{
 			ApiFpCcFeaturesReqType req = {
 				.Primitive = API_FP_CC_FEATURES_REQ,
 				.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
 			};
-			fw_version_cfm(m);
+			uint8_t nvramRfpi[5];
+			ApiProdTestCfmType *prodResp =
+				(ApiLinuxInitGetSystemInfoCfmType*) &m->mail_header;
+
+			// We have read the device RFPI. Now verify it's correct
+			if(prodResp->Opcode == PT_CMD_GET_ID &&	
+					prodResp->ParameterLength == 5) {
+				printf("Read RFPI from NVS: %2.2x %2.2x %2.2x %2.2x %2.2x\n",
+					prodResp->Parameters[0], prodResp->Parameters[1],
+					prodResp->Parameters[2], prodResp->Parameters[3],
+					prodResp->Parameters[4]);
+				nvs_rfpi_patch(nvramRfpi);
+				if(memcmp(nvramRfpi, prodResp->Parameters, 5)) {
+					exit_failure("Error, incorrect RFPI in NVS\n");
+				}
+			}
 
 			printf("WRITE: API_FP_CC_FEATURES_REQ\n");
 			mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
@@ -428,6 +468,7 @@ int connection_set_registration(int onoff) {
 // Initialize SoC internal Dect
 int start_internal_dect(void) {
 	ApiLinuxInitGetSystemInfoReqType req;
+	DECTSHIMDRV_CHANNELCOUNT_PARAM chanCnt;
 	DECTSHIMDRV_INIT_PARAM parm;
 	int shimFd, r;
 
@@ -436,7 +477,17 @@ int start_internal_dect(void) {
 
 	memset(&parm, 0, sizeof(parm));
 	r = ioctl(shimFd, DECTSHIMIOCTL_INIT_CMD, &parm);
-	if (r != 0) exit_failure("%s: ioctl error %d\n", __FUNCTION__, errno);
+	if (r != 0) {
+		exit_failure("%s: ioctl error shm init%d\n", __FUNCTION__, errno);
+	}
+
+	memset(&chanCnt, 0, sizeof(chanCnt));
+	r = ioctl(shimFd, DECTSHIMIOCTL_GET_CHANNELS_CMD, &chanCnt);
+	if (r != 0) {
+		exit_failure("%s: ioctl error shm get channels%d\n",
+			__FUNCTION__, errno);
+	}
+	hwIsInternal = chanCnt.channel_count > 0;
 
 	close(shimFd);
 
