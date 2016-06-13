@@ -13,9 +13,11 @@ INCLUDE_PATHS += -I$(BCM_KERNEL_DIR)/bcm963xx/bcmdrivers/opensource/include/bcm9
 endif
 
 
-# Dectmngr2 misbehaves on MIPS with -fno-caller-saves
-# from global CFLAGS so revert it. /Ronny
-CFLAGS += -O2 -fcaller-saves
+# Dectmngr2 misbehaves on MIPS and sometimes crashes
+# due to bad compiling. We try various compiler flags
+# to force changed binary output. Unsure of what is
+# the actuall problem...  /Ronny
+CFLAGS += -O2 -fcaller-saves -fsection-anchors
 CFLAGS += -Wall -Werror=implicit-function-declaration
 CFLAGS += -Wextra -std=gnu99
 # For debug during development
@@ -27,7 +29,7 @@ CFLAGS += -Wextra -std=gnu99
 
 # Ability to build without ubus etc. for Sercomm
 CFLAGS += -DWITH_UBUS
-LIBS += -lubox -lubus -lblobmsg_json
+LIBS += -lubox -lubus
 dectmngr2: ubus.o
 
 
