@@ -336,13 +336,27 @@ int connection_set_radio(int onoff) {
 		ubus_send_string("radio", ubusStrActive);
 		ubus_call_string("led.dect", "set", "state", "ok", NULL);
 	}
-	else {
-		ApiFpMmStopProtocolReqType r = { .Primitive = API_FP_MM_STOP_PROTOCOL_REQ, };
-		mailProto.send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStopProtocolReqType));
+	else if(connection.radio == ACTIVE) {
+		ApiFpMmStopProtocolReqType reqOff = {
+			.Primitive = API_FP_MM_STOP_PROTOCOL_REQ, };
+		ApiFpResetReqType reqReset = { .Primitive = API_FP_RESET_REQ, };
+
+		mailProto.send(dect_bus, (uint8_t *) &reqOff,
+			sizeof(ApiFpMmStopProtocolReqType));
 		connection.radio = INACTIVE;											// No confirmation is replied
+
 		printf("Radio is inactive\n");
 		ubus_send_string("radio", ubusStrInActive);
 		ubus_call_string("led.dect", "set", "state", "off", NULL);
+
+		/* After radio has been disabled we need
+		 * to reset the Dect firmware stack. It's
+		 * the only way to enable reactivation of
+		 * the radio, should the user want to. */
+		printf("Reseting stack...\n");
+		mailProto.send(dect_bus, (uint8_t *) &reqReset, sizeof(ApiFpResetReqType));
+		usleep(0);
+		if(hwIsInternal) exit_succes("App exit for complete stack reset...");
 	}
 
 	memset(&newTimer, 0, sizeof(newTimer));
@@ -373,6 +387,8 @@ int connection_set_registration(int onoff) {
 
 	if(onoff) {
 		connection.registration = PENDING_ACTIVE;
+
+		if(connection.radio == PENDING_INACTIVE) connection.radio = ACTIVE;
 
 		if(connection.radio == ACTIVE) {
 			m.RegistrationEnabled = true;
@@ -440,7 +456,10 @@ int perhaps_disable_radio(void) {
 	if(connection.registration == ACTIVE) return 0;
 
 	if(connection.uciRadioConf == RADIO_AUTO) {
-		return connection_set_radio(handsets.termCount > 0);
+		if(handsets.termCntExpt >= 0 &&
+				handsets.termCntExpt == handsets.termCount) {
+			return connection_set_radio(handsets.termCount > 0);
+		}
 	}
 	else if(connection.uciRadioConf == RADIO_ALWAYS_ON) {
 		return connection_set_radio(1);

@@ -18,7 +18,10 @@ struct terminal_t {
 
 
 struct handsets_t {
-	int termCount;											// Number of terminals registered
+	int termCount;											// Number of terminals registered (read from stack)
+	int termCntExpt;										// Number of terminals we have calculated should exist
+	int termCntEvntAdd;										// Delayed event indicator of what happened when terminal count changed
+	int termCntEvntDel;										// Delayed event indicator of what happened when terminal count changed
 	struct terminal_t terminal[MAX_NR_HANDSETS];
 };
 

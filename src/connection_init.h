@@ -30,7 +30,7 @@ static const char *remote_bool_str[] = {				// String explanations of enum remot
 struct connection_t {
 	enum remote_bool_t registration;
 	enum remote_bool_t radio;
-	enum uciRadioConf_t uciRadioConf;					// Should radio be always on/off/auto=
+	enum uciRadioConf_t uciRadioConf;					// Should radio be always on/off/auto
 };
 
 

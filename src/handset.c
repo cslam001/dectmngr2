@@ -25,7 +25,32 @@
 
 
 static void *dect_bus;
+static int isListing;															// True if a slow handset list query is in progress (then don't start another one).
+static int needListing;															// True if a fresh handset list query is needed
 
+
+
+//-------------------------------------------------------------
+// Send UBUS events if the number of handsets has changed
+static int notify_user_handets_changed(void) {
+	int i;
+
+	if(handsets.termCntEvntDel) {
+		for(i = 0; i < handsets.termCntEvntDel; i++) {
+			ubus_send_string("handset", "remove");
+		}
+		handsets.termCntEvntDel = 0;
+	}
+
+	if(handsets.termCntEvntAdd) {
+		for(i = 0; i < handsets.termCntEvntAdd; i++) {
+			ubus_send_string("handset", "add");
+		}
+	 	handsets.termCntEvntAdd = 0;
+	}
+
+	return 0;
+}
 
 
 
@@ -67,6 +92,16 @@ static void got_handset_ipui(busmail_t *m)
 	for(i = 0; i < MAX_NR_HANDSETS &&
 			handsets.terminal[i].id != resp->TerminalId; i++);
 
+	/* Querying the list of handsets is a slow
+	 * process. Things might happen behind our
+	 * back. If we get a strange reply from the
+	 * stack we thus restart the query. */
+	if(needListing || i == MAX_NR_HANDSETS || i > handsets.termCount) {
+		isListing = 0;
+		list_handsets();
+		return;
+	}
+
 	// Copy unique address
 	memcpy(handsets.terminal[i].ipui, resp->IPUI,
 		sizeof(handsets.terminal[0].ipui));
@@ -101,9 +136,12 @@ static void got_handset_ipui(busmail_t *m)
 	 * haven't got them all. */
 	i++;
 	if(i >= handsets.termCount) {
-		perhaps_disable_radio();
-		ubus_reply_handset_list(0, &handsets);
+		if(handsets.termCntExpt == -1) handsets.termCntExpt = handsets.termCount;
+		isListing = 0;
 		printf("Has updated the handset list\n");
+		ubus_reply_handset_list(0, &handsets);
+		notify_user_handets_changed();
+		perhaps_disable_radio();
 	}
 	else {
 		get_handset_ipui(handsets.terminal[i].id);
@@ -128,8 +166,11 @@ static int handset_delete_cfm(busmail_t *m)
 			free(handsets.terminal[i].codecs);
 			memset(&handsets.terminal[i], 0, sizeof(struct terminal_t));
 			handsets.termCount--;
-			perhaps_disable_radio();
-			ubus_send_string("handset", "remove");
+			handsets.termCntEvntDel++;
+			if(handsets.termCntExpt >= 0) handsets.termCntExpt--;
+			printf("A handset has been deleted. (Expects %d left)\n",
+				handsets.termCntExpt);
+			list_handsets();
 			break;
 		}
 	}
@@ -184,8 +225,10 @@ static int handset_registerd_cfm(busmail_t *m)
 	}
 	
 	handsets.termCount++;
-	ubus_send_string("handset", "add");
-	perhaps_disable_radio();
+	handsets.termCntEvntAdd++;
+	if(handsets.termCntExpt >= 0) handsets.termCntExpt++;
+	printf("A handset has been added. (Expects %d)\n", handsets.termCntExpt);
+	list_handsets();
 
 	return 0;
 }
@@ -201,7 +244,13 @@ int list_handsets(void)
 		.StartTerminalId = 0
 	};
 
-	printf("Querying number of registered handsets\n");
+	// Only issue one listing at a time
+	needListing = isListing;
+	if(isListing) return 0;
+	isListing = 1;
+
+	printf("Querying number of registered handsets (expects %d)\n",
+		handsets.termCntExpt);
 	mailProto.send(dect_bus, (uint8_t*) &m, sizeof(m));
 
 	return 0;
@@ -229,20 +278,31 @@ static void got_registration_count(busmail_t *m)
 	for(i = 0; i < MAX_NR_HANDSETS; i++) free(handsets.terminal[i].codecs);
 	handsets.termCount = resp->TerminalIdCount;
 	memset(handsets.terminal, 0, sizeof(struct terminal_t) * MAX_NR_HANDSETS);
-	printf("There are %d registered handsets\n", handsets.termCount);
+	printf("There are %d registered handsets (expected %d)\n",
+		handsets.termCount, handsets.termCntExpt);
 
 	for(i = 0 ; i < resp->TerminalIdCount; i++) {
 		handsets.terminal[i].id = resp->TerminalId[i];
 	}
 
-	/* Get the ipui of the first handset. For some damn
-	 * reason we can't to all of them at once. */
-	if (handsets.termCount > 0) {
+	/* Get the IPUI of all handsets. We need to poll the Dect
+	 * stack due to it is very slow to update the list of
+	 * registered handsets. */
+	if(needListing || (handsets.termCntExpt >= 0 &&
+			handsets.termCntExpt != handsets.termCount)) {
+		usleep(100000);
+		isListing = 0;
+		list_handsets();
+	}
+	else if (handsets.termCount > 0) {
 		get_handset_ipui(handsets.terminal[0].id);
 	}
 	else {
-		perhaps_disable_radio();
+		handsets.termCntExpt = handsets.termCount;
 		ubus_reply_handset_list(0, &handsets);
+		notify_user_handets_changed();
+		isListing = 0;
+		perhaps_disable_radio();
 	}
 }
 
@@ -319,6 +379,7 @@ static void handset_handler(packet_t *p)
 void handset_init(void * bus)
 {
 	memset(&handsets, 0, sizeof(handsets));
+	handsets.termCntExpt = -1;
 
 	dect_bus = bus;
 	mailProto.add_handler(bus, handset_handler);
