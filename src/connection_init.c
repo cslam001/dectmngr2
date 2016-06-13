@@ -179,17 +179,17 @@ static void connection_init_handler(packet_t *p) {
 
 			// Query device RFPI when it's external
 			if(hwIsInternal) {
-				ApiProdTestReqType req = {
-					.Primitive = API_PROD_TEST_REQ,
-					.Opcode = PT_CMD_GET_ID
+				ApiFpCcFeaturesReqType req = {
+					.Primitive = API_FP_CC_FEATURES_REQ,
+					.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
 				};
 				printf("WRITE: API_FP_CC_FEATURES_REQ\n");
 				mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
 			}
 			else {
-				ApiFpCcFeaturesReqType req = {
-					.Primitive = API_FP_CC_FEATURES_REQ,
-					.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
+				ApiProdTestReqType req = {
+					.Primitive = API_PROD_TEST_REQ,
+					.Opcode = PT_CMD_GET_ID
 				};
 				printf("WRITE: PT_CMD_GET_ID\n");
 				mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
