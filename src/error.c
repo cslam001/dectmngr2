@@ -26,7 +26,7 @@ void exit_failure(const char *format, ...)
 void err_exit(const char *format, ...)
 {
 #define BUF_SIZE 500
-	char err[BUF_SIZE], msg[BUF_SIZE];
+	char msg[BUF_SIZE];
 	va_list ap;
 	
 	va_start(ap, format);
@@ -35,5 +35,20 @@ void err_exit(const char *format, ...)
 	
 	fprintf(stderr, "%s\n", msg);
 	exit(EXIT_FAILURE);
+}
+
+
+void exit_succes(const char *format, ...)
+{
+#define BUF_SIZE 500
+	char msg[BUF_SIZE];
+	va_list ap;
+	
+	va_start(ap, format);
+	vsprintf(msg, format, ap);
+	va_end(ap);
+	
+	printf("%s\n", msg);
+	exit(EXIT_SUCCESS);
 }
 
