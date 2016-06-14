@@ -686,7 +686,7 @@ static int fill_info_elements(struct call_t *call, rsuint8 **buf, rsuint16 *bufL
 	struct terminal_t *terminal;
 	ApiCodecListType *codecs;
 	ApiLineIdType line;
-	int i;
+	int i, hasWideband;
 
 	// Find the handset in our list of registereds
 	for(i = 0; i < MAX_NR_HANDSETS &&
@@ -710,9 +710,15 @@ static int fill_info_elements(struct call_t *call, rsuint8 **buf, rsuint16 *bufL
 
 	// Send the codecs we want the handset to use
 	codecs = calloc(1, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType));
-	codecs->NegotiationIndicator = API_NI_POSSIBLE;
-	if(call->BasicService == API_WIDEBAND_SPEECH ||
-			terminal->BasicService == API_WIDEBAND_SPEECH) {
+	codecs->NegotiationIndicator = (terminal->codecs) ? 
+		terminal->codecs->NegotiationIndicator : API_NI_POSSIBLE;
+	hasWideband = 0;
+	for(i = 0; terminal->codecs && i < terminal->codecs->NoOfCodecs &&
+			!hasWideband; i++) {
+		hasWideband = (terminal->codecs->Codec[i].Codec == API_CT_G722);
+	}
+	if(hasWideband && (call->BasicService == API_WIDEBAND_SPEECH ||
+			terminal->BasicService == API_WIDEBAND_SPEECH)) {
 		codecs->NoOfCodecs = 2;
 		codecs->Codec[0].Codec = API_CT_G722;
 		codecs->Codec[0].MacDlcService = API_MDS_1_MD;
