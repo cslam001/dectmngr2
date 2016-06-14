@@ -505,6 +505,8 @@ int start_internal_dect(void) {
 // it when no handsets are registered (to reduce EMC).
 int perhaps_disable_radio(void) {
 	if(connection.registration == ACTIVE) return 0;
+	if(connection.registration == PENDING_ACTIVE) return 0;
+	if(connection.registration == PENDING_INACTIVE) return 0;
 
 	if(connection.uciRadioConf == RADIO_AUTO) {
 		if(handsets.termCntExpt >= 0 &&
