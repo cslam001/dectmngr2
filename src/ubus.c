@@ -460,6 +460,7 @@ int ubus_reply_handset_list(int retErrno, const struct handsets_t const *handset
 	list1 = blobmsg_open_array(&blob, "handsets");
 	for(i = 0; i < MAX_NR_HANDSETS; i++) {
 		if(!handsets->terminal[i].id) continue;
+		if(!handsets->terminal[i].codecs) continue;
 
 		tbl = blobmsg_open_table(&blob, NULL);
 		blobmsg_add_u32(&blob, "id", handsets->terminal[i].id);
