@@ -47,9 +47,6 @@ enum {
 };
 
 
-static uint32_t uciId;
-static uint32_t asteriskId;
-
 static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg);
 static int ubus_request_handset(struct ubus_context *ubus_ctx, struct ubus_object *obj,
@@ -138,9 +135,13 @@ static struct ubus_object rpcObj = {
 
 static struct ubus_context *ubusContext;
 static void *ubus_stream;
+static int isReceiveing;														// True when ubus receiving is enabled
 static struct ubus_event_handler stateListener;									// Event handler for radio and registration 
 static struct ubus_event_handler buttonListener;								// Event handler box dect button
 static struct querier_t querier;												// Handle to deferred RPC request
+static uint32_t uciId;
+static uint32_t asteriskId;
+
 
 
 //-------------------------------------------------------------
@@ -892,10 +893,78 @@ out:
 
 
 //-------------------------------------------------------------
+// When we know we are going to be busy for a long time
+// and thus can't process received ubus messages - block
+// them entirely. Then anyone trying to send us a message
+// will fail immediately as opposed to timing out.
+int ubus_disable_receive(void) {
+	if(!isReceiveing) return 0;
+
+	if(ubus_remove_object(ubusContext, &rpcObj) != UBUS_STATUS_OK) {
+		exit_failure("Error deregistering ubus object rpcObj");
+	}
+
+	if(ubus_unregister_event_handler(ubusContext, &buttonListener) != 
+			UBUS_STATUS_OK) {
+		exit_failure("Error deregistering ubus event handler %s", butnShrt1);
+	}
+
+	if(ubus_unregister_event_handler(ubusContext, &stateListener) != 
+			UBUS_STATUS_OK) {
+		exit_failure("Error deregistering ubus event handler %s", ubusSenderPath);
+	}
+
+	isReceiveing = 0;
+
+	return 0;
+}
+
+
+
+//-------------------------------------------------------------
+// Start accepting ubus messages (when we know we are
+// ready for processing).
+int ubus_enable_receive(void) {
+	isReceiveing = 1;
+
+	/* Register event handler (not calls) for:
+	 * ubus send dect '{ "key": "value" }' */
+	if(ubus_register_event_handler(ubusContext, &stateListener,
+			ubusSenderPath) != UBUS_STATUS_OK) {
+		exit_failure("Error registering ubus event handler %s", ubusSenderPath);
+	}
+
+	/* Register event handler (not calls) for:
+	 * ubus send button.DECT '{ "action": "pressed" }' */
+	if(ubus_register_event_handler(ubusContext, &buttonListener,
+			butnShrt1) != UBUS_STATUS_OK ||
+			ubus_register_event_handler(ubusContext, &buttonListener,
+			butnShrt2) != UBUS_STATUS_OK ||
+			ubus_register_event_handler(ubusContext, &buttonListener,
+			butnLong) != UBUS_STATUS_OK) {
+		exit_failure("Error registering ubus event handler %s", butnShrt1);
+	}
+
+	// Invoke our RPC handler when ubus calls (not events) arrive
+	if(ubus_add_object(ubusContext, &rpcObj) != UBUS_STATUS_OK) {
+		exit_failure("Error registering ubus object rpcObj");
+	}
+
+	if(ubus_lookup_id(ubusContext, "uci", &uciId) != UBUS_STATUS_OK) {
+		exit_failure("Error, can't get UCI path");
+	}
+
+	return 0;
+}
+
+
+
+//-------------------------------------------------------------
 void ubus_init(void * base, config_t * config) {	
 	printf("ubus init\n");
 	memset(&querier, 0, sizeof(querier));
 
+	isReceiveing = 0;
 	ubusContext = ubus_connect(NULL);
 	if(!ubusContext) exit_failure("Failed to connect to ubus");
 
@@ -904,37 +973,10 @@ void ubus_init(void * base, config_t * config) {
 	stream_add_handler(ubus_stream, 0, ubus_fd_handler);
 	event_base_add_stream(ubus_stream);
 
-	/* Register event handler (not calls) for:
-	 * ubus send dect '{ "key": "value" }' */
 	memset(&stateListener, 0, sizeof(stateListener));
 	stateListener.cb = ubus_event_state;
-	if(ubus_register_event_handler(ubusContext, &stateListener,
-			ubusSenderPath) != UBUS_STATUS_OK) {
-		exit_failure("Error registering ubus event handler %s", ubusSenderPath);
-	}
 
-	/* Register event handler (not calls) for:
-	 * ubus send button.DECT '{ "action": "pressed" }' */
 	memset(&buttonListener, 0, sizeof(buttonListener));
 	buttonListener.cb = ubus_event_button;
-	if(ubus_register_event_handler(ubusContext, &buttonListener,
-			butnShrt1) != UBUS_STATUS_OK ||
-			ubus_register_event_handler(ubusContext, &buttonListener,
-			butnShrt2) != UBUS_STATUS_OK ||
-			ubus_register_event_handler(ubusContext, &buttonListener,
-			butnLong) != UBUS_STATUS_OK) {
-		exit_failure("Error registering ubus event handler button.DECT");
-	}
-
-	// Invoke our RPC handler when ubus calls (not events) arrive
-	if(ubus_add_object(ubusContext, &rpcObj) != UBUS_STATUS_OK) {
-		exit_failure("Error registering ubus object");
-	}
-
-	if(ubus_lookup_id(ubusContext, "uci", &uciId) != UBUS_STATUS_OK) {
-		exit_failure("Error, can't get UCI path");
-	}
-
 }
-
 

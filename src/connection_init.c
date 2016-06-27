@@ -226,7 +226,10 @@ static void connection_init_handler(packet_t *p) {
 		break;
 
 	case API_FP_CC_FEATURES_CFM:
-		if(hwIsInternal) {
+		if(ubus_enable_receive()) {
+			break;
+		}
+		else if(hwIsInternal) {
 			/* Start protocol (the radio) if
 			 * it's configured by user. */
 			ubus_send_string("dectmngr", ubusStrActive);
@@ -386,6 +389,7 @@ int connection_set_radio(int onoff) {
 		connection.radio = INACTIVE;											// No confirmation is replied
 
 		printf("Radio is inactive\n");
+		ubus_disable_receive();
 		ubus_send_string("radio", ubusStrInActive);
 		ubus_call_string("led.dect", "set", "state", "off", NULL);
 

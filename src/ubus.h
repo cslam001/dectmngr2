@@ -33,6 +33,8 @@ int ubus_call_string(const char *path, const char* method, const char *key,
 int uci_call_query(const char *option);
 int asterisk_call(int terminal, int add, int release, const char *cid);
 int ubus_reply_handset_list(int retErrno, const struct handsets_t const *handsets);
+int ubus_disable_receive(void);
+int ubus_enable_receive(void);
 void ubus_init(void * base, config_t * config);
 
 #endif
