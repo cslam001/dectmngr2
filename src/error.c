@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "ubus.h"
+
 void exit_failure(const char *format, ...)
 {
 #define BUF_SIZE 500
@@ -18,6 +20,7 @@ void exit_failure(const char *format, ...)
 	va_end(ap);
 	
 	fprintf(stderr, "%s: %s\n", msg, err);
+	ubus_disable_receive();
 	exit(EXIT_FAILURE);
 }
 
@@ -34,6 +37,7 @@ void err_exit(const char *format, ...)
 	va_end(ap);
 	
 	fprintf(stderr, "%s\n", msg);
+	ubus_disable_receive();
 	exit(EXIT_FAILURE);
 }
 
@@ -49,6 +53,7 @@ void exit_succes(const char *format, ...)
 	va_end(ap);
 	
 	printf("%s\n", msg);
+	ubus_disable_receive();
 	exit(EXIT_SUCCESS);
 }
 

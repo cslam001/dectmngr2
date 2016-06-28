@@ -899,6 +899,7 @@ out:
 // will fail immediately as opposed to timing out.
 int ubus_disable_receive(void) {
 	if(!isReceiveing) return 0;
+	if(!ubusContext) return 0;
 
 	if(ubus_remove_object(ubusContext, &rpcObj) != UBUS_STATUS_OK) {
 		exit_failure("Error deregistering ubus object rpcObj");
