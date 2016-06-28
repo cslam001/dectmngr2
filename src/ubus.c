@@ -529,7 +529,7 @@ static void perhaps_reply_deferred_timeout(void) {
 	if(!querier.inUse) return;
 	if(clock_gettime(CLOCK_MONOTONIC, &now)) return;
 
-	if(now.tv_sec - querier.timeStamp.tv_sec > 4) {
+	if(now.tv_sec - querier.timeStamp.tv_sec > 40) {							// Long timeout due to handset deletes can be slow
 		ubus_complete_deferred_request(querier.ubus_ctx, &querier.req, 
 			UBUS_STATUS_TIMEOUT);
 		querier.inUse = 0;
@@ -914,6 +914,12 @@ int ubus_disable_receive(void) {
 		exit_failure("Error deregistering ubus event handler %s", ubusSenderPath);
 	}
 
+	if(querier.inUse) {
+		ubus_complete_deferred_request(querier.ubus_ctx, &querier.req, 
+			UBUS_STATUS_UNKNOWN_ERROR);
+		querier.inUse = 0;
+	}
+
 	isReceiveing = 0;
 
 	return 0;
@@ -925,6 +931,7 @@ int ubus_disable_receive(void) {
 // Start accepting ubus messages (when we know we are
 // ready for processing).
 int ubus_enable_receive(void) {
+	if(isReceiveing) return 0;
 	isReceiveing = 1;
 
 	/* Register event handler (not calls) for:
