@@ -38,8 +38,12 @@ static int notify_user_handets_changed(void) {
 	if(handsets.termCntEvntDel) {
 		/* After last handset has been deleted we need
 		 * to block incomming ubus messages due to we
-		 * will be busy for a long time. */
-		if(handsets.termCntExpt == 0) ubus_disable_receive();
+		 * will soon be busy for a long time. Do the disable
+		 * BEFORE we send the "handset remove" event. */
+		if(handsets.termCount == 0 && connection.uciRadioConf == RADIO_AUTO &&
+				connection.radio == ACTIVE) {
+			ubus_disable_receive();
+		}
 
 		for(i = 0; i < handsets.termCntEvntDel; i++) {
 			ubus_send_string("handset", "remove");
