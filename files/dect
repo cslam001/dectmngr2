@@ -40,11 +40,24 @@ start_service() {
 }
 
 stop_service() {
+	if [ "$REBOOT_REASON" == "defaultreset" ]; then
+		local _i=1
+		json_load "$(ubus -t 5 call dect handset "{'list':''}")"
+		json_select handsets
+		while json_get_var hs $_i; do
+			json_select $_i
+			json_get_var id id;
+			ubus -t 5 call dect handset "{'delete':$_i}" 2>/dev/null
+			json_select ..
+			_i=$((_i+1))
+		done
+		sleep 1
+	fi
 	killall -q $NAME
 }
 
 reload_service() {
-	stop
+	killall -q $NAME
 	start
 }
 
