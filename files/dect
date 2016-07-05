@@ -40,7 +40,7 @@ start_service() {
 }
 
 stop_service() {
-	if [ "$REBOOT_REASON" == "defaultreset" ]; then
+	if [ "$(cat /tmp/reboot_reason 2>/dev/null)" == "defaultreset" ]; then
 		local _i=1
 		json_load "$(ubus -t 5 call dect handset "{'list':''}")"
 		json_select handsets
