@@ -202,11 +202,24 @@ static int handset_registerd_cfm(busmail_t *m)
 	msgIn = (ApiFpMmRegistrationCompleteIndType*) &m->mail_header;
 	if(msgIn->Status != RSS_SUCCESS) return -1;
 	if(handsets.termCount == MAX_NR_HANDSETS) return -1;
+	if(!msgIn->TerminalId) return -1;
 
-	/* Find a free slot in the list of registered
-	 * handset and add its' properties. */
-	for(i = 0; i < MAX_NR_HANDSETS && handsets.terminal[i].id; i++);
-	handsets.terminal[i].id = msgIn->TerminalId;
+	/* Do we already know this handset? This may happen
+	 * if user registers same handset twice in a row. */
+	for(i = 0; i < MAX_NR_HANDSETS &&
+			handsets.terminal[i].id != msgIn->TerminalId; i++);
+
+	if(i == MAX_NR_HANDSETS) {
+		/* It's a new handset we hasn't seen before. Find a
+		 * free slot in the list of registered handsets and
+		 * add its' properties. */
+		for(i = 0; i < MAX_NR_HANDSETS && handsets.terminal[i].id; i++);
+		handsets.terminal[i].id = msgIn->TerminalId;
+		handsets.termCount++;
+		handsets.termCntEvntAdd++;
+		if(handsets.termCntExpt >= 0) handsets.termCntExpt++;
+		printf("A handset has been added. (Expects %d)\n", handsets.termCntExpt);
+	}
 
 	// Codecs
 	ie = ApiGetInfoElement((ApiInfoElementType*) msgIn->InfoElement,
@@ -233,10 +246,6 @@ static int handset_registerd_cfm(busmail_t *m)
 			API_WIDEBAND_SPEECH : API_BASIC_SPEECH;
 	}
 	
-	handsets.termCount++;
-	handsets.termCntEvntAdd++;
-	if(handsets.termCntExpt >= 0) handsets.termCntExpt++;
-	printf("A handset has been added. (Expects %d)\n", handsets.termCntExpt);
 	list_handsets();
 
 	return 0;
