@@ -104,12 +104,6 @@ static const struct ubus_method ubusMethods[] = {								// ubus RPC methods
 };
 
 
-static struct ubus_object_type rpcType[] = {
-	UBUS_OBJECT_TYPE(ubusSenderPath, ubusMethods)
-};
-
-
-
 static const struct blobmsg_policy buttonKeys[] = {
 	{ .name = "action", .type = BLOBMSG_TYPE_STRING },
 };
@@ -125,14 +119,9 @@ static const struct blobmsg_policy asteriskKeys[] = {
 	[AST_ERR] = { .name = strErrno, .type = BLOBMSG_TYPE_INT32 },
 };
 
-static struct ubus_object rpcObj = {
-	.name = ubusSenderPath,
-	.type = rpcType,
-	.methods = ubusMethods,
-	.n_methods = ARRAY_SIZE(ubusMethods)
-};
 
-
+static struct ubus_object_type rpcType;
+static struct ubus_object rpcObj;
 static struct ubus_context *ubusContext;
 static void *ubus_stream;
 static int isReceiveing;														// True when ubus receiving is enabled
@@ -922,6 +911,7 @@ int ubus_disable_receive(void) {
 	}
 
 	isReceiveing = 0;
+	printf("UBUS receiver has been disabled\n");
 
 	return 0;
 }
@@ -937,6 +927,8 @@ int ubus_enable_receive(void) {
 
 	/* Register event handler (not calls) for:
 	 * ubus send dect '{ "key": "value" }' */
+	memset(&stateListener, 0, sizeof(stateListener));
+	stateListener.cb = ubus_event_state;
 	if(ubus_register_event_handler(ubusContext, &stateListener,
 			ubusSenderPath) != UBUS_STATUS_OK) {
 		exit_failure("Error registering ubus event handler %s", ubusSenderPath);
@@ -944,6 +936,8 @@ int ubus_enable_receive(void) {
 
 	/* Register event handler (not calls) for:
 	 * ubus send button.DECT '{ "action": "pressed" }' */
+	memset(&buttonListener, 0, sizeof(buttonListener));
+	buttonListener.cb = ubus_event_button;
 	if(ubus_register_event_handler(ubusContext, &buttonListener,
 			butnShrt1) != UBUS_STATUS_OK ||
 			ubus_register_event_handler(ubusContext, &buttonListener,
@@ -954,6 +948,16 @@ int ubus_enable_receive(void) {
 	}
 
 	// Invoke our RPC handler when ubus calls (not events) arrive
+	memset(&rpcType, 0, sizeof(rpcType));
+	rpcType.name = ubusSenderPath;
+	rpcType.n_methods = ARRAY_SIZE(ubusMethods);
+	rpcType.methods = ubusMethods;
+	memset(&rpcObj, 0, sizeof(rpcObj));
+	rpcObj.name = ubusSenderPath;
+	rpcObj.path = ubusSenderPath;
+	rpcObj.type = &rpcType;
+	rpcObj.methods = ubusMethods;
+	rpcObj.n_methods = ARRAY_SIZE(ubusMethods);
 	if(ubus_add_object(ubusContext, &rpcObj) != UBUS_STATUS_OK) {
 		exit_failure("Error registering ubus object rpcObj");
 	}
@@ -961,6 +965,8 @@ int ubus_enable_receive(void) {
 	if(ubus_lookup_id(ubusContext, "uci", &uciId) != UBUS_STATUS_OK) {
 		exit_failure("Error, can't get UCI path");
 	}
+
+	printf("UBUS receiver has been enabled\n");
 
 	return 0;
 }
@@ -980,11 +986,5 @@ void ubus_init(void * base, config_t * config) {
 	ubus_stream = stream_new(ubusContext->sock.fd);
 	stream_add_handler(ubus_stream, 0, ubus_fd_handler);
 	event_base_add_stream(ubus_stream);
-
-	memset(&stateListener, 0, sizeof(stateListener));
-	stateListener.cb = ubus_event_state;
-
-	memset(&buttonListener, 0, sizeof(buttonListener));
-	buttonListener.cb = ubus_event_button;
 }
 
