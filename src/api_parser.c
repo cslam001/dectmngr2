@@ -45,10 +45,6 @@ static void api_parser_handler(packet_t *p) {
 		printf("API_FP_GET_FW_VERSION_CFM\n");
 		break;
 	
-	case API_FP_FEATURES_CFM:
-		printf("API_FP_FEATURES_CFM\n");
-		break;
-
 	case API_SCL_STATUS_IND:
 		printf("API_SCL_STATUS_IND\n");
 		break;

@@ -28,6 +28,13 @@
 #include "PtCmdDef.h"
 #include <dectshimdrv.h>
 
+// Backwards compatibility with v11.19
+#ifndef	API_FP_CC_FEATURES_REQ
+#define API_FP_CC_FEATURES_REQ	(API_FP_CC_SET_FEATURES_CFM)
+#define API_FP_CC_FEATURES_CFM	(API_FP_CC_SET_FEATURES_CFM)
+typedef ApiFpCcSetFeaturesCfmType ApiFpCcFeaturesReqType;
+#endif
+
 
 static time_t reset_ind = 0;
 static void *dect_bus;
@@ -205,7 +212,7 @@ static void connection_init_handler(packet_t *p) {
 			};
 			uint8_t nvramRfpi[5];
 			ApiProdTestCfmType *prodResp =
-				(ApiLinuxInitGetSystemInfoCfmType*) &m->mail_header;
+				(ApiProdTestCfmType*) &m->mail_header;
 
 			// We have read the device RFPI. Now verify it's correct
 			if(prodResp->Opcode == PT_CMD_GET_ID &&	
