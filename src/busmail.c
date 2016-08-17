@@ -14,50 +14,7 @@
 #include "tty.h"
 
 
-typedef struct {
-	uint8_t * data;
-	int size;
-	uint8_t task_id;
-} tx_packet_t;
 
-
-#define CLIENT_PKT_DATA_SIZE 1000
-#define CLIENT_PKT_TYPE 5
-#define CLIENT_PKT_HEADER_SIZE 8
-
-typedef struct {
-	uint32_t size;
-	uint32_t type;
-	uint8_t data[CLIENT_PKT_DATA_SIZE];
-} client_packet_t;
-
-
-typedef struct {
-	uint32_t fd;
-	uint8_t tx_seq_l;
-	uint8_t rx_seq_l;
-	uint8_t tx_seq_r;
-	uint8_t rx_seq_r;
-	void * tx_fifo;
-	buffer_t * buf;
-	void * application_handlers;
-} busmail_connection_t;
-
-
-/* Module scope variables */
-/* static uint8_t tx_seq_l, rx_seq_l, tx_seq_r, rx_seq_r; */
-/* static int busmail_fd; */
-/* static void (*application_frame) (busmail_t *); */
-extern void * client_list;
-extern void * client_bus;
-extern int client_connected;
-client_packet_t client_p;
-
-
-static void packet_dispatch(void * packet) {
-	
-}
-			    
 
 static void reset_counters(void * _self) {
 
@@ -457,7 +414,7 @@ int busmail_get(void * _self, packet_t *p) {
 
 void packet_dump(packet_t *p) {
 	
-	int i;
+	unsigned int i;
 
 	printf("\n[PACKET %d] - ", p->size);
 	for (i = 0; i < p->size; i++) {

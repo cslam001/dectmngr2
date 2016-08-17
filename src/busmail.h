@@ -53,6 +53,14 @@ typedef struct {
 	uint8_t data[PACKET_SIZE];
 } packet_t;
 
+
+typedef struct {
+	uint8_t * data;
+	int size;
+	uint8_t task_id;
+} tx_packet_t;
+
+
 typedef struct __attribute__((__packed__)) 
 {
 	uint8_t frame_header;
@@ -61,6 +69,19 @@ typedef struct __attribute__((__packed__))
 	uint16_t mail_header;
 	uint8_t mail_data[1];
 } busmail_t;
+
+
+typedef struct {
+	uint32_t fd;
+	uint8_t tx_seq_l;
+	uint8_t rx_seq_l;
+	uint8_t tx_seq_r;
+	uint8_t rx_seq_r;
+	void * tx_fifo;
+	buffer_t * buf;
+	void * application_handlers;
+} busmail_connection_t;
+
 
 
 struct mail_protocol_t {
