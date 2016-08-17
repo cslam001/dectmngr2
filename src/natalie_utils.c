@@ -24,7 +24,7 @@ ApiGetInfoElement(ApiInfoElementType *IeBlockPtr,
 	ApiInfoElementType *pIe = NULL;
 	rsuint16 targetIe = Ie;  
 
-	while (NULL != (pIe = ApiGetNextInfoElement(IeBlockPtr, IeBlockLength, pIe))) {
+	while ((pIe = ApiGetNextInfoElement(IeBlockPtr, IeBlockLength, pIe))) {
 		if (pIe->Ie == targetIe) {
 			/* Return the pointer to the info element found */
 			return pIe; 
