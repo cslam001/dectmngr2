@@ -28,11 +28,19 @@
 #include "PtCmdDef.h"
 #include <dectshimdrv.h>
 
-// Backwards compatibility with v11.19
-#ifndef	API_FP_CC_FEATURES_REQ
-#define API_FP_CC_FEATURES_REQ	(API_FP_CC_SET_FEATURES_CFM)
+
+/* Backwards compatibility between Natalie version.
+ * The API differs between versions. However, it does NOT
+ * provade a method for discovering this at compile
+ * time! Thus we don't know what we link agains until
+ * it's to late... Below is an ugly workaround. */
+#if ROS_PRIMITIVE_COUNT >= 1304													// Natalie v12.26
+#define API_FP_CC_FEATURES_REQ	(API_FP_CC_SET_FEATURES_REQ)
 #define API_FP_CC_FEATURES_CFM	(API_FP_CC_SET_FEATURES_CFM)
-typedef ApiFpCcSetFeaturesCfmType ApiFpCcFeaturesReqType;
+typedef ApiFpCcSetFeaturesReqType ApiFpCcFeaturesReqType;
+#elif ROS_PRIMITIVE_COUNT >= 1269												// Natalie v11.19
+#else
+#error Error, unknown Natalie version
 #endif
 
 
