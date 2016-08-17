@@ -5,25 +5,24 @@
 #include "buffer.h"
 #include "busmail.h"
 
-#define PACKET_SIZE 500
-#define NO_PF 0
-#define PF 1
+
+typedef struct {
+	uint32_t fd;
+	uint8_t tx_seq_l;
+	uint8_t rx_seq_l;
+	uint8_t tx_seq_r;
+	uint8_t rx_seq_r;
+	void * tx_fifo;
+	buffer_t * buf;
+	uint8_t program_id;
+	uint8_t task_id;
+	void (*application_frame) (packet_t *);
+} eap_connection_t;
 
 
-/* typedef struct __attribute__((__packed__))  */
-/* { */
-/* 	uint8_t frame_header; */
-/* 	uint8_t program_id; */
-/* 	uint8_t task_id; */
-/* 	uint16_t mail_header; */
-/* 	uint8_t mail_data[1]; */
-/* } eap_t; */
-
-
-
-void* eap_new(int fd, void (*app_handler)(packet_t *));
-int eap_write(void * _self, void * event);
-void eap_dispatch(void * _self);
-void eap_send(void * _self, uint8_t * data, int size);
+eap_connection_t* eap_new(int fd, void (*app_handler)(packet_t *));
+int eap_write(eap_connection_t *bus, void * event);
+void eap_dispatch(eap_connection_t *bus);
+void eap_send(eap_connection_t *bus, uint8_t * data, int size);
 
 #endif /* EAP_H */

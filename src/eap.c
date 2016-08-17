@@ -5,8 +5,8 @@
 #include <stdbool.h>
 #include <assert.h>
 
+#include "eap.h"
 #include "error.h"
-#include "busmail.h"
 #include "fifo.h"
 #include "event.h"
 
@@ -14,49 +14,8 @@
 #define RSX_TSK_ID 0xdc
 
 
-typedef struct {
-	uint8_t * data;
-	int size;
-	uint8_t task_id;
-} tx_packet_t;
 
-
-#define CLIENT_PKT_DATA_SIZE 1000
-#define CLIENT_PKT_TYPE 5
-#define CLIENT_PKT_HEADER_SIZE 8
-
-typedef struct {
-	uint32_t size;
-	uint32_t type;
-	uint8_t data[CLIENT_PKT_DATA_SIZE];
-} client_packet_t;
-
-
-typedef struct {
-	uint32_t fd;
-	uint8_t tx_seq_l;
-	uint8_t rx_seq_l;
-	uint8_t tx_seq_r;
-	uint8_t rx_seq_r;
-	void * tx_fifo;
-	buffer_t * buf;
-	uint8_t program_id;
-	uint8_t task_id;
-	void (*application_frame) (packet_t *);
-} busmail_connection_t;
-
-
-/* Module scope variables */
-/* static uint8_t tx_seq_l, rx_seq_l, tx_seq_r, rx_seq_r; */
-/* static int busmail_fd; */
-/* static void (*application_frame) (busmail_t *); */
-extern void * client_list;
-client_packet_t client_p;
-
-
-static void reset_counters(void * _self) {
-
-	busmail_connection_t * bus = (busmail_connection_t *) _self;
+static void reset_counters(eap_connection_t *bus) {
 
 	bus->tx_seq_l = 0;
 	bus->rx_seq_l = 0;
@@ -106,9 +65,8 @@ static void send_packet(void * data, int data_size, int fd) {
 
 
 
-static uint8_t make_info_frame(void * _self) {
+static uint8_t make_info_frame(eap_connection_t *bus) {
 	
-	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	uint8_t header;
 
 	header = ( (bus->tx_seq_l << TX_SEQ_OFFSET) | 
@@ -119,9 +77,7 @@ static uint8_t make_info_frame(void * _self) {
 
 
 
-static void eap_tx(void * _self, uint8_t * data, int size, uint8_t task_id) {
-
-	busmail_connection_t * bus = (busmail_connection_t *) _self;
+static void eap_tx(eap_connection_t *bus, uint8_t * data, int size, uint8_t task_id) {
 	uint8_t tx_seq_tmp, rx_seq_tmp;
 	busmail_t * r;	
 	
@@ -151,9 +107,7 @@ static void eap_tx(void * _self, uint8_t * data, int size, uint8_t task_id) {
 
 /* Send an EAP busmail where the addressee has
  * been specified by previously received packet. */
-void eap_send(void * _self, uint8_t * data, int size) {
-
-	busmail_connection_t * bus = (busmail_connection_t *) _self;
+void eap_send(eap_connection_t *bus, uint8_t * data, int size) {
 	tx_packet_t * tx = calloc(sizeof(tx_packet_t), 1);
 	
 	tx->data = malloc(size - BUSMAIL_HEADER_SIZE);
@@ -166,9 +120,7 @@ void eap_send(void * _self, uint8_t * data, int size) {
 }
 
 
-static void information_frame(void * _self, packet_t *p) {
-
-	busmail_connection_t * bus = (busmail_connection_t *) _self;
+static void information_frame(eap_connection_t *bus, packet_t *p) {
 	busmail_t * m = (busmail_t *) &p->data[0];
 	uint8_t sh, ih;
 	int ack = true;
@@ -197,9 +149,7 @@ static void information_frame(void * _self, packet_t *p) {
 
 
 
-int eap_write(void * _self, void * event) {
-
-	busmail_connection_t * bus = (busmail_connection_t *) _self;
+int eap_write(eap_connection_t *bus, void * event) {
 	
 	if ( buffer_write(bus->buf, event_data(event), event_count(event)) == 0 ) {
 		return -1;
@@ -209,9 +159,7 @@ int eap_write(void * _self, void * event) {
 }
 
 
-void eap_dispatch(void * _self) {
-
-	busmail_connection_t * bus = (busmail_connection_t *) _self;
+void eap_dispatch(eap_connection_t *bus) {
 	packet_t packet;
 	packet_t *p = &packet;
 	busmail_t * m;
@@ -227,10 +175,12 @@ void eap_dispatch(void * _self) {
 
 
 
-void* eap_new(int fd, void (*app_handler)(packet_t *)) {
+eap_connection_t* eap_new(int fd, void (*app_handler)(packet_t *)) {
 
-	busmail_connection_t * bus = (busmail_connection_t *) calloc(sizeof(busmail_connection_t), 1);
+	eap_connection_t *bus;
 
+	bus = (eap_connection_t*) malloc(sizeof(eap_connection_t));
+	memset(bus, 0, sizeof(eap_connection_t));
 	bus->fd = fd;
 	bus->application_frame = app_handler;
 	bus->tx_fifo = fifo_new();
