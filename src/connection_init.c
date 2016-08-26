@@ -265,7 +265,7 @@ static void connection_init_handler(packet_t *p) {
 							 .PcmClksPerBit = 0x1, /* One clock per bit */
 							 .PcmFscInvert = 0x0,  /* FSC not inverted */
 							 .PcmCh0Delay = 0x0,   /* No 8-bit offset for chan 0 */
-							 .PcmDoutIsOpenDrain = 0x1, /* Must be 1 if mult. devices on bus */
+							 .PcmDoutIsOpenDrain = 0x0, /* Must be 1 if mult. devices on bus */
 							 .PcmIsOpenDrain = 0x0,  /* 0 == Normal mode */
 			};
 			mailProto.send(dect_bus, (uint8_t *)&pcm_req, sizeof(ApiFpInitPcmReqType));

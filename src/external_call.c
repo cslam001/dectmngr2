@@ -20,6 +20,7 @@
 #include "ubus.h"
 #include "natalie_utils.h"
 #include "dect.h"
+#include "app.h"
 
 
 //-------------------------------------------------------------
@@ -708,7 +709,10 @@ static int fill_info_elements(struct call_t *call, rsuint8 **buf, rsuint16 *bufL
 	ApiBuildInfoElement((ApiInfoElementType**) buf, bufLen,
 		API_IE_LINE_ID, sizeof(line), (rsuint8*) &line);
 
-	// Send the codecs we want the handset to use
+	/* Send the codecs we want the handset to use. Due to an issue
+	 * with external Dect it only works with narrowband. (Can't
+	 * figure out how to get 16kHz PCM framrate to work all the
+	 * way from PCM through BCM endpoint up to Asterisk.) */
 	codecs = calloc(1, sizeof(ApiCodecListType) + sizeof(ApiCodecInfoType));
 	codecs->NegotiationIndicator = (terminal->codecs) ? 
 		terminal->codecs->NegotiationIndicator : API_NI_POSSIBLE;
@@ -717,7 +721,8 @@ static int fill_info_elements(struct call_t *call, rsuint8 **buf, rsuint16 *bufL
 			!hasWideband; i++) {
 		hasWideband = (terminal->codecs->Codec[i].Codec == API_CT_G722);
 	}
-	if(hasWideband && (call->BasicService == API_WIDEBAND_SPEECH ||
+	if(hwIsInternal && hasWideband &&
+			(call->BasicService == API_WIDEBAND_SPEECH ||
 			terminal->BasicService == API_WIDEBAND_SPEECH)) {
 		codecs->NoOfCodecs = 2;
 		codecs->Codec[0].Codec = API_CT_G722;
