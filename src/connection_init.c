@@ -312,11 +312,12 @@ static void connection_init_handler(packet_t *p) {
 					ubus_call_string("led.dect", "set", "state", "notice", NULL);// Light up box LED
 				}
 				else if(connection.registration == PENDING_INACTIVE) {
-						connection.registration = INACTIVE;
-						printf("Registration is inactive\n");
-						ubus_send_string("registration", ubusStrInActive);
-						ubus_call_string("led.dect", "set", "state", 
-							(connection.radio == ACTIVE) ? "ok" : "off", NULL);
+					connection.registration = INACTIVE;
+					printf("Registration is inactive\n");
+					ubus_send_string("registration", ubusStrInActive);
+					ubus_call_string("led.dect", "set", "state", 
+						(connection.radio == ACTIVE) ? "ok" : "off", NULL);
+					list_handsets();
 				}
 			}
 		}
