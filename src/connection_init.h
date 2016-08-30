@@ -18,15 +18,6 @@ enum remote_bool_t {
 	INACTIVE,
 };
 
-static const char *remote_bool_str[] = {				// String explanations of enum remote_bool_t
-	"unknown",
-	"pending active",
-	"active",
-	"pending inactive",
-	"inactive",
-};
-
-
 struct connection_t {
 	enum remote_bool_t registration;
 	enum remote_bool_t radio;

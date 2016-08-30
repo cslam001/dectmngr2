@@ -44,6 +44,19 @@ typedef ApiFpCcSetFeaturesReqType ApiFpCcFeaturesReqType;
 #endif
 
 
+
+//-------------------------------------------------------------
+static const char *remote_bool_str[] = {										// String explanations of enum remote_bool_t
+	"unknown",
+	"pending active",
+	"active",
+	"pending inactive",
+	"inactive",
+};
+
+
+
+//-------------------------------------------------------------
 static time_t reset_ind = 0;
 static void *dect_bus;
 struct connection_t connection;
@@ -320,7 +333,7 @@ static void connection_init_handler(packet_t *p) {
 //-------------------------------------------------------------
 // Timer handler, for turning of registration
 // after a delay if no handset has registered.
-static void timer_handler(void *unused1, void *unused2) {
+static void timer_handler(void *unused1 __attribute__((unused)), void *unused2 __attribute__((unused))) {
 	uint64_t expired;
 	int res;
 
