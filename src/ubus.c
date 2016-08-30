@@ -24,6 +24,11 @@ enum {
 };
 
 enum {
+	BTN_ACTN,
+	BTN_TYPE,
+};
+
+enum {
 	HANDSET_LIST,
 	HANDSET_DELETE,
 	HANDSET_PAGEALL,															// Page (ping) all handsets
@@ -68,10 +73,10 @@ const char strOff[] = "off";
 const char strAuto[] = "auto";
 const char strPressed[] = "pressed";											// Button pressed string
 const char strReleased[] = "released";
+const char strShort[] = "short";
+const char strLong[] = "long";
 const char strErrno[] = "errno";
-const char butnShrt1[] = "button.DECT";
-const char butnShrt2[] = "button.DECTS";										// Ubus button event names
-const char butnLong[] = "button.DECTL";
+const char strButton[] = "button.DECT";											// Ubus button event names
 
 
 static const struct blobmsg_policy ubusStateKeys[] = {							// ubus RPC "state" arguments (keys and values)
@@ -105,7 +110,8 @@ static const struct ubus_method ubusMethods[] = {								// ubus RPC methods
 
 
 static const struct blobmsg_policy buttonKeys[] = {
-	{ .name = "action", .type = BLOBMSG_TYPE_STRING },
+	[BTN_ACTN] = { .name = "action", .type = BLOBMSG_TYPE_STRING },				// Button press or release
+	[BTN_TYPE] = { .name = "type", .type = BLOBMSG_TYPE_STRING },				// Long or short press
 };
 
 
@@ -530,47 +536,52 @@ static void perhaps_reply_deferred_timeout(void) {
 //-------------------------------------------------------------
 // Event handler for
 // ubus send button.DECT '{ "action": "pressed" }'
-static void ubus_event_button(struct ubus_context *ctx,
-	struct ubus_event_handler *ev, const char *type, struct blob_attr *blob)
+static void ubus_event_button(struct ubus_context *ctx __attribute__((unused)), struct ubus_event_handler *ev __attribute__((unused)), const char *type __attribute__((unused)), struct blob_attr *blob)
 {
-	struct blob_attr *keys;
+	struct blob_attr *keys[ARRAY_SIZE(buttonKeys)];
 	const char *strVal;
 
-	if(blobmsg_parse(buttonKeys, 1, &keys, blob_data(blob), blob_len(blob))) {
+	// Tokenize message key/value paris into an array
+	if(blobmsg_parse(buttonKeys, ARRAY_SIZE(buttonKeys),
+			keys, blob_data(blob), blob_len(blob))) {
 		return;
 	}
-	else if(!keys) {
-		return;
-	}
-
-	strVal = blobmsg_get_string(keys);
-	//printf("Dect button event %s %s\n", type, strVal);
 
 	/* Do nothing on button presses, we don't want to
 	 * trigger a radio activity just before we might
 	 * turn radio off (at button release). */
-	if(strncmp(strVal, strReleased, sizeof(strReleased))) return;
+	if(keys[BTN_ACTN]) {
+		strVal = blobmsg_get_string(keys[BTN_ACTN]);
+		if(strncmp(strVal, strReleased, sizeof(strReleased))) return;
+	}
 
-	// Long button released?
-	if(strncmp(type, butnLong, sizeof(butnLong)) == 0) {
-		if(connection.uciRadioConf == RADIO_ALWAYS_OFF) {
-			printf("Buttin activates radio permanently\n");
-			connection.uciRadioConf = RADIO_ALWAYS_ON;
-			connection_set_registration(1);
-		}
-		else {
-			printf("Button inactivates radio permanently\n");
-			connection.uciRadioConf = RADIO_ALWAYS_OFF;
-			connection_set_radio(0);
-		}
-	} 
+	// Long or short button press?
+	if(keys[BTN_TYPE]) {
+		strVal = blobmsg_get_string(keys[BTN_TYPE]);
 
-	// Short button released?
-	else if(strncmp(type, butnShrt1, sizeof(butnShrt1)) == 0 ||
-			strncmp(type, butnShrt2, sizeof(butnShrt2)) == 0) {
-		if(connection.uciRadioConf != RADIO_ALWAYS_OFF) {
-			printf("Button activates registration\n");
-			connection_set_registration(1);
+		// Long button released?
+		if(strncmp(strVal, strLong, sizeof(strLong)) == 0) {
+			if(connection.uciRadioConf == RADIO_ALWAYS_ON) {
+				printf("Button inactivates radio permanently\n");
+				connection.uciRadioConf = RADIO_ALWAYS_OFF;
+				connection_set_radio(0);
+			}
+			else {
+				printf("Button activates radio permanently\n");
+				connection.uciRadioConf = RADIO_ALWAYS_ON;
+				connection_set_registration(1);
+			}
+		}
+
+		// Short button released?
+		else if(strncmp(strVal, strShort, sizeof(strShort)) == 0) {
+			if(connection.uciRadioConf == RADIO_ALWAYS_OFF) {
+				printf("Ignoring button, radio is inactive\n");
+			}
+			else {
+				printf("Button activates registration\n");
+				connection_set_registration(1);
+			}
 		}
 	}
 }
@@ -580,8 +591,7 @@ static void ubus_event_button(struct ubus_context *ctx,
 //-------------------------------------------------------------
 // Event handler for
 // ubus send dect '{ "key": "value" }'
-static void ubus_event_state(struct ubus_context *ctx,
-	struct ubus_event_handler *ev, const char *type, struct blob_attr *blob)
+static void ubus_event_state(struct ubus_context *ctx __attribute__((unused)), struct ubus_event_handler *ev __attribute__((unused)), const char *type __attribute__((unused)), struct blob_attr *blob)
 {
 	struct blob_attr *keys[ARRAY_SIZE(ubusStateKeys)];
 	const char *strVal;
@@ -624,7 +634,7 @@ static void ubus_event_state(struct ubus_context *ctx,
 
 
 //-------------------------------------------------------------
-static void ubus_fd_handler(void * dect_stream, void * event) {
+static void ubus_fd_handler(void * dect_stream __attribute__((unused)), void * event __attribute__((unused))) {
 	ubus_handle_event(ubusContext);
 }
 
@@ -765,8 +775,7 @@ out:
 
 //-------------------------------------------------------------
 // RPC handler for ubus call dect status
-static int ubus_request_status(struct ubus_context *ubus_ctx, struct ubus_object *obj,
-		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg)
+static int ubus_request_status(struct ubus_context *ubus_ctx, struct ubus_object *obj __attribute__((unused)), struct ubus_request_data *req, const char *methodName, struct blob_attr *msg __attribute__((unused)))
 {
 	char *keys, *key, *values, *value;
 	char *saveptr1, *saveptr2;
@@ -896,7 +905,7 @@ int ubus_disable_receive(void) {
 
 	if(ubus_unregister_event_handler(ubusContext, &buttonListener) != 
 			UBUS_STATUS_OK) {
-		exit_failure("Error deregistering ubus event handler %s", butnShrt1);
+		exit_failure("Error deregistering ubus event handler %s", strButton);
 	}
 
 	if(ubus_unregister_event_handler(ubusContext, &stateListener) != 
@@ -939,12 +948,8 @@ int ubus_enable_receive(void) {
 	memset(&buttonListener, 0, sizeof(buttonListener));
 	buttonListener.cb = ubus_event_button;
 	if(ubus_register_event_handler(ubusContext, &buttonListener,
-			butnShrt1) != UBUS_STATUS_OK ||
-			ubus_register_event_handler(ubusContext, &buttonListener,
-			butnShrt2) != UBUS_STATUS_OK ||
-			ubus_register_event_handler(ubusContext, &buttonListener,
-			butnLong) != UBUS_STATUS_OK) {
-		exit_failure("Error registering ubus event handler %s", butnShrt1);
+			strButton) != UBUS_STATUS_OK) {
+		exit_failure("Error registering ubus event handler %s", strButton);
 	}
 
 	// Invoke our RPC handler when ubus calls (not events) arrive
@@ -974,7 +979,7 @@ int ubus_enable_receive(void) {
 
 
 //-------------------------------------------------------------
-void ubus_init(void * base, config_t * config) {	
+void ubus_init(void *base __attribute__((unused)), config_t *config __attribute__((unused))) {
 	printf("ubus init\n");
 	memset(&querier, 0, sizeof(querier));
 
