@@ -79,23 +79,79 @@ static void fw_version_cfm(busmail_t *m) {
 	}
 
 	printf("VersionHex %x\n", (unsigned int)p->VersionHex);
+	snprintf(connection.fwVersion, sizeof(connection.fwVersion),
+		"%x", (unsigned int) p->VersionHex);
 	
-	if (p->DectType == API_EU_DECT) {
-		printf("DectType: API_EU_DECT\n");
-	} else {
-		printf("DectType: BOGUS\n");
+	switch(p->DectType) {
+		case API_EU_DECT:
+			printf("DectType: API_EU_DECT\n");
+			sprintf(connection.type, "EU");
+			break;
+		case API_US_DECT:
+			printf("DectType: API_US_DECT\n");
+			sprintf(connection.type, "US");
+			break;
+		case API_SA_DECT:
+			printf("DectType: API_SA_DECT\n");
+			sprintf(connection.type, "SA");
+			break;
+		case API_TAIWAN_DECT:
+			printf("DectType: API_TAIWAN_DECT\n");
+			sprintf(connection.type, "Taiwan");
+			break;
+		case API_CHINA_DECT:
+			printf("DectType: API_CHINA_DECT\n");
+			sprintf(connection.type, "China");
+			break;
+		case API_THAILAND_DECT:
+			printf("DectType: API_THAILAND_DECT\n");
+			sprintf(connection.type, "Thailand");
+			break;
+		case API_DECT_TYPE_INVALID:
+			printf("DectType: invalid\n");
+			sprintf(connection.type, "invalid");
+			break;
+		default:
+			printf("DectType: unknown\n");
+			sprintf(connection.type, "unknown");
+			break;
 	}
 
 	return;
 }
 
 
+
+//-------------------------------------------------------------
+// Returns true if radio can start
+static int is_radio_prerequisites_ok(void) {
+	const uint8_t invalidRfpis[2][5] = {
+		{ 0, 0, 0, 0, 0, }, { 0xffu, 0xffu, 0xffu, 0xffu, 0xffu }
+	};
+	uint8_t nvramRfpi[5];
+
+	// Fetch RFPI from our filesystem
+	nvs_rfpi_patch(nvramRfpi);
+
+	// Does the RFPI in NVS look valid?
+	if(memcmp(connection.rfpi, nvramRfpi, 5) ||
+			memcmp(invalidRfpis[0], connection.rfpi, 5) == 0 ||
+			memcmp(invalidRfpis[1], connection.rfpi, 5) == 0) {
+		printf("Warning, incorrect RFPI in NVS! Radio can't be used!\n");
+		return 0;
+	}
+
+	return 1;
+}
+
+
+
 //-------------------------------------------------------------
 int connection_get_status(char **keys, char **values) {
-
-	*keys = calloc(1, 100);
+	const int bufLen = 200;
+	*keys = calloc(1, bufLen);
 	if(!*keys) return -1;
-	*values = calloc(1, 100);
+	*values = calloc(1, bufLen);
 	if(!*values) return -1;
 
 	strcat(*keys, "radio\n");
@@ -103,6 +159,12 @@ int connection_get_status(char **keys, char **values) {
 	strcat(*values, "\n");
 	strcat(*keys, "registration\n");
 	strcat(*values, remote_bool_str[connection.registration]);
+	strcat(*values, "\n");
+	strcat(*keys, "version\n");
+	strcat(*values, connection.fwVersion);
+	strcat(*values, "\n");
+	strcat(*keys, "spectrum\n");
+	strcat(*values, connection.type);
 	strcat(*values, "\n");
 
 	return 0;
@@ -231,21 +293,18 @@ static void connection_init_handler(packet_t *p) {
 				.Primitive = API_FP_CC_FEATURES_REQ,
 				.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
 			};
-			uint8_t nvramRfpi[5];
 			ApiProdTestCfmType *prodResp =
 				(ApiProdTestCfmType*) &m->mail_header;
 
 			// We have read the device RFPI. Now verify it's correct
 			if(prodResp->Opcode == PT_CMD_GET_ID &&	
 					prodResp->ParameterLength == 5) {
+				memcpy(connection.rfpi, prodResp->Parameters, 5);
 				printf("Read RFPI from NVS: %2.2x %2.2x %2.2x %2.2x %2.2x\n",
 					prodResp->Parameters[0], prodResp->Parameters[1],
 					prodResp->Parameters[2], prodResp->Parameters[3],
 					prodResp->Parameters[4]);
-				nvs_rfpi_patch(nvramRfpi);
-				if(memcmp(nvramRfpi, prodResp->Parameters, 5)) {
-					exit_failure("Error, incorrect RFPI in NVS\n");
-				}
+				is_radio_prerequisites_ok();
 			}
 
 			printf("WRITE: API_FP_CC_FEATURES_REQ\n");
@@ -396,6 +455,11 @@ int connection_set_radio(int onoff) {
 	struct itimerspec newTimer;
 
 	if(onoff) {
+		if(!is_radio_prerequisites_ok()) {
+			ubus_send_string("radio", ubusStrInActive);
+			return -1;
+		}
+
 		/* Don't enable radio again if it's already active
 		 * since it would inactivate registration in the
 		 * timer handler. */
@@ -448,7 +512,7 @@ int connection_set_radio(int onoff) {
 // timer for possible timeout.
 int connection_set_registration(int onoff) {
 	struct itimerspec newTimer;
-	int doSendMsg;
+	int doSendMsg, res;
 
 	ApiFpMmSetRegistrationModeReqType m = {
 		.Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ,
@@ -468,8 +532,14 @@ int connection_set_registration(int onoff) {
 			newTimer.it_value.tv_sec = 180;
 			doSendMsg = 1;
 		}
-		else if(connection_set_radio(1) == 0) {
-			newTimer.it_value.tv_sec = 1;
+		else {
+			res = connection_set_radio(1);
+			if(res == -1) {
+				return -1;
+			}
+			else if(res == 0) {
+				newTimer.it_value.tv_sec = 1;
+			}
 		}
 	}
 	else {

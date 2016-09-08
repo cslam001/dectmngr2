@@ -682,8 +682,12 @@ static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object 
 	if(keys[STATE_RADIO]) {
 		strVal = blobmsg_get_string(keys[STATE_RADIO]);
 		if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
-			connection_set_radio(1);
-			ubus_reply_success(ubus_ctx, req, methodName);
+			if(connection_set_radio(1)) {
+				ubus_reply_err(ubus_ctx, req, methodName, ENODEV);
+			}
+			else {
+				ubus_reply_success(ubus_ctx, req, methodName);
+			}
 		}
 		else if(strncmp(strVal, strOff, sizeof(strOff)) == 0) {
 			connection_set_radio(0);
@@ -696,8 +700,12 @@ static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object 
 	if(keys[STATE_REGISTRATION]) {
 		strVal = blobmsg_get_string(keys[STATE_REGISTRATION]);
 		if(strncmp(strVal, strOn, sizeof(strOn)) == 0) {
-			connection_set_registration(1);
-			ubus_reply_success(ubus_ctx, req, methodName);
+			if(connection_set_registration(1)) {
+				ubus_reply_err(ubus_ctx, req, methodName, ENODEV);
+			}
+			else {
+				ubus_reply_success(ubus_ctx, req, methodName);
+			}
 		}
 		else if(strncmp(strVal, strOff, sizeof(strOff)) == 0) {
 			connection_set_registration(0);
@@ -781,6 +789,7 @@ static int ubus_request_status(struct ubus_context *ubus_ctx, struct ubus_object
 	char *saveptr1, *saveptr2;
 	struct blob_buf blob;
 	int res = UBUS_STATUS_OK;
+	void *listRfpi;
 
 	memset(&blob, 0, sizeof(blob));
 
@@ -798,6 +807,15 @@ static int ubus_request_status(struct ubus_context *ubus_ctx, struct ubus_object
 		key = NULL;
 		value = NULL;
 	}
+
+	// Add fixed part RFPI
+	listRfpi = blobmsg_open_array(&blob, "rfpi");
+	blobmsg_add_u16(&blob, NULL, connection.rfpi[0]);
+	blobmsg_add_u16(&blob, NULL, connection.rfpi[1]);
+	blobmsg_add_u16(&blob, NULL, connection.rfpi[2]);
+	blobmsg_add_u16(&blob, NULL, connection.rfpi[3]);
+	blobmsg_add_u16(&blob, NULL, connection.rfpi[4]);
+	blobmsg_close_table(&blob, listRfpi);
 
 	// Add returncode
 	blobmsg_add_u32(&blob, "errno", 0);
