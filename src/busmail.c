@@ -105,51 +105,6 @@ static void unnumbered_control_frame(void * _self, packet_t *p) {
 }
 
 
-static int packet_inspect(packet_t *p) {
-	
-	uint32_t data_size = 0, i;
-	uint8_t crc = 0, crc_calc = 0;
-	
-	/* Check header */
-	if (p->data[0] != BUSMAIL_PACKET_HEADER) {
-		printf("Drop packet: no header\n");
-		return -1;
-	}
-
-	/* Check size */
-	if (p->size < BUSMAIL_PACKET_OVER_HEAD) {
-		printf("Drop packet: packet size smaller then BUSMAIL_PACKET_OVER_HEAD %d < %d\n",
-		       p->size, BUSMAIL_PACKET_OVER_HEAD);
-		return -1;
-	}
-
-	/* Do we have a full packet? */
-	data_size = (((uint32_t) p->data[1] << 8) | p->data[2]);
-	if (p->size < (data_size + BUSMAIL_PACKET_OVER_HEAD)) {
-		printf("Drop packet: not a full packet incount: %d < packet size: %d\n",
-		       p->size, data_size + BUSMAIL_PACKET_OVER_HEAD);
-		return -1;
-	}
-	
-	/* Read packet checksum */
-	crc = (( (uint8_t) p->data[p->size - 1]));
-
-	/* Calculate checksum over data portion */
-	for (i = 0; i < data_size; i++) {
-		crc_calc += p->data[i + 3];
-	}
-
-	if (crc != crc_calc) {
-		printf("Drop packet: bad packet checksum: %x != %x\n", crc, crc_calc);
-		return -1;
-	}
-
-	return 0;
-}
-
-
-
-
 static uint8_t make_supervisory_frame(void * _self, uint8_t suid, uint8_t pf) {
 	
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
@@ -177,7 +132,6 @@ static uint8_t make_info_frame(void * _self, uint8_t pf) {
 static void busmail_tx(void * _self, uint8_t * data, int size, uint8_t pf, uint8_t task_id, uint8_t prog_id) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
-	uint8_t tx_seq_tmp, rx_seq_tmp;
 	busmail_t * r;	
 	
 	r = malloc(BUSMAIL_PACKET_OVER_HEAD - 1 + size);
@@ -308,15 +262,11 @@ static void information_frame(void * _self, packet_t *p) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
 	busmail_t * m = (busmail_t *) &p->data[0];
-	uint8_t pf, sh, ih;
-	tx_packet_t * tx;
-	int ack = true;
 
 
 	/* Update busmail packet counters */
 	bus->tx_seq_r = (m->frame_header & TX_SEQ_MASK) >> TX_SEQ_OFFSET;
 	bus->rx_seq_r = (m->frame_header & RX_SEQ_MASK) >> RX_SEQ_OFFSET;
-	pf = (m->frame_header & PF_MASK) >> PF_OFFSET;
 
 	util_dump(p->data, p->size, "[DECT]");
 
@@ -354,7 +304,7 @@ int busmail_receive(void *_self, void *event) {
 int busmail_get(void * _self, packet_t *p) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;
-	int i, stop, size, read = 0;
+	uint32_t i, size, read = 0;
 	uint8_t crc = 0, crc_calc = 0;
 	uint8_t buf[5000];
 
