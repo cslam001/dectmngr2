@@ -10,7 +10,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <sys/epoll.h>
+#include <sys/select.h>
 #include <termios.h>
 
 
@@ -34,6 +34,13 @@
 #define BUF_SIZE 5000
 #define SECTOR_ERASE_CMD 0x30
 #define CHIP_ERASE_CMD 0x10
+
+#define TIMEOUT_10MS					10
+#define TIMEOUT_100MS					(10 * TIMEOUT_10MS)
+#define TIMEOUT_SEC						(10 * TIMEOUT_100MS)
+#define ERASE_CONFIRM_TIMEOUT			(205 * TIMEOUT_SEC)
+#define QUICK_CONFIRM_TIMEOUT			(7 * TIMEOUT_100MS)
+#define RETRANSMIT_WAIT_TIMEOUT			(3 * TIMEOUT_10MS)
 
 
 static int dect_fd;
@@ -121,13 +128,6 @@ static flash_type_t flash;
 static flash_type_t *f = &flash;  
 
 
-enum fl_state {
-	NEW_PACKET,
-};
-
-int fl_state;
-
-uint8_t packetbuf[BUF_SIZE];
 int sectors, mod, sectors_written;
 
 buffer_t * buf;
@@ -186,46 +186,44 @@ static uint8_t * make_tx_packet(uint8_t * tx, void * packet, int data_size) {
 }
 
 
-static void send_packet(void * data, int data_size, int fd) {
+// Send a packet to Dect and wait for an answer. If we
+// don't get any response we retransmit same packet again.
+static void send_packet_timeout(void *data, int size, int fd, int timeout) {
+	int tx_size, res;
+	struct timeval t;
+	uint8_t *buf;
+	fd_set rfds;
 
-  int tx_size = data_size + PACKET_OVER_HEAD;
-  uint8_t * tx = malloc(tx_size);
-  
-  make_tx_packet(tx, data, data_size);
-  util_dump(tx, tx_size, "[WRITE]");
-  write(fd, tx, tx_size);
-  free(tx);
+	tx_size = size + PACKET_OVER_HEAD;
+	buf = malloc(tx_size);
+	make_tx_packet(buf, data, size);
+	t.tv_sec = timeout / 1000;
+	t.tv_usec = (timeout - t.tv_sec * 1000) * 1000;
+
+	do {
+		if(tx_size < (int) MAX_PAYLOAD_SIZE / 4) {								// Debug print small packets
+			util_dump(buf, tx_size, "[WRITE]");
+		}
+
+		while(write(fd, buf, tx_size) != tx_size) usleep(0);
+		tty_drain(fd);
+
+		FD_ZERO(&rfds);
+		FD_SET(fd, &rfds);
+		res = select(fd + 1, &rfds, NULL, NULL, &t);							// Wait for data from Dect
+		if(res == -1) {
+			perror("Error waiting for packet ack");
+		}
+		else if(res == 0) {
+			printf("Timeout, retransmitting\n");
+			usleep(RETRANSMIT_WAIT_TIMEOUT * 1000);
+		}
+	} while(res == 0);
+
+	free(buf);
 }
-
-static void send_packet_quiet(void * data, int data_size, int fd) {
-
-  int tx_size = data_size + PACKET_OVER_HEAD;
-  uint8_t * tx = malloc(tx_size);
-  
-  make_tx_packet(tx, data, data_size);
-  write(fd, tx, tx_size);
-  free(tx);
-}
-
-
-static void get_sw_version(void) {
-  
-}
-
-
-static void read_flashloader(void) {
-
-
-  
-}
-
 
 static void calculate_checksum(void) {
-  
-	uint32_t crc=0;
-	int i;
-	uint8_t * FlashLoaderCodePtr = pr->img;
-
 	/* Calculate Checksum of flash loader */
 	InitCrc32Table();
 	pr->checksum = CalculateCRC32((uint16 *)pr->img, pr->size);
@@ -239,7 +237,7 @@ static void sw_version_req(int fd) {
 	SwVersionReqType *r = malloc(sizeof(SwVersionReqType));
   
 	r->Primitive = READ_SW_VERSION_REQ;
-	send_packet(r, sizeof(SwVersionReqType), fd);
+	send_packet_timeout(r, sizeof(SwVersionReqType), fd, QUICK_CONFIRM_TIMEOUT);
 	free(r);
 }
 
@@ -256,14 +254,15 @@ static void sw_version_cfm(packet_t *p) {
 
 
 
-static void qspi_flash_type_req(packet_t *p) {
+static void qspi_flash_type_req(void) {
 
 	ReadProprietaryDataReqType *r = malloc(sizeof(ReadProprietaryDataReqType));
   
 	r->Primitive = READ_PROPRIETARY_DATA_REQ;
 	r->RequestID = 0;
 
-	send_packet(r, sizeof(ReadProprietaryDataReqType), dect_fd);
+	send_packet_timeout(r, sizeof(ReadProprietaryDataReqType),
+		dect_fd, QUICK_CONFIRM_TIMEOUT);
 	free(r);
 
 }
@@ -286,7 +285,7 @@ static void qspi_flash_type_cfm(packet_t *p) {
 
 
 
-static void config_target(packet_t *p) {
+static void config_target(void) {
 	
 	write_config_req_t *r = malloc(sizeof(write_config_req_t));
   
@@ -296,7 +295,8 @@ static void config_target(packet_t *p) {
 	r->OffsetAddress = 0xf0000;
 	r->Config = QSPI_FLASH_CONFIG;
 
-	send_packet(r, sizeof(write_config_req_t), dect_fd);
+	send_packet_timeout(r, sizeof(write_config_req_t),
+		dect_fd, QUICK_CONFIRM_TIMEOUT);
 	free(r);
 }
 
@@ -355,7 +355,7 @@ static void read_firmware(void) {
 
 
 
-static void erase_flash_req(packet_t *p, int address) {
+static void erase_flash_req(int address) {
 	
 	erase_flash_req_t *m = malloc(sizeof(erase_flash_req_t));
 	
@@ -363,7 +363,8 @@ static void erase_flash_req(packet_t *p, int address) {
 	m->Address = address;
 	m->EraseCommand = CHIP_ERASE_CMD;
 
-	send_packet(m, sizeof(erase_flash_req_t), dect_fd);
+	send_packet_timeout(m, sizeof(erase_flash_req_t),
+		dect_fd, ERASE_CONFIRM_TIMEOUT);
 	free(m);
 }
 
@@ -396,10 +397,7 @@ static void flash_erase_cfm(packet_t *p) {
 }
 
 
-static void erase_flash(packet_t *p) {
-	
-	int mod, i;
-
+static void erase_flash(void) {
 	sectors = pr->size / f->SectorSize + 1;
 	mod = pr->size % f->SectorSize;
 
@@ -412,15 +410,15 @@ static void erase_flash(packet_t *p) {
 	printf("Erasing flash\n");
 	/* Erase first sector */
 	sectors_written = 0;
-	erase_flash_req(p, 0);
+	erase_flash_req(0);
 
 }
 
-static int is_data_ff(uint8_t *data) {
-	
+
+static int is_data_ff(uint8_t *data) {	
 	int i;
 
-	for (i = 0; i < 2048; i++) {
+	for (i = 0; i < MAX_PAYLOAD_DATA_BYTES; i++) {
 		if (data[i] != 0xff) {
 			return 0;
 		}
@@ -428,16 +426,15 @@ static int is_data_ff(uint8_t *data) {
 	return 1;
 }
 
-static void prog_flash_req(packet_t *p, int offset) {
 
-	int i;
-	prog_flash_t * m = malloc(sizeof(prog_flash_t) + 2048 - 2);
+static void prog_flash_req(int offset) {
+	prog_flash_t * m = malloc(sizeof(prog_flash_t) + MAX_PAYLOAD_DATA_BYTES - 2);
 	uint8_t *data = pr->img + offset;
 	int of = offset;
-	int data_size = 2048;
+	int data_size = MAX_PAYLOAD_DATA_BYTES;
 
 	/* Skip data if all zeros */
-	while (is_data_ff(data)) {
+	while (of < pr->size && is_data_ff(data)) {
 		data += data_size;
 		of += data_size;
 	};
@@ -463,42 +460,39 @@ static void prog_flash_req(packet_t *p, int offset) {
 	m->Primitive = PROG_FLASH_REQ;
 	m->Address = of;
 	
-	/* printf("Address: 0x%x\n", p->Address); */
-	/* printf("Length: 0x%x\n", p->Length); */
+	/*printf("FLASH_PROG_REQ\n");
+	printf("Address: 0x%x\n", m->Address);
+	printf("Length: 0x%x\n", m->Length);*/
 	
-	send_packet_quiet(m, sizeof(prog_flash_t) + data_size - 2, dect_fd);
+	send_packet_timeout(m, sizeof(prog_flash_t) + data_size - 2,
+		dect_fd, QUICK_CONFIRM_TIMEOUT);
 	free(m);
-
 }
 
 
-static void program_flash(packet_t *p) {
-	
-	printf("program flash\n");
-	prog_flash_req(p, 0);
-}
+static void calc_crc32_req(void) {
+	calc_crc32_req_t *m;
+	uint32_t timeout;
 
-
-static void calc_crc32_req(packet_t *p) {
-
-	calc_crc32_req_t * m = (calc_crc32_req_t *) malloc(sizeof(calc_crc32_req_t));
-
+	m = (calc_crc32_req_t*) malloc(sizeof(calc_crc32_req_t));
 	m->Primitive = CALC_CRC32_REQ;
 	m->Address = 0;
 	m->Length = pr->size;
+
+	// Confirm timeout 1 sec pr 1mbyte
+	timeout = (m->Length / 0x10000) * TIMEOUT_SEC;
+	timeout += 5 * TIMEOUT_SEC;
 	
 	printf("CALC_CRC32_REQ\n");
 	printf("m->Address: %x\n", m->Address);
 	printf("m->Length: %x\n", m->Length);
 
-	send_packet(m, sizeof(calc_crc32_req_t), dect_fd);
+	send_packet_timeout(m, sizeof(calc_crc32_req_t), dect_fd, timeout);
 	free(m);
-
 }
 
 
 static void calc_crc32_cfm(packet_t *p) {
-
 	calc_crc32_cfm_t * m = (calc_crc32_cfm_t *) &p->data[0];
 
 	printf("CALC_CRC32_CFM\n");	
@@ -513,43 +507,33 @@ static void calc_crc32_cfm(packet_t *p) {
 		printf("Bad checksum! 0x%x != 0x%x\n", m->Crc32, pr->checksum);
 		exit(-1);
 	}
-
 }
 
 
-static void prog_flash_cfm(packet_t *p) {
-	
+static void prog_flash_cfm(packet_t *p) {	
 	prog_flash_cfm_t * m = (prog_flash_cfm_t *) &p->data[0];
 
-
-	/* printf("FLASH_PROG_REQ\n"); */
-	/* printf("Address: 0x%x\n", p->Address); */
-	/* printf("Length: 0x%x\n", p->Length); */
-	/* printf("Confirm: 0x%x\n", p->Confirm); */
+	/*printf("FLASH_PROG_CFM\n");
+	printf("Address: 0x%x\n", m->Address);
+	printf("Length: 0x%x\n", m->Length);
+	printf("Confirm: 0x%x\n", m->Confirm);*/
 
 	
 	if (m->Confirm == TRUE) {
 		printf(".");
 		
-		if ((m->Address + 0x800) < pr->size) {
-			prog_flash_req(p, m->Address + 0x800);
+		if ((m->Address + 0x800) < (uint32_t) pr->size) {
+			prog_flash_req(m->Address + 0x800);
 		} else {
 			printf("\ndone programming\n");
-			calc_crc32_req(p);
+			calc_crc32_req();
 		}
 
 	} else {
 		printf("FALSE\n");
-		prog_flash_req(p, m->Address + 0);
-	}
-	
-	
+		prog_flash_req(m->Address + 0);
+	}	
 }
-
-
-
-
-
 
 
 
@@ -563,14 +547,14 @@ void flashloader_dispatch(packet_t *p) {
 		printf("READ_SW_VERSION_CFM\n");
 		sw_version_cfm(p);
 		printf("WRITE_CONFIG_REQ\n");
-		config_target(p);
+		config_target();
 		break;
 		
 	case WRITE_CONFIG_CFM:
 		printf("WRITE_CONFIG_CFM\n");
 		write_config_cfm(p);
 		printf("READ_PROPRIETARY_DATA_REQ\n");
-		qspi_flash_type_req(p);
+		qspi_flash_type_req();
 		break;
 
 	case READ_PROPRIETARY_DATA_CFM:
@@ -579,7 +563,7 @@ void flashloader_dispatch(packet_t *p) {
 		
 		/* Erase flash */
 		printf("FLASH_ERASE_REQ\n");
-		erase_flash(p);
+		erase_flash();
 
 		break;
 
@@ -588,7 +572,8 @@ void flashloader_dispatch(packet_t *p) {
 		flash_erase_cfm(p);
 
 		/* Progam flash */
-		program_flash(p);
+		printf("program flash\n");
+		prog_flash_req(0);
 		break;
 
 	case PROG_FLASH_CFM:
@@ -604,28 +589,26 @@ void flashloader_dispatch(packet_t *p) {
 		printf("Unknown flashloader packet: %x\n", p->data[0]);
 		break;
 	}
-
 }
 
 
 
 int flashpacket_get(packet_t *p, buffer_t *b) {
-	
-	int i, start, stop, size;
+	uint32_t i, size, read = 0;;
 	uint16_t crc = 0, crc_calc = 0;
-	uint8_t buf[5000];
-
-	/* start = buffer_find(b, BUSMAIL_PACKET_HEADER); */
-	/* if (start < 0) { */
-	/* 	return -1; */
-	/* } */
-
+	uint8_t buf[MAX_MAIL_BUFFER_SIZE];
 
 	/* Do we have a start of frame? */	
 	while (buffer_read(b, buf, 1) > 0) {
+		read++;
 		if (buf[0] == UART_PACKET_HEADER) {
 			break;
 		}
+	}
+
+	/* Return if we did not read any data */
+	if (read == 0) {
+		return -1;
 	}
 
 	/* Do we have a full header? */
@@ -636,17 +619,18 @@ int flashpacket_get(packet_t *p, buffer_t *b) {
 	buffer_read(b, buf + 1, 2);
 
 	/* Packet size */
-	size = (((uint32_t) buf[2] << 8) | buf[1]);
+	size = (((int) buf[2] << 8) | (int) buf[1]);
 
 	/* Do we have a full packet? */
-	if (2 + size > buffer_size(b)) {
+	if (buffer_size(b) < size + 2) {
 		buffer_rewind(b, 3);
 		return -1;
 	}
 	buffer_read(b, buf + 3, size + 2);
 	
 	/* Read packet checksum */
-	crc = ( ((buf[PACKET_OVER_HEAD + size - 1]) << 8) | (buf[PACKET_OVER_HEAD + size - 2]) );
+	crc = (((uint16_t) buf[PACKET_OVER_HEAD + size - 1]) << 8) | 
+		((uint16_t) buf[PACKET_OVER_HEAD + size - 2]);
 
 	/* Calculate checksum over data portion */
 	for (i = 0; i < size; i++) {
@@ -667,8 +651,7 @@ int flashpacket_get(packet_t *p, buffer_t *b) {
 
 
 
-void flashloader_handler(void * stream, void * event) {
-
+void flashloader_handler(void *stream __attribute__((unused)), void * event) {
 	packet_t packet;
 	packet_t *p = &packet;
 
@@ -687,7 +670,6 @@ void flashloader_handler(void * stream, void * event) {
 
 
 void flashloader_init(void * stream) {
-	
 	printf("flashloader_init\n");
 
 	dect_fd = stream_get_fd(stream);
