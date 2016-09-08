@@ -21,6 +21,7 @@
 #include "natalie_utils.h"
 #include "dect.h"
 #include "app.h"
+#include "connection_init.h"
 
 
 //-------------------------------------------------------------
@@ -256,6 +257,8 @@ int setup_req(uint32_t termId, int pcmId, const char *cid) {
 	rsuint8 *buf;
 	char *cidBuf;
 	int i;
+
+	if(connection.radio != ACTIVE) return -1;
 
 	// Find the handset in our list of registereds
 	for(i = 0; i < MAX_NR_HANDSETS && handsets.terminal[i].id != termId; i++);
