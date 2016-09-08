@@ -13,13 +13,13 @@ enum {
 
 buffer_t * buffer_new(int size) {
 
-	buffer_t *b = (buffer_t *) calloc(sizeof(buffer_t), 1);
+	buffer_t *b = (buffer_t *) calloc(1, sizeof(buffer_t));
 
 	if (!b) {
 		exit_failure("malloc\n");
 	}
 	
-	b->buf_start = calloc(size, 1);
+	b->buf_start = malloc(size);
 	if (!b->buf_start) {
 		exit_failure("malloc\n");
 	}
@@ -35,7 +35,7 @@ buffer_t * buffer_new(int size) {
 }
 
 
-static int write_normal(buffer_t * self, uint8_t *input, int count) {
+static uint32_t write_normal(buffer_t * self, uint8_t *input, uint32_t count) {
 
 	/* Don't write beyond buffer boundary */
 	if ( self->data_end + count > self->buf_end ) {
@@ -50,7 +50,7 @@ static int write_normal(buffer_t * self, uint8_t *input, int count) {
 }
 
 
-static int write_wrapped(buffer_t * self, uint8_t *input, int count) {
+static uint32_t write_wrapped(buffer_t * self, uint8_t *input, uint32_t count) {
 
 	/* Don't write beyond start of data */
 	if ( self->data_end + count > self->data_start ) {
@@ -65,7 +65,7 @@ static int write_wrapped(buffer_t * self, uint8_t *input, int count) {
 }
 
 
-static int read_normal(buffer_t * self, uint8_t *buf, int count) {
+static uint32_t read_normal(buffer_t * self, uint8_t *buf, uint32_t count) {
 
 	/* Don't read beyond end of data */
 	if ( count > self->count) {
@@ -79,13 +79,17 @@ static int read_normal(buffer_t * self, uint8_t *buf, int count) {
 	return count;
 }
 
-static int read_wrapped(buffer_t * self, uint8_t *buf, int count) {
+static uint32_t read_wrapped(buffer_t * self, uint8_t *buf, uint32_t count) {
 	
 	/* Don't read beyond end of buffer */
 	if ( self->data_start + count > self->buf_end ) {
 		count = self->buf_end - self->data_start;
 	}
-		
+	/* Don't read beyond end of data */
+	if ( count > self->count) {
+		count = self->count;
+	}
+
 	memcpy(buf, self->data_start, count);
 	self->data_start += count;
 	self->count -= count;
@@ -94,7 +98,7 @@ static int read_wrapped(buffer_t * self, uint8_t *buf, int count) {
 }
 
 
-static int rewind_normal(buffer_t * self, int count) {
+static uint32_t rewind_normal(buffer_t * self, uint32_t count) {
 
 	/* Don't rewind beyond start of buffer */
 	if ( self->data_start - count < self->buf_start ) {
@@ -108,7 +112,7 @@ static int rewind_normal(buffer_t * self, int count) {
 }
 
 
-static int rewind_wrapped(buffer_t * self, int count) {
+static uint32_t rewind_wrapped(buffer_t * self, uint32_t count) {
 
 	/* Don't rewind beyond end of data */
 	if ( self->data_start - count < self->data_end ) {
@@ -122,9 +126,9 @@ static int rewind_wrapped(buffer_t * self, int count) {
 }
 
 
-int buffer_write(buffer_t * self, uint8_t *input, int count) {
+uint32_t buffer_write(buffer_t * self, uint8_t *input, uint32_t count) {
 	
-	int written = 0;
+	uint32_t written = 0;
 
 	if (self->count == self->buf_size) {
 		return 0;
@@ -162,9 +166,9 @@ int buffer_write(buffer_t * self, uint8_t *input, int count) {
 }
 
 
-int buffer_read(buffer_t * self, uint8_t *buf, int count) {
+uint32_t buffer_read(buffer_t * self, uint8_t *buf, uint32_t count) {
 
-	int read = 0;
+	uint32_t read = 0;
 
 	if ( self->state == NORMAL_STATE ) {
 
@@ -201,9 +205,9 @@ int buffer_read(buffer_t * self, uint8_t *buf, int count) {
 }
 
 
-int buffer_rewind(buffer_t * self, int count) {
+uint32_t buffer_rewind(buffer_t * self, uint32_t count) {
 
-	int rewinded = 0;
+	uint32_t rewinded = 0;
 
 	if ( self->state == NORMAL_STATE ) {
 		
@@ -240,7 +244,7 @@ int buffer_rewind(buffer_t * self, int count) {
 
 int buffer_dump(buffer_t * self) {
 	
-	int i, j, data_start, data_end;
+	uint32_t i, data_start, data_end;
 	
 	data_start = self->data_start - self->buf_start;
 	data_end = self->data_end - self->buf_start;
@@ -271,7 +275,7 @@ int buffer_dump(buffer_t * self) {
 }
 
 
-int buffer_size(buffer_t * self) {
+uint32_t buffer_size(buffer_t * self) {
 
 	return self->count;
 }
