@@ -179,10 +179,11 @@ static int handset_delete_cfm(busmail_t *m)
 			if(handsets.termCntExpt >= 0) handsets.termCntExpt--;
 			printf("A handset has been deleted. (Expects %d left)\n",
 				handsets.termCntExpt);
-			list_handsets();
 			break;
 		}
 	}
+
+	list_handsets();
 
 	return 0;
 }
