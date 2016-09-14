@@ -247,6 +247,7 @@ static int handset_registerd_cfm(busmail_t *m)
 	ie = ApiGetInfoElement((ApiInfoElementType*) msgIn->InfoElement,
 		msgIn->InfoElementLength, API_IE_CODEC_LIST);
 	if (ie && ie->IeLength) {
+		free(handsets.terminal[i].codecs);
 		handsets.terminal[i].codecs = malloc(ie->IeLength);
 		memcpy(handsets.terminal[i].codecs, ie->IeData, ie->IeLength);
 	}
