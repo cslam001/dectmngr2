@@ -198,12 +198,33 @@ static int handset_registerd_cfm(busmail_t *m)
 	ApiBasicTermCapsType *basicCaps;
 	ApiTermCapsType *caps;
 	ApiInfoElementType *ie;
-	int i;
+	int i, hasGap, isUle;
 
 	msgIn = (ApiFpMmRegistrationCompleteIndType*) &m->mail_header;
 	if(msgIn->Status != RSS_SUCCESS) return -1;
 	if(handsets.termCount == MAX_NR_HANDSETS) return -1;
 	if(!msgIn->TerminalId) return -1;
+	hasGap = 0;
+	isUle = 0;
+
+	/* Is the new registered device a voice handset or a
+	 * ULE sensor? We ignore ULE due to it's handled by
+	 * another daemon. */
+	ie = ApiGetInfoElement((ApiInfoElementType*) msgIn->InfoElement,
+		msgIn->InfoElementLength, API_IE_TERMCAPS);
+	if (ie && ie->IeLength) {
+		caps = (ApiTermCapsType*) ie->IeData;
+		if(caps->Byte4 & 0x02u) hasGap = 1;
+		if(caps->Byte4h & 0x3cu) isUle = 1;
+	}
+
+	if(isUle) {
+		printf("A ULE device has been added (ignoring)\n");
+		return perhaps_disable_radio();
+	}
+	else if(!hasGap) {
+		return delete_handset(msgIn->TerminalId);
+	}
 
 	/* Do we already know this handset? This may happen
 	 * if user registers same handset twice in a row. */
