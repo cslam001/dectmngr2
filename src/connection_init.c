@@ -16,6 +16,7 @@
 #include "event_base.h"
 #include "nvs.h"
 #include "app.h"
+#include "rawmailproxy.h"
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
@@ -184,6 +185,7 @@ static void connection_init_handler(packet_t *p) {
 	case API_FP_RESET_IND:														// External Dect has reseted
 		if (abs(time(NULL) - reset_ind) > 8) {
 			printf("External Dect found\n");
+			connection.hasInitialized = 0;
 			reset_ind = time(NULL);
 			connection.radio = INACTIVE;
 			ubus_send_string("radio", ubusStrInActive);
@@ -265,45 +267,33 @@ static void connection_init_handler(packet_t *p) {
 
 	case API_FP_GET_FW_VERSION_CFM:
 		{
+			ApiFpMmGetIdReqType req = {
+				.Primitive = API_FP_MM_GET_ID_REQ,
+			};
+			if(connection.hasInitialized) break;								// Do nothing if third party rawmail app use same command
 			fw_version_cfm(m);
-
-			// Query device RFPI when it's external
-			if(hwIsInternal) {
-				ApiFpCcFeaturesReqType req = {
-					.Primitive = API_FP_CC_FEATURES_REQ,
-					.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
-				};
-				printf("WRITE: API_FP_CC_FEATURES_REQ\n");
-				mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
-			}
-			else {
-				ApiProdTestReqType req = {
-					.Primitive = API_PROD_TEST_REQ,
-					.Opcode = PT_CMD_GET_ID
-				};
-				printf("WRITE: PT_CMD_GET_ID\n");
-				mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
-			}
+			printf("WRITE: API_FP_MM_GET_ID_REQ\n");
+			mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
 		}
 		break;
 
-	case API_PROD_TEST_CFM:
+	case API_FP_MM_GET_ID_CFM:
 		{
 			ApiFpCcFeaturesReqType req = {
 				.Primitive = API_FP_CC_FEATURES_REQ,
 				.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
 			};
-			ApiProdTestCfmType *prodResp =
-				(ApiProdTestCfmType*) &m->mail_header;
+			ApiFpMmGetIdCfmType *prodResp =
+				(ApiFpMmGetIdCfmType*) &m->mail_header;
+
+			if(connection.hasInitialized) break;								// Do nothing if third party rawmail app use same command
 
 			// We have read the device RFPI. Now verify it's correct
-			if(prodResp->Opcode == PT_CMD_GET_ID &&	
-					prodResp->ParameterLength == 5) {
-				memcpy(connection.rfpi, prodResp->Parameters, 5);
+			if(prodResp->Status == RSS_SUCCESS) {
+				memcpy(connection.rfpi, prodResp->Id, 5);
 				printf("Read RFPI from NVS: %2.2x %2.2x %2.2x %2.2x %2.2x\n",
-					prodResp->Parameters[0], prodResp->Parameters[1],
-					prodResp->Parameters[2], prodResp->Parameters[3],
-					prodResp->Parameters[4]);
+					prodResp->Id[0], prodResp->Id[1], prodResp->Id[2],
+					prodResp->Id[3], prodResp->Id[4]);
 				is_radio_prerequisites_ok();
 			}
 
@@ -313,6 +303,8 @@ static void connection_init_handler(packet_t *p) {
 		break;
 
 	case API_FP_CC_FEATURES_CFM:
+		if(connection.hasInitialized) break;									// Do nothing if third party rawmail app use same command
+
 		if(ubus_enable_receive()) {
 			break;
 		}
@@ -383,7 +375,7 @@ static void connection_init_handler(packet_t *p) {
 		break;
 
 	case API_FP_MM_REGISTRATION_COMPLETE_IND:
-		connection_set_registration(0);
+		if(connection.registration == ACTIVE) connection_set_registration(0);
 		break;
 	}
 }
@@ -445,6 +437,7 @@ void connection_init(void * bus) {
 	connection.radio = INACTIVE;
 	connection.registration = INACTIVE;
 	connection.uciRadioConf = RADIO_AUTO;
+	connection.hasInitialized = 0;
 }
 
 
@@ -467,6 +460,7 @@ int connection_set_radio(int onoff) {
 
 		ApiFpMmStartProtocolReqType r =  { .Primitive = API_FP_MM_START_PROTOCOL_REQ, };
 		mailProto.send(dect_bus, (uint8_t *)&r, sizeof(ApiFpMmStartProtocolReqType));
+		usleep(200000);
 		connection.radio = ACTIVE;												// No confirmation is replied
 		printf("Radio is active\n");
 		ubus_send_string("radio", ubusStrActive);
@@ -612,7 +606,10 @@ int perhaps_disable_radio(void) {
 	if(connection.registration == PENDING_INACTIVE) return 0;
 
 	if(connection.uciRadioConf == RADIO_AUTO) {
-		if(handsets.termCntExpt >= 0 &&
+		if(hasProxyClient()) {													// Are there any third party client connected?
+			return connection_set_radio(1);
+		}
+		else if(handsets.termCntExpt >= 0 &&
 				handsets.termCntExpt == handsets.termCount) {
 			return connection_set_radio(handsets.termCount > 0);
 		}

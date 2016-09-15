@@ -37,7 +37,7 @@ dectmngr2: prog.o boot.o preloader.o flashloader.o tty.o
 dectmngr2: error.o main.o util.o Crc.o app.o buffer.o natalie_utils.o
 dectmngr2: busmail.o nvs.o fifo.o list.o eap.o stream.o event.o
 dectmngr2: event_base.o external_call.o connection_init.o api_parser.o
-dectmngr2: handset.o rawmail.o debugger.o
+dectmngr2: handset.o rawmail.o debugger.o rawmailproxy.o
 	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -o $@ $^ $(LIBS)
 
 

@@ -41,7 +41,7 @@ static int notify_user_handets_changed(void) {
 		 * will soon be busy for a long time. Do the disable
 		 * BEFORE we send the "handset remove" event. */
 		if(handsets.termCount == 0 && connection.uciRadioConf == RADIO_AUTO &&
-				connection.radio == ACTIVE) {
+				connection.radio == ACTIVE && !hasProxyClient()) {
 			ubus_disable_receive();
 		}
 
@@ -147,6 +147,7 @@ static void got_handset_ipui(busmail_t *m)
 	if(i >= handsets.termCount) {
 		if(handsets.termCntExpt == -1) handsets.termCntExpt = handsets.termCount;
 		isListing = 0;
+		connection.hasInitialized = 1;
 		printf("Has updated the handset list\n");
 		ubus_reply_handset_list(0, &handsets);
 		notify_user_handets_changed();
@@ -343,6 +344,7 @@ static void got_registration_count(busmail_t *m)
 		ubus_reply_handset_list(0, &handsets);
 		notify_user_handets_changed();
 		isListing = 0;
+		connection.hasInitialized = 1;
 		perhaps_disable_radio();
 	}
 }

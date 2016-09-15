@@ -41,6 +41,7 @@
 #include "api_parser.h"
 #include "debugger.h"
 #include "main.h"
+#include "rawmailproxy.h"
 
 
 //-------------------------------------------------------------
@@ -166,6 +167,7 @@ void app_init(void *base __attribute__((unused)), config_t * conf __attribute__ 
 	connection_init(dect_bus);
 	external_call_init(dect_bus);
 	handset_init(dect_bus);
+	rawmailproxy_init(dect_bus);
 
 	setup_signal_handler();
 

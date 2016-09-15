@@ -27,6 +27,7 @@ struct connection_t {
 	uint8_t rfpi[5];									// Fixed part RFPI
 	char fwVersion[16];									// Dect stack version
 	char type[16];										// Country spectrum
+	int hasInitialized;									// True if stack has finished initialization
 };
 
 
