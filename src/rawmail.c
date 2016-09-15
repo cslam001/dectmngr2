@@ -36,10 +36,12 @@ int rawmail_send(void * _self, uint8_t *data, int size) {
 	int len, writtenLen, chunkSize;
 	struct rawmail_connection_t *bus;
 	struct timespec req, rem;
+	char str[32];
 
 	bus = (struct rawmail_connection_t *) _self;
 	writtenLen = 0;
-	util_dump(data, size, "[WRITE to intdect]");
+	snprintf(str, sizeof(str), "[Rawmail write %d]",  bus->fd);
+	util_dump(data, size, str);
 
 	while(writtenLen < size) {
 		chunkSize = size - writtenLen;
@@ -88,6 +90,7 @@ int rawmail_dispatch(void *_self) {
 	struct rawmail_connection_t *bus;
 	packet_t packet;
 	busmail_t *mail;
+	char str[32];
 	int len;
 
 	bus = (struct rawmail_connection_t *) _self;
@@ -109,7 +112,8 @@ int rawmail_dispatch(void *_self) {
 	}
 
 	packet.size = len + (uint8_t*) &mail->mail_header - (uint8_t*) packet.data;
-	util_dump((uint8_t*) &mail->mail_header, len, "[READ from intdect]");
+	snprintf(str, sizeof(str), "[Rawmail read %d]",  bus->fd);
+	util_dump((uint8_t*) &mail->mail_header, len, str);
 	list_call_each(bus->application_handlers, &packet);
 
 	return 0;
@@ -135,6 +139,7 @@ void* rawmail_new(int fd) {
 	bus->fd = fd;
 	bus->application_handlers = list_new();
 	bus->buf = buffer_new(PACKET_SIZE);
+	printf("New rawmail buffer for fd %d\n", fd);
 
 	return bus;
 }
