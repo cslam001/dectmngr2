@@ -13,6 +13,7 @@
 #include "event_base.h"
 #include "error.h"
 #include "connection_init.h"
+#include "rawmailproxy.h"
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
