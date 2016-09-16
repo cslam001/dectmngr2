@@ -348,6 +348,29 @@ static void connection_init_handler(packet_t *p) {
 		}
 		break;
 
+	case API_FP_MM_SET_ACCESS_CODE_CFM:											// PIN code for registering
+		{
+			ApiFpMmSetAccessCodeCfmType *resp =
+				(ApiFpMmSetAccessCodeCfmType*)  &m->mail_header;
+
+			if(resp->Status == RSS_SUCCESS) {
+				if(connection.accessCodeStatus == PENDING_ACTIVE) {
+					connection.accessCodeStatus = ACTIVE;
+				}
+
+				if(connection.registration == PENDING_ACTIVE) {
+					/* We need to work together here with third
+					 * party applications which as well may
+					 * activate registration. */
+					connection_set_registration(1);
+				}
+			}
+			else {
+				connection_set_registration(0);
+			}
+		}
+		break;
+
 	case API_FP_MM_SET_REGISTRATION_MODE_CFM:
 		{
 			ApiFpMmSetRegistrationModeCfmType *resp =
@@ -436,6 +459,7 @@ void connection_init(void * bus) {
 	 * reseted and thus we know initial state. */
 	connection.radio = INACTIVE;
 	connection.registration = INACTIVE;
+	connection.accessCodeStatus = INACTIVE;
 	connection.uciRadioConf = RADIO_AUTO;
 	connection.hasInitialized = 0;
 }
@@ -505,28 +529,50 @@ int connection_set_radio(int onoff) {
 // Enable registration of phones and arm a
 // timer for possible timeout.
 int connection_set_registration(int onoff) {
+	ApiFpMmSetRegistrationModeReqType setRegistr;
+	ApiFpMmSetAccessCodeReqType setAccessCode;
 	struct itimerspec newTimer;
-	int doSendMsg, res;
+	int res;
 
-	ApiFpMmSetRegistrationModeReqType m = {
-		.Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ,
-		.DeleteLastHandset = true
-	};
+	setRegistr.Primitive = API_FP_MM_SET_REGISTRATION_MODE_REQ;
+	setRegistr.DeleteLastHandset = true;
+	setAccessCode.Primitive = API_FP_MM_SET_ACCESS_CODE_REQ;
+	setAccessCode.Ac[0] = 0xffu;
+	setAccessCode.Ac[1] = 0xffu;
+	setAccessCode.Ac[2] = 0;
+	setAccessCode.Ac[3] = 0;
 
 	memset(&newTimer, 0, sizeof(newTimer));
-	doSendMsg = 0;
 
+	// Activate or inactivate registration?
 	if(onoff) {
 		connection.registration = PENDING_ACTIVE;
 
+		/* Was the radio in progress of becomming
+		 * turned off? Then abort that operation. */
 		if(connection.radio == PENDING_INACTIVE) connection.radio = ACTIVE;
 
-		if(connection.radio == ACTIVE) {
-			m.RegistrationEnabled = true;
-			newTimer.it_value.tv_sec = 180;
-			doSendMsg = 1;
+		// Do we need to set the PIN code first?
+		if(connection.accessCodeStatus != ACTIVE) {
+			printf("WRITE: API_FP_MM_SET_ACCESS_CODE_REQ\n");
+			connection.accessCodeStatus = PENDING_ACTIVE;
+			mailProto.send(dect_bus, (uint8_t *) &setAccessCode,
+				sizeof(setAccessCode));
 		}
+
+		/* The PIN code has been set. Is the radio on? Then
+		 * start registration and a timout timer. */
+		else if(connection.radio == ACTIVE) {
+			printf("WRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n");
+			newTimer.it_value.tv_sec = 180;
+			setRegistr.RegistrationEnabled = true;
+			mailProto.send(dect_bus, (uint8_t *) &setRegistr,
+				sizeof(ApiFpMmSetRegistrationModeReqType));
+		}
+
 		else {
+			/* The radio was off, we need to start it
+			 * before we can start registration. */
 			res = connection_set_radio(1);
 			if(res == -1) {
 				return -1;
@@ -537,16 +583,11 @@ int connection_set_registration(int onoff) {
 		}
 	}
 	else {
-		m.RegistrationEnabled = false;
+		// Turn of registration
+		connection.accessCodeStatus = INACTIVE;
 		connection.registration = PENDING_INACTIVE;
-		doSendMsg = 1;
-	}
-
-	/* Either active registration mode
-	 * or do nothing if we first need to
-	 * enable the radio. */
-	if(doSendMsg) {
-		mailProto.send(dect_bus, (uint8_t *)&m,
+		setRegistr.RegistrationEnabled = false;
+		mailProto.send(dect_bus, (uint8_t *) &setRegistr,
 			sizeof(ApiFpMmSetRegistrationModeReqType));
 	}
 

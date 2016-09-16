@@ -22,6 +22,7 @@ enum remote_bool_t {
 
 struct connection_t {
 	enum remote_bool_t registration;
+	enum remote_bool_t accessCodeStatus;				// PIN code for registering handsets
 	enum remote_bool_t radio;
 	enum uciRadioConf_t uciRadioConf;					// Should radio be always on/off/auto
 	uint8_t rfpi[5];									// Fixed part RFPI
