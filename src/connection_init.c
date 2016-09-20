@@ -499,6 +499,16 @@ int connection_set_radio(int onoff) {
 			sizeof(ApiFpMmStopProtocolReqType));
 		connection.radio = INACTIVE;											// No confirmation is replied
 
+		/* Kill third party proxy applications. They
+		 * too need to restart as we now will do.
+		 * Gigaset ULE has an own watchdog and will
+		 * restart by itself in 45 s (if in use). This
+		 * is crude and of course we need a better API! */
+		if(hasProxyClient()) {
+			system("/usr/bin/killall -q uleapp");
+			usleep(200000);
+		}
+
 		printf("Radio is inactive\n");
 		ubus_disable_receive();
 		ubus_send_string("radio", ubusStrInActive);
