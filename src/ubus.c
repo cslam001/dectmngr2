@@ -217,9 +217,9 @@ static void call_answer(struct ubus_request *req, int type, struct blob_attr *ms
 				connection.uciRadioConf = RADIO_ALWAYS_OFF;
 				connection_set_radio(0);
 			}
-			else if(strncmp(strVal, strAuto, sizeof(strAuto)) == 0) {
-				/* Radio should be on if we have registered
-				 * handsets, otherwise off. */
+			else {
+				/* Default to radio should be on if we have
+				 * registered handsets, otherwise off. */
 				printf("Uci setting radio active when handsets registered\n");
 				connection.uciRadioConf = RADIO_AUTO;
 			}
