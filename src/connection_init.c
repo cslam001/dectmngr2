@@ -407,11 +407,17 @@ static void connection_init_handler(packet_t *p) {
 
 //-------------------------------------------------------------
 // Timer handler, for turning of registration
-// after a delay if no handset has registered.
+// after a delay if no handset has registered
+// and turning off the radio after a delay as
+// well due to this application will exit(),
+// but first we need some time to send a reply
+// for the Ubus request that asked us to turn
+// the radio off.
 static void timer_handler(void *unused1 __attribute__((unused)), void *unused2 __attribute__((unused))) {
 	uint64_t expired;
 	int res;
 
+	ApiFpResetReqType reqReset = { .Primitive = API_FP_RESET_REQ, };
 	expired = 1;
 
 	res = read(timer_fd, &expired, sizeof(expired));
@@ -436,6 +442,23 @@ static void timer_handler(void *unused1 __attribute__((unused)), void *unused2 _
 	else if(connection.radio == INACTIVE && 
 			connection.registration != INACTIVE) {
 		connection_set_registration(0);
+	}
+	else if(connection.radio == PENDING_INACTIVE) {
+		/* By now we have had time to send a ubus reply
+		 * for radio off request. Do application exit. */
+		printf("Radio is inactive\n");
+		ubus_disable_receive();
+		ubus_send_string("radio", ubusStrInActive);
+		ubus_call_string("led.dect", "set", "state", "off", NULL);
+
+		/* After radio has been disabled we need
+		 * to reset the Dect firmware stack. It's
+		 * the only way to enable reactivation of
+		 * the radio, should the user want to. */
+		printf("Reseting stack...\n");
+		mailProto.send(dect_bus, (uint8_t *) &reqReset, sizeof(ApiFpResetReqType));
+		usleep(0);
+		if(hwIsInternal) exit_succes("App exit for complete stack reset...");
 	}
 }
 
@@ -471,6 +494,9 @@ void connection_init(void * bus) {
 int connection_set_radio(int onoff) {
 	struct itimerspec newTimer;
 
+	memset(&newTimer, 0, sizeof(newTimer));
+	newTimer.it_value.tv_sec = 1;
+
 	if(onoff) {
 		if(!is_radio_prerequisites_ok()) {
 			ubus_send_string("radio", ubusStrInActive);
@@ -493,7 +519,6 @@ int connection_set_radio(int onoff) {
 	else if(connection.radio == ACTIVE) {
 		ApiFpMmStopProtocolReqType reqOff = {
 			.Primitive = API_FP_MM_STOP_PROTOCOL_REQ, };
-		ApiFpResetReqType reqReset = { .Primitive = API_FP_RESET_REQ, };
 
 		mailProto.send(dect_bus, (uint8_t *) &reqOff,
 			sizeof(ApiFpMmStopProtocolReqType));
@@ -509,23 +534,13 @@ int connection_set_radio(int onoff) {
 			usleep(200000);
 		}
 
-		printf("Radio is inactive\n");
-		ubus_disable_receive();
-		ubus_send_string("radio", ubusStrInActive);
-		ubus_call_string("led.dect", "set", "state", "off", NULL);
-
-		/* After radio has been disabled we need
-		 * to reset the Dect firmware stack. It's
-		 * the only way to enable reactivation of
-		 * the radio, should the user want to. */
-		printf("Reseting stack...\n");
-		mailProto.send(dect_bus, (uint8_t *) &reqReset, sizeof(ApiFpResetReqType));
-		usleep(0);
-		if(hwIsInternal) exit_succes("App exit for complete stack reset...");
+		/* Schedule a delayed radio off due to our caller
+		 * needs some time to send a ubus reply. */
+		connection.radio = PENDING_INACTIVE;
+		newTimer.it_value.tv_sec = 0;
+		newTimer.it_value.tv_nsec = 1e7;
 	}
 
-	memset(&newTimer, 0, sizeof(newTimer));
-	newTimer.it_value.tv_sec = 1;
 	if(timerfd_settime(timer_fd, 0, &newTimer, NULL) == -1) {
 		perror("Error setting timer");
 	}
