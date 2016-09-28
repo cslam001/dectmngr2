@@ -49,6 +49,19 @@
 #include "dect.h"
 #include "connection_init.h"
 
+#include <Api/FpGeneral/ApiFpGeneral.h>
+#include <Api/FpCc/ApiFpCc.h>
+#include <Api/FpMm/ApiFpMm.h>
+#include <Api/RsStandard.h>
+
+
+//-------------------------------------------------------------
+const ApiFpMmSetRegistrationModeCfmType fakeRegistrationModeCfm = {
+	.Primitive = API_FP_MM_SET_REGISTRATION_MODE_CFM,
+	.Status = RSS_SUCCESS
+};
+
+
 
 //-------------------------------------------------------------
 static int listenFd;
@@ -62,16 +75,78 @@ static busmail_connection_t *proxy_int_bus;
 
 
 //-------------------------------------------------------------
+static void rawmail_rx_from_natalie(packet_t *p);
+
+
+
+//-------------------------------------------------------------
 // We receive rawmail data from third party app
 static void rawmail_rx_from_client(packet_t *p) {
+	busmail_t *mail, *fakeBusmail;
+	uint32_t len, fakeLen;
+	const void *fakeCfm;
 	uint8_t *data;
-	uint32_t len;
 
+	mail = (busmail_t*) p->data;
 	data = (uint8_t*) p->data + BUSMAIL_HEADER_SIZE;
 	len = p->size - BUSMAIL_HEADER_SIZE;
+	fakeCfm = NULL;
+	fakeLen = 0;
 
 	//printf("proxy to dect_bus len %d\n", len);
-	mailProto.send(proxy_int_bus, data, len);
+	switch (mail->mail_header) {
+		case API_FP_MM_SET_REGISTRATION_MODE_REQ: {
+			ApiFpMmSetRegistrationModeReqType *req = 
+				(ApiFpMmSetRegistrationModeReqType*) &mail->mail_header;
+
+			/* When a user presses the Dect button on the box
+			 * we get a collition of events. BOTH dectmngr2 and
+			 * the third party ULE application activates
+			 * registration. And BOTH maintain separate timers
+			 * for when to end the registration and control the
+			 * box LED. We try to alleviate the situation by
+			 * intercepting messages from the third party app.
+			 * If dectmngr2 has already started registration the
+			 * third party is blocked from doing it as well. It
+			 * can however still modify PIN code. */
+			if(connection.registration == INACTIVE) break;
+			fakeCfm = &fakeRegistrationModeCfm;
+			fakeLen = sizeof(fakeRegistrationModeCfm);
+			if(req->RegistrationEnabled) {
+				printf("Third party activates registration while busy, ");
+				printf("blocking it.\n");
+			}
+			else {
+				printf("Third party inactivates registration while busy, ");
+				printf("allowing it though, for consistent behaviour of ");
+				printf("LED and PIN.\n");
+				connection_set_registration(0);
+			}
+			break;
+		}
+		default:
+			break;
+	}
+
+
+	/* Send the rawmail through to Natalie or bounce
+	 * a fake reply back to third party app? */
+	if(fakeLen) {
+		packet_t *fakePacket = malloc(sizeof(packet_t));
+		fakePacket->fd = p->fd;
+		fakePacket->size = BUSMAIL_HEADER_SIZE + fakeLen;
+		fakeBusmail = (busmail_t*) fakePacket->data;
+		fakeBusmail->frame_header = BUSMAIL_PACKET_HEADER;
+		fakeBusmail->program_id = API_PROG_ID;
+		fakeBusmail->task_id = API_TASK_ID;
+		memcpy(&fakeBusmail->mail_header, fakeCfm, fakeLen);
+		printf("We fake a confirm to third party\n");
+		rawmail_rx_from_natalie(fakePacket);
+		free(fakePacket);
+	}
+	else {
+		mailProto.send(proxy_int_bus, data, len);
+	}
 }
 
 
