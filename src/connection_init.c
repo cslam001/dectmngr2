@@ -571,6 +571,11 @@ int connection_set_registration(int onoff) {
 
 	// Activate or inactivate registration?
 	if(onoff) {
+		if(!is_radio_prerequisites_ok()) {
+			ubus_send_string("radio", ubusStrInActive);
+			return -1;
+		}
+
 		connection.registration = PENDING_ACTIVE;
 
 		/* Was the radio in progress of becomming
