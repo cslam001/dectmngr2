@@ -181,6 +181,9 @@ static void rx_from_client(void *proxy_stream, void *event) {
 		/* Send packets from debugger to dect_bus */
 		rawmail_dispatch(proxy_bus);
 	}
+	else {
+		util_dump(event_data(event), event_count(event), "[Proxy discard]");
+	}
 }
 
 
