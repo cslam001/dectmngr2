@@ -53,6 +53,8 @@
 #include <Api/FpCc/ApiFpCc.h>
 #include <Api/FpMm/ApiFpMm.h>
 #include <Api/RsStandard.h>
+#include <Api/FpUle/ApiFpUle.h>
+
 
 
 //-------------------------------------------------------------
@@ -61,6 +63,12 @@ const ApiFpMmSetRegistrationModeCfmType fakeRegistrationModeCfm = {
 	.Status = RSS_SUCCESS
 };
 
+const ApiFpUleInitCfmType fakeUleInitCfm = {
+	.Primitive = API_FP_ULE_INIT_CFM,
+	.Status = RSS_SUCCESS,
+	.MaxUlpDevices = 58,
+	.UpLinkBuffers = 159
+};
 
 
 //-------------------------------------------------------------
@@ -72,24 +80,60 @@ static eap_connection_t *proxy_bus;
 static void *proxy_listen_stream;
 static busmail_connection_t *proxy_int_bus;
 
+static packet_t *packetBuf;
+static int packRd;
+static int packWr;
+static int packToken;
 
 
 //-------------------------------------------------------------
+static void rawmail_rx_from_client_enqueue(packet_t *p);
+static void dequeue_rawmail_from_client(void);
+static void rawmail_rx_from_client(packet_t *p);
 static void rawmail_rx_from_natalie(packet_t *p);
 
+
+
+
+//-------------------------------------------------------------
+static void rawmail_rx_from_client_enqueue(packet_t *p) {
+	if(packToken && packRd == packWr) {
+		printf("Proxy direct > dect\n");
+		rawmail_rx_from_client(p);
+	}
+	else {
+		printf("Proxy enqueue %d\n", packWr);
+		memcpy(packetBuf + packWr, p, sizeof(packet_t));
+		packWr++;
+		if(packWr == 10) packWr = 0;
+	}
+}
+
+
+//-------------------------------------------------------------
+static void dequeue_rawmail_from_client(void) {
+	if(packRd == packWr) return;
+	if(!packToken) return;
+
+	printf("Proxy dequeue %d\n", packRd);
+	rawmail_rx_from_client(packetBuf + packRd);
+	packRd++;
+	if(packRd == 10) packRd = 0;
+}
 
 
 //-------------------------------------------------------------
 // We receive rawmail data from third party app
 static void rawmail_rx_from_client(packet_t *p) {
 	busmail_t *mail, *fakeBusmail;
-	uint32_t len, fakeLen;
+	uint32_t lenPacket, fakeLen, lenMail;
 	const void *fakeCfm;
 	uint8_t *data;
 
 	mail = (busmail_t*) p->data;
 	data = (uint8_t*) p->data + BUSMAIL_HEADER_SIZE;
-	len = p->size - BUSMAIL_HEADER_SIZE;
+	lenPacket = p->size - BUSMAIL_HEADER_SIZE;
+lenMail = 0;
 	fakeCfm = NULL;
 	fakeLen = 0;
 
@@ -98,6 +142,8 @@ static void rawmail_rx_from_client(packet_t *p) {
 		case API_FP_MM_SET_REGISTRATION_MODE_REQ: {
 			ApiFpMmSetRegistrationModeReqType *req = 
 				(ApiFpMmSetRegistrationModeReqType*) &mail->mail_header;
+lenMail = sizeof(ApiFpMmSetRegistrationModeReqType);
+printf("Proxy API_FP_MM_SET_REGISTRATION_MODE_REQ packet %d len should be %d\n", lenPacket, lenMail);
 
 			/* When a user presses the Dect button on the box
 			 * we get a collition of events. BOTH dectmngr2 and
@@ -124,6 +170,72 @@ static void rawmail_rx_from_client(packet_t *p) {
 			}
 			break;
 		}
+
+		case API_FP_ULE_INIT_REQ:
+			fakeCfm = &fakeUleInitCfm;
+			fakeLen = sizeof(fakeUleInitCfm);
+lenMail = sizeof(ApiFpUleInitReqType);
+printf("Proxy API_FP_ULE_INIT_REQ packet %d len should be %d\n", lenPacket, lenMail);
+			break;
+
+		case API_FP_ULE_SET_FEATURES_REQ:
+lenMail = sizeof(ApiFpUleSetFeaturesReqType);
+printf("Proxy API_FP_ULE_SET_FEATURES_REQ packet %d len should be %d\n", lenPacket, lenMail);
+			break;
+
+		case API_FP_ULE_GET_REGISTRATION_COUNT_REQ:
+lenMail = sizeof(ApiFpUleGetRegistrationCountReqType);
+printf("Proxy API_FP_ULE_GET_REGISTRATION_COUNT_REQ packet %d len should be %d\n", lenPacket, lenMail);
+			break;
+
+		case API_FP_GET_FW_VERSION_REQ:
+lenMail = sizeof(ApiFpGetFwVersionReqType);
+printf("Proxy API_FP_GET_FW_VERSION_REQ packet %d len should be %d\n", lenPacket, lenMail);
+			break;
+
+		case API_FP_MM_GET_ACCESS_CODE_REQ:
+lenMail = sizeof(ApiFpMmGetAccessCodeReqType);
+printf("Proxy API_FP_MM_SET_ACCESS_CODE_REQ packet %d len should be %d\n", lenPacket, lenMail);
+			break;
+
+		case API_FP_MM_SET_ACCESS_CODE_REQ:
+lenMail = sizeof(ApiFpMmSetAccessCodeReqType);
+printf("Proxy API_FP_MM_SET_ACCESS_CODE_REQ packet %d len should be %d\n", lenPacket, lenMail);
+			break;
+
+		case API_FP_MM_START_PROTOCOL_REQ:
+lenMail = sizeof(ApiFpMmStartProtocolReqType);
+printf("Proxy API_FP_MM_START_PROTOCOL_REQ packet %d len should be %d\n", lenPacket, lenMail);
+			break;
+
+		case API_FP_ULE_SET_PVC_LEGACY_MODE_REQ:
+lenMail = sizeof(ApiFpUleSetPvcLegacyModeReqType);
+printf("Proxy API_FP_ULE_SET_PVC_LEGACY_MODE_REQ packet %d len should be %d\n", lenPacket, lenMail);
+			break;
+
+		case API_FP_ULE_GET_DEVICE_IPUI_REQ:
+lenMail = sizeof(ApiFpUleGetDeviceIpuiReqType);
+printf("Proxy API_FP_ULE_GET_DEVICE_IPUI_REQ packet %d len should be %d\n", lenPacket, lenMail);
+			break;
+
+		case API_FP_ULE_DATA_REQ: {
+			ApiFpUleDataReqType *req = (ApiFpUleDataReqType*) &mail->mail_header;
+lenMail = sizeof(ApiFpUleDataReqType) + req->Length - 1;
+printf("Proxy API_FP_ULE_DATA_REQ %d len should be %d\n", lenPacket, lenMail);
+			}
+			break;
+
+		case API_FP_ULE_DELETE_REGISTRATION_REQ:
+lenMail = sizeof(ApiFpUleDeleteRegistrationReqType);
+printf("Proxy API_FP_ULE_DELETE_REGISTRATION_REQ packet %d len should be %d\n", lenPacket, lenMail);
+			break;
+
+		case API_FP_MM_DELETE_REGISTRATION_REQ:
+lenMail = sizeof(ApiFpMmDeleteRegistrationReqType);
+printf("Proxy API_FP_MM_DELETE_REGISTRATION_REQ packet %d len should be %d\n", lenPacket, lenMail);
+			break;
+
+
 		default:
 			break;
 	}
@@ -144,9 +256,29 @@ static void rawmail_rx_from_client(packet_t *p) {
 		rawmail_rx_from_natalie(fakePacket);
 		free(fakePacket);
 	}
-	else {
-		mailProto.send(proxy_int_bus, data, len);
+	else if(lenMail) {
+		switch (mail->mail_header) {
+			case API_FP_MM_START_PROTOCOL_REQ:
+			case API_FP_MM_STOP_PROTOCOL_REQ:
+				/* We discard these mails from third party apps due
+				 * to they don't produce any confirm back. And they
+				 * are redundant. */
+				break;
+
+			default:
+packToken = 0;
+printf("Proxy token %d\n", packToken);
+			mailProto.send(proxy_int_bus, data, lenMail);
+IT LOOKS LIKE ULEAPP IGNORES TO WAIT FOR FpUleDtrInd
+BEFORE FIRST PACKET.
+AN EMPTY PACKET IS A CONFIGURATION REQUEST FROM SENSOR?
+SEND FAKE HANDSET PRESENT IND?
+			break;
+		}
 	}
+
+	lenPacket -= lenMail;
+	if(lenPacket) printf("Proxy packet remaining data %d -----------------------------------------------------------------------------\n", lenPacket);
 }
 
 
@@ -177,9 +309,11 @@ static void rx_from_client(void *proxy_stream, void *event) {
 	else if(connection.hasInitialized && connection.radio == ACTIVE) {
 		util_dump(event_data(event), event_count(event), "[Proxy read]");
 		rawmail_receive(proxy_bus, event);
+printf("Proxy token %d\n", packToken);
 
 		/* Send packets from debugger to dect_bus */
 		rawmail_dispatch(proxy_bus);
+printf("Proxy token %d\n", packToken);
 	}
 	else {
 		util_dump(event_data(event), event_count(event), "[Proxy discard]");
@@ -206,6 +340,10 @@ static void rawmail_rx_from_natalie(packet_t *p) {
 
 	//printf("proxy to third party app len %d\n", proxyPacket.size);
 	rawmail_send(proxy_bus, (uint8_t*) &proxyPacket, proxyPacket.size);
+
+packToken = 1;
+printf("Proxy token %d\n", packToken);
+dequeue_rawmail_from_client();
 }
 
 
@@ -237,9 +375,15 @@ static void proxy_listen_handler(void *dummy __attribute__ ((unused)), void *eve
 
 	/* Setup client rawmail connection */
 	proxy_bus = rawmail_new(proxyFd);
-	rawmail_add_handler(proxy_bus, rawmail_rx_from_client);
+//	rawmail_add_handler(proxy_bus, rawmail_rx_from_client);
+rawmail_add_handler(proxy_bus, rawmail_rx_from_client_enqueue);
 	client_connected = 1;
 	perhaps_disable_radio();
+
+	packetBuf = malloc(sizeof(packet_t)*20);
+	packRd = 0;
+	packWr = 0;
+	packToken = 1;
 }
 
 

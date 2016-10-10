@@ -26,6 +26,7 @@
 #include <Api/FpAudio/ApiFpAudio.h>
 #include <Api/RsStandard.h>
 #include <Api/Linux/ApiLinux.h>
+#include <Api/FpUle/ApiFpUle.h>
 #include "PtCmdDef.h"
 #include <dectshimdrv.h>
 
@@ -279,9 +280,9 @@ static void connection_init_handler(packet_t *p) {
 
 	case API_FP_MM_GET_ID_CFM:
 		{
-			ApiFpCcFeaturesReqType req = {
-				.Primitive = API_FP_CC_FEATURES_REQ,
-				.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
+			ApiFpUleInitReqType req = {
+				.Primitive = API_FP_ULE_INIT_REQ,
+				.MaxUlpDevices = 4
 			};
 			ApiFpMmGetIdCfmType *prodResp =
 				(ApiFpMmGetIdCfmType*) &m->mail_header;
@@ -296,6 +297,23 @@ static void connection_init_handler(packet_t *p) {
 					prodResp->Id[3], prodResp->Id[4]);
 				is_radio_prerequisites_ok();
 			}
+
+			printf("ule_start\n");
+			mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
+		}
+		break;
+
+	case API_FP_ULE_INIT_CFM:
+		{
+			ApiFpCcFeaturesReqType req = {
+				.Primitive = API_FP_CC_FEATURES_REQ,
+				.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
+			};
+			ApiFpUleInitCfmType *resp = (ApiFpUleInitCfmType*) &m->mail_header;
+
+			printf("ULE result: %d\n", resp->Status);
+			printf("ULE MaxUlpDevices: %d\n", resp->MaxUlpDevices);
+			printf("ULE UpLinkBuffers: %d\n", resp->UpLinkBuffers);
 
 			printf("WRITE: API_FP_CC_FEATURES_REQ\n");
 			mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
@@ -391,7 +409,7 @@ static void connection_init_handler(packet_t *p) {
 					ubus_send_string("registration", ubusStrInActive);
 					ubus_call_string("led.dect", "set", "state", 
 						(connection.radio == ACTIVE) ? "ok" : "off", NULL);
-					list_handsets();
+if(handsets.termCntEvntAdd || handsets.termCntEvntDel) list_handsets();
 				}
 			}
 		}
@@ -400,7 +418,20 @@ static void connection_init_handler(packet_t *p) {
 	case API_FP_MM_REGISTRATION_COMPLETE_IND:
 		if(connection.registration == ACTIVE) connection_set_registration(0);
 		break;
+
+	case API_FP_ULE_PVC_CONFIG_IND:
+		printf("API_FP_ULE_PVC_CONFIG_IND ----------------------------------------\n");
+		break;
+
+	case API_FP_ULE_PVC_PENDING_IND:
+		printf("API_FP_ULE_PVC_PENDING_IND ----------------------------------------\n");
+		break;
+
+	case API_FP_ULE_PVC_IWU_DATA_IND:
+		printf("API_FP_ULE_PVC_IWU_DATA_IND ---------------------------------------\n");
+		break;
 	}
+
 }
 
 
@@ -566,6 +597,8 @@ int connection_set_registration(int onoff) {
 	setAccessCode.Ac[1] = 0xffu;
 	setAccessCode.Ac[2] = 0;
 	setAccessCode.Ac[3] = 0;
+setAccessCode.Ac[2] = 0x55u;
+setAccessCode.Ac[3] = 0x55u;
 
 	memset(&newTimer, 0, sizeof(newTimer));
 
