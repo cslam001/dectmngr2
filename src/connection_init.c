@@ -45,14 +45,27 @@ typedef ApiFpCcSetFeaturesReqType ApiFpCcFeaturesReqType;
 #endif
 
 
-
 //-------------------------------------------------------------
+static const char strTypeUnknown[] = "unknown";
+static const char strTypeInval[] = "invalid";
+
 static const char *remote_bool_str[] = {										// String explanations of enum remote_bool_t
 	"unknown",
 	"pending active",
 	"active",
 	"pending inactive",
 	"inactive",
+};
+
+static const uint8_t invalidRfpis[][5] = {										// List of invalid RFPIs in FP
+	{ 0, 0, 0, 0, 0, },															// Null
+	{ 0xffu, 0xffu, 0xffu, 0xffu, 0xffu },										// Empty flash
+	{ 0x02u, 0x3fu, 0x90u, 0x00, 0xf8u }										// Duplicated address (several DG400 devices had the same)
+};
+
+static const uint8_t invalidRfpiRanges[][3] = {									// List of invalid RFPI ranges (first three bytes of full RFPI)
+	{ 0x02u, 0xc3u, 0x55u },													// Early pilot run of DG400
+	{ 0x02u, 0x3fu, 0x88u }														// Bad example from produciton document DG400
 };
 
 
@@ -68,7 +81,7 @@ static void *timer_stream;
 
 //-------------------------------------------------------------
 static void fw_version_cfm(busmail_t *m) {
-
+	const char strType[] = "DectType";
 	ApiFpGetFwVersionCfmType * p = (ApiFpGetFwVersionCfmType *) &m->mail_header;
 
 	printf("fw_version_cfm\n");
@@ -85,36 +98,37 @@ static void fw_version_cfm(busmail_t *m) {
 	
 	switch(p->DectType) {
 		case API_EU_DECT:
-			printf("DectType: API_EU_DECT\n");
+			printf("%s: API_EU_DECT\n", strType);
 			sprintf(connection.type, "EU");
 			break;
 		case API_US_DECT:
-			printf("DectType: API_US_DECT\n");
+			printf("%s: API_US_DECT\n", strType);
 			sprintf(connection.type, "US");
 			break;
 		case API_SA_DECT:
-			printf("DectType: API_SA_DECT\n");
+			printf("%s: API_SA_DECT\n", strType);
 			sprintf(connection.type, "SA");
 			break;
 		case API_TAIWAN_DECT:
-			printf("DectType: API_TAIWAN_DECT\n");
+			printf("%s: API_TAIWAN_DECT\n", strType);
 			sprintf(connection.type, "Taiwan");
 			break;
 		case API_CHINA_DECT:
-			printf("DectType: API_CHINA_DECT\n");
+			printf("%s: API_CHINA_DECT\n", strType);
 			sprintf(connection.type, "China");
 			break;
 		case API_THAILAND_DECT:
-			printf("DectType: API_THAILAND_DECT\n");
+			printf("%s: API_THAILAND_DECT\n", strType);
 			sprintf(connection.type, "Thailand");
 			break;
 		case API_DECT_TYPE_INVALID:
-			printf("DectType: invalid\n");
-			sprintf(connection.type, "invalid");
+			printf("%s: %s\n", strType, strTypeInval);
+			snprintf(connection.type, sizeof(strTypeInval), "%s", strTypeInval);
 			break;
 		default:
-			printf("DectType: unknown\n");
-			sprintf(connection.type, "unknown");
+			printf("%s: %s\n", strType, strTypeUnknown);
+			snprintf(connection.type, sizeof(strTypeUnknown),
+				"%s", strTypeUnknown);
 			break;
 	}
 
@@ -126,23 +140,173 @@ static void fw_version_cfm(busmail_t *m) {
 //-------------------------------------------------------------
 // Returns true if radio can start
 static int is_radio_prerequisites_ok(void) {
-	const uint8_t invalidRfpis[2][5] = {
-		{ 0, 0, 0, 0, 0, }, { 0xffu, 0xffu, 0xffu, 0xffu, 0xffu }
-	};
 	uint8_t nvramRfpi[5];
+	unsigned i;
+	int valid;
 
+	valid = 1;
+	
 	// Fetch RFPI from our filesystem
-	nvs_rfpi_patch(nvramRfpi);
+	if(nvs_rfpi_patch(nvramRfpi)) valid = 0;
 
 	// Does the RFPI in NVS look valid?
-	if(memcmp(connection.rfpi, nvramRfpi, 5) ||
-			memcmp(invalidRfpis[0], connection.rfpi, 5) == 0 ||
-			memcmp(invalidRfpis[1], connection.rfpi, 5) == 0) {
-		printf("Warning, incorrect RFPI in NVS! Radio can't be used!\n");
-		return 0;
+	if(memcmp(connection.rfpi, nvramRfpi, 5)) valid = 0;
+	for(i = 0; i < sizeof(invalidRfpis) / 5; i++) {
+		if(memcmp(invalidRfpis[i], nvramRfpi, 5) == 0) valid = 0;
+	}
+	for(i = 0; i < sizeof(invalidRfpiRanges) / 3; i++) {
+		if(memcmp(invalidRfpiRanges[i], nvramRfpi, 3) == 0) valid = 0;
 	}
 
-	return 1;
+	// Check Dect type (country). Has it been set?
+	if(strlen(connection.type) == 0) valid = 0;
+	if(strncmp(connection.type, strTypeUnknown, sizeof(connection.type)) == 0 ||
+			strncmp(connection.type, strTypeInval, sizeof(connection.type) == 0)) {
+		valid = 0;
+	}
+
+	if(valid) return 1;
+
+	printf("Warning, incorrect NVS settings! Radio can't be used!\n");
+	return 0;
+}
+
+
+
+//-------------------------------------------------------------
+// When external dect FP has an invalid RFPI we delete
+// it and uploads a new one (copy from nvram). 
+static int reprogram_rfpi(void) {
+	const char errmsg[] = "Invalid RFPI in nvram, can't reprogram RFPI!\n";
+	ApiProdTestReqType *req;
+	PtSetIdReqType *nvsRfpi;
+	uint8_t nvramRfpi[5];
+	unsigned i;
+	int res;
+
+	res = 0;
+
+	// Fetch RFPI from our filesystem
+	req = malloc(sizeof(ApiProdTestReqType) - 1 + sizeof(PtSetIdReqType));
+	if(!req || nvs_rfpi_patch(nvramRfpi)) {
+		res = -1;
+		goto out;
+	}
+	req->Primitive = API_PROD_TEST_REQ;
+	req->Opcode = PT_CMD_SET_ID;
+	req->ParameterLength = sizeof(PtSetIdReqType);
+	nvsRfpi = (PtSetIdReqType*) req->Parameters;
+
+	for(i = 0; i < sizeof(invalidRfpis) / 5; i++) {
+		if(memcmp(invalidRfpis[i], nvramRfpi, 5) == 0) {
+			res = -1;
+			printf(errmsg);
+			goto out;
+		}
+	}
+
+	for(i = 0; i < sizeof(invalidRfpiRanges) / 3; i++) {
+		if(memcmp(invalidRfpiRanges[i], nvramRfpi, 3) == 0) {
+			res = -1;
+			printf(errmsg);
+			goto out;
+		}
+	}
+
+	nvsRfpi->Id[0] = nvramRfpi[0];
+	nvsRfpi->Id[1] = nvramRfpi[1];
+	nvsRfpi->Id[2] = nvramRfpi[2];
+	nvsRfpi->Id[3] = nvramRfpi[3];
+	nvsRfpi->Id[4] = nvramRfpi[4];
+	printf("Reprograms RFPI in NVS to: %2.2x %2.2x %2.2x %2.2x %2.2x...\n",
+		nvsRfpi->Id[0], nvsRfpi->Id[1], nvsRfpi->Id[2],
+		nvsRfpi->Id[3], nvsRfpi->Id[4]);
+
+	mailProto.send(dect_bus, (uint8_t *) req,
+		sizeof(ApiProdTestReqType) - 1 + sizeof(PtSetIdReqType));
+out:
+	free(req);
+	return res;
+}
+
+
+
+//-------------------------------------------------------------
+// When external dect FP has an invalid RFPI we delete
+// it and uploads a new one (copy from nvram). 
+static int reprogram_clock_freq(void) {
+	PtSetFreqReqType *nvsFreq;
+	ApiProdTestReqType *req;
+	uint8_t nvramFreq[8];
+
+	// Fetch calibrated radio frequency from our filesystem
+	req = malloc(sizeof(ApiProdTestReqType) - 1 + sizeof(PtSetFreqReqType));
+	if(!req || nvs_freq_patch(nvramFreq)) {
+		free(req);
+		return -1;
+	}
+	req->Primitive = API_PROD_TEST_REQ;
+	req->Opcode = PT_CMD_SET_CLOCK_FREQUENCY;
+	req->ParameterLength = sizeof(PtSetFreqReqType);
+	nvsFreq = (PtSetFreqReqType*) req->Parameters;
+
+	// The value is byte swaped in nvram for some strange reason...
+	nvsFreq->Frequency = ((uint16_t) nvramFreq[7]) << 8 |
+		(uint16_t) nvramFreq[6];
+	printf("Reprograms radio calibrated freq in NVS to: %4.4x...\n",
+		nvsFreq->Frequency);
+
+	mailProto.send(dect_bus, (uint8_t *) req,
+		sizeof(ApiProdTestReqType) - 1 + sizeof(PtSetFreqReqType));
+	free(req);
+
+	return 0;
+}
+
+
+
+//-------------------------------------------------------------
+// Send request to Natalie to perform a warm soft reset.
+int dect_warm_reset(void) {
+	ApiFpResetReqType reqReset = { .Primitive = API_FP_RESET_REQ };
+	struct itimerspec newTimer;
+	
+	/* Kill third party proxy applications. They
+	 * too need to restart as we now will do.
+	 * Gigaset ULE has an own watchdog and will
+	 * restart by itself in 45 s (if in use). This
+	 * is crude and of course we need a better API! */
+	if(hasProxyClient()) {
+		system("/usr/bin/killall -q uleapp");
+		usleep(200000);
+	}
+
+	while(reset_ind && abs(time(NULL) - reset_ind) <= MIN_RESET_WAIT_TIME) {
+		printf("Please wait for reset...\n");
+		sleep(1);
+	}
+
+	printf("Radio is inactive\n");
+	ubus_disable_receive();
+	ubus_send_string("radio", ubusStrInActive);
+	ubus_call_string("led.dect", "set", "state", "off", NULL);
+
+	printf("Reseting stack...\n");
+	mailProto.send(dect_bus, (uint8_t *) &reqReset, sizeof(ApiFpResetReqType));
+	usleep(0);
+
+	/* Start a timer for when we expect to have
+	 * initialized Natalie dect. If it times out
+	 * something is wrong with Natalie firmware. */
+	memset(&newTimer, 0, sizeof(newTimer));
+	newTimer.it_value.tv_sec = MAX_RESET_INIT_TIME;
+	if(timerfd_settime(timer_fd, 0, &newTimer, NULL) == -1) {
+		perror("Error setting timer");
+	}
+
+	if(hwIsInternal) exit_succes("App exit for complete stack reset...");
+
+	return 0;
 }
 
 
@@ -183,8 +347,11 @@ static void connection_init_handler(packet_t *p) {
 	switch (m->mail_header) {
 
 	case API_FP_RESET_IND:														// External Dect has reseted
-		if (abs(time(NULL) - reset_ind) > 8) {
+		if (!reset_ind || abs(time(NULL) - reset_ind) > MIN_RESET_WAIT_TIME) {
 			printf("External Dect found\n");
+			memset(connection.rfpi, 0, 5);
+			memset(connection.fwVersion, 0, sizeof(connection.fwVersion));
+			memset(connection.type, 0, sizeof(connection.type));
 			connection.hasInitialized = 0;
 			reset_ind = time(NULL);
 			connection.radio = INACTIVE;
@@ -277,30 +444,96 @@ static void connection_init_handler(packet_t *p) {
 		}
 		break;
 
-	case API_FP_MM_GET_ID_CFM:
-		{
-			ApiFpCcFeaturesReqType req = {
-				.Primitive = API_FP_CC_FEATURES_REQ,
-				.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
-			};
-			ApiFpMmGetIdCfmType *prodResp =
-				(ApiFpMmGetIdCfmType*) &m->mail_header;
+	case API_FP_MM_GET_ID_CFM: {
+		ApiFpCcFeaturesReqType req = {
+			.Primitive = API_FP_CC_FEATURES_REQ,
+			.ApiFpCcFeature = API_FP_CC_EXTENDED_TERMINAL_ID_SUPPORT
+		};
 
-			if(connection.hasInitialized) break;								// Do nothing if third party rawmail app use same command
+		ApiFpMmGetIdCfmType *prodResp =
+			(ApiFpMmGetIdCfmType*) &m->mail_header;
 
-			// We have read the device RFPI. Now verify it's correct
-			if(prodResp->Status == RSS_SUCCESS) {
-				memcpy(connection.rfpi, prodResp->Id, 5);
-				printf("Read RFPI from NVS: %2.2x %2.2x %2.2x %2.2x %2.2x\n",
-					prodResp->Id[0], prodResp->Id[1], prodResp->Id[2],
-					prodResp->Id[3], prodResp->Id[4]);
-				is_radio_prerequisites_ok();
+		if(connection.hasInitialized) break;									// Do nothing if third party rawmail app use same command
+
+		// We have read the device RFPI. Now verify it's correct
+		if(prodResp->Status == RSS_SUCCESS) {
+			memcpy(connection.rfpi, prodResp->Id, 5);
+			printf("Read RFPI from NVS: %2.2x %2.2x %2.2x %2.2x %2.2x\n",
+				prodResp->Id[0], prodResp->Id[1], prodResp->Id[2],
+				prodResp->Id[3], prodResp->Id[4]);
+
+			if(is_radio_prerequisites_ok()) {
+				printf("WRITE: API_FP_CC_FEATURES_REQ\n");
+				mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
 			}
 
-			printf("WRITE: API_FP_CC_FEATURES_REQ\n");
-			mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
+			/* The NVS RFPI was found to be invalid, we try to
+			 * repair it now by activating factory setup. */
+			else if(reprogram_clock_freq()) {
+				printf("Failed reprograming clock frequency in FP!\n");
+			}
 		}
-		break;
+		else {
+			exit_failure("Failed ID query");
+		}
+	}
+	break;
+
+	case API_PROD_TEST_CFM: {													// Factory production commands; only used once, when external dect flash is empty.
+		ApiProdTestCfmType *prodResp = (ApiProdTestCfmType*) &m->mail_header;
+		int factorySetup, needReset;
+
+		factorySetup = 1;
+		needReset = 0;
+
+		switch(prodResp->Opcode) {												// Urg, production commands use neasted opcodes!
+			case PT_CMD_SET_CLOCK_FREQUENCY: {									// We have reprogrammed external dect radio calibration clock
+				PtSetFreqCfmType *ptResp =
+					(PtSetFreqCfmType*) prodResp->Parameters;
+
+				if(prodResp->ParameterLength == sizeof(PtSetFreqCfmType) &&
+						ptResp->Status == RSS_SUCCESS) {						
+					if(reprogram_rfpi()) {
+						printf("Failed reprograming RFPI in FP!\n");
+						needReset = 1;
+					}
+				}
+				else {
+					printf("Failed reprograming clock frequency in FP!\n");
+				}
+			}
+			break;
+
+			case PT_CMD_SET_ID: {												// We have reprogrammed Natalie RFPI
+				PtSetIdCfmType *ptResp =
+					(PtSetIdCfmType*) prodResp->Parameters;
+
+				if(prodResp->ParameterLength == sizeof(PtSetIdCfmType) &&
+						ptResp->Status == RSS_SUCCESS) {
+					needReset = 1;
+					factorySetup = 0;
+				}
+				else {
+					printf("Failed reprograming RFPI in FP!\n");
+				}
+			}
+			break;
+
+			default:
+				needReset = 1;
+				break;
+		}
+
+		/* When factory production setup has completed
+		 * we reset the Dect chip and start all over again. */
+		if(needReset) {
+			dect_warm_reset();
+		}
+		else if(!factorySetup) {
+			exit_failure("Failed factory production");
+		}
+	}
+	break;
 
 	case API_FP_CC_FEATURES_CFM:
 		if(connection.hasInitialized) break;									// Do nothing if third party rawmail app use same command
@@ -417,7 +650,6 @@ static void timer_handler(void *unused1 __attribute__((unused)), void *unused2 _
 	uint64_t expired;
 	int res;
 
-	ApiFpResetReqType reqReset = { .Primitive = API_FP_RESET_REQ, };
 	expired = 1;
 
 	res = read(timer_fd, &expired, sizeof(expired));
@@ -445,20 +677,15 @@ static void timer_handler(void *unused1 __attribute__((unused)), void *unused2 _
 	}
 	else if(connection.radio == PENDING_INACTIVE) {
 		/* By now we have had time to send a ubus reply
-		 * for radio off request. Do application exit. */
-		printf("Radio is inactive\n");
-		ubus_disable_receive();
-		ubus_send_string("radio", ubusStrInActive);
-		ubus_call_string("led.dect", "set", "state", "off", NULL);
-
-		/* After radio has been disabled we need
+		 * for radio off request. Do application exit.
+		 * After radio has been disabled we need
 		 * to reset the Dect firmware stack. It's
 		 * the only way to enable reactivation of
 		 * the radio, should the user want to. */
-		printf("Reseting stack...\n");
-		mailProto.send(dect_bus, (uint8_t *) &reqReset, sizeof(ApiFpResetReqType));
-		usleep(0);
-		if(hwIsInternal) exit_succes("App exit for complete stack reset...");
+		dect_warm_reset();
+	}
+	else if(!connection.hasInitialized) {
+		printf("Warning, timeout initializing dect\n");
 	}
 }
 
@@ -466,6 +693,8 @@ static void timer_handler(void *unused1 __attribute__((unused)), void *unused2 _
 
 //-------------------------------------------------------------
 void connection_init(void * bus) {
+	struct itimerspec newTimer;
+
 	dect_bus = bus;
 	mailProto.add_handler(bus, connection_init_handler);
 
@@ -477,6 +706,15 @@ void connection_init(void * bus) {
 	timer_stream = stream_new(timer_fd);
 	stream_add_handler(timer_stream, 0, timer_handler);
 	event_base_add_stream(timer_stream);
+
+	/* Start a timer for when we expect to have
+	 * initialized Natalie dect. If it times out
+	 * something is wrong with Natalie firmware. */
+	memset(&newTimer, 0, sizeof(newTimer));
+	newTimer.it_value.tv_sec = MAX_RESET_INIT_TIME;
+	if(timerfd_settime(timer_fd, 0, &newTimer, NULL) == -1) {
+		perror("Error setting timer");
+	}
 
 	/* At startup of dectmngr the dect chip is
 	 * reseted and thus we know initial state. */
@@ -523,16 +761,6 @@ int connection_set_radio(int onoff) {
 		mailProto.send(dect_bus, (uint8_t *) &reqOff,
 			sizeof(ApiFpMmStopProtocolReqType));
 		connection.radio = INACTIVE;											// No confirmation is replied
-
-		/* Kill third party proxy applications. They
-		 * too need to restart as we now will do.
-		 * Gigaset ULE has an own watchdog and will
-		 * restart by itself in 45 s (if in use). This
-		 * is crude and of course we need a better API! */
-		if(hasProxyClient()) {
-			system("/usr/bin/killall -q uleapp");
-			usleep(200000);
-		}
 
 		/* Schedule a delayed radio off due to our caller
 		 * needs some time to send a ubus reply. */
