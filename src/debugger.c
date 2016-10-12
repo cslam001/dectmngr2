@@ -88,9 +88,7 @@ static void rx_from_debugger(void *debugger_stream, void *event) {
 		
 		/* Connection closed */
 		printf("debugger closed connection\n");
-		if (close(debuggerFd) == -1) {
-			exit_failure("close");
-		}
+		if (close(debuggerFd) == -1) exit_failure("close");
 					
 		list_delete(debugger_list, (void*) debuggerFd);
 
@@ -126,15 +124,15 @@ static void busmail_rx_from_natalie(packet_t *p) {
 // copies it to the (internal+external) common Busmail protocol
 // parser.
 static void raw_rx_from_natalie(void *stream __attribute__ ((unused)), void *event) {
-	if(!debugger_bus) return;
+	if(!debug_int_bus) return;
 
-	if (busmail_receive(debugger_bus, event) < 0) {
+	if (busmail_receive(debug_int_bus, event) < 0) {
 		printf("busmail debug buffer full\n");
 	}
 	
 	/* Process whole packets in buffer. The previously registered
 	   callback will be called for application frames */
-	busmail_dispatch(debugger_bus);
+	busmail_dispatch(debug_int_bus);
 }
 
 
