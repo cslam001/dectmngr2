@@ -178,7 +178,7 @@ static void rx_from_client(void *proxy_stream, void *event) {
 		util_dump(event_data(event), event_count(event), "[Proxy read]");
 		rawmail_receive(proxy_bus, event);
 
-		/* Send packets from debugger to dect_bus */
+		/* Send packets from third party to dect_bus */
 		rawmail_dispatch(proxy_bus);
 	}
 	else {
