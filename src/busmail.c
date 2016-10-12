@@ -429,7 +429,7 @@ void busmail_add_handler(void * _self , void (*app_handler)(packet_t *)) {
 
 void * busmail_new(int fd) {
 
-	busmail_connection_t * bus = (busmail_connection_t *) calloc(sizeof(busmail_connection_t), 1);
+	busmail_connection_t * bus = (busmail_connection_t *) calloc(1, sizeof(busmail_connection_t));
 
 	bus->fd = fd;
 	bus->application_handlers = list_new();
