@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <sys/timerfd.h>
 #include <sys/ioctl.h>
+#include <syslog.h>
 
 
 #include "connection_init.h"
@@ -63,7 +64,7 @@ static const uint8_t invalidRfpis[][5] = {										// List of invalid RFPIs in 
 	{ 0x02u, 0x3fu, 0x90u, 0x00, 0xf8u }										// Duplicated address (several DG400 devices had the same)
 };
 
-static const uint8_t invalidRfpiRanges[][3] = {									// List of invalid RFPI ranges (first three bytes of full RFPI)
+static const uint8_t invalidRfpiRanges[][3] = {									// List of blacklisted RFPI ranges (first three bytes of full RFPI)
 	{ 0x02u, 0xc3u, 0x55u },													// Early pilot run of DG400
 	{ 0x02u, 0x3fu, 0x88u }														// Bad example from produciton document DG400
 };
@@ -93,6 +94,7 @@ static void fw_version_cfm(busmail_t *m) {
 	}
 
 	printf("VersionHex %x\n", (unsigned int)p->VersionHex);
+	syslog(LOG_INFO, "Firmware version %x\n", (unsigned int) p->VersionHex);
 	snprintf(connection.fwVersion, sizeof(connection.fwVersion),
 		"%x", (unsigned int) p->VersionHex);
 	
@@ -168,6 +170,7 @@ static int is_radio_prerequisites_ok(void) {
 	if(valid) return 1;
 
 	printf("Warning, incorrect NVS settings! Radio can't be used!\n");
+	syslog(LOG_WARNING, "Warning, incorrect NVS settings! Radio can't be used!");
 	return 0;
 }
 
@@ -177,7 +180,8 @@ static int is_radio_prerequisites_ok(void) {
 // When external dect FP has an invalid RFPI we delete
 // it and uploads a new one (copy from nvram). 
 static int reprogram_rfpi(void) {
-	const char errmsg[] = "Invalid RFPI in nvram, can't reprogram RFPI!\n";
+	const char errmsg1[] = "Invalid RFPI in nvram, won't reprogram RFPI!\n";
+	const char errmsg2[] = "Invalid RFPI range in nvram, won't reprogram RFPI!\n";
 	ApiProdTestReqType *req;
 	PtSetIdReqType *nvsRfpi;
 	uint8_t nvramRfpi[5];
@@ -200,7 +204,8 @@ static int reprogram_rfpi(void) {
 	for(i = 0; i < sizeof(invalidRfpis) / 5; i++) {
 		if(memcmp(invalidRfpis[i], nvramRfpi, 5) == 0) {
 			res = -1;
-			printf(errmsg);
+			printf(errmsg1);
+			syslog(LOG_WARNING, errmsg1);
 			goto out;
 		}
 	}
@@ -208,7 +213,8 @@ static int reprogram_rfpi(void) {
 	for(i = 0; i < sizeof(invalidRfpiRanges) / 3; i++) {
 		if(memcmp(invalidRfpiRanges[i], nvramRfpi, 3) == 0) {
 			res = -1;
-			printf(errmsg);
+			printf(errmsg2);
+			syslog(LOG_WARNING, errmsg2);
 			goto out;
 		}
 	}
@@ -349,6 +355,7 @@ static void connection_init_handler(packet_t *p) {
 	case API_FP_RESET_IND:														// External Dect has reseted
 		if (!reset_ind || abs(time(NULL) - reset_ind) > MIN_RESET_WAIT_TIME) {
 			printf("External Dect found\n");
+			syslog(LOG_INFO, "External Dect found");
 			memset(connection.rfpi, 0, 5);
 			memset(connection.fwVersion, 0, sizeof(connection.fwVersion));
 			memset(connection.type, 0, sizeof(connection.type));
@@ -370,6 +377,7 @@ static void connection_init_handler(packet_t *p) {
 				(ApiLinuxInitGetSystemInfoCfmType*) &m->mail_header;
 
 			printf("Internal Dect found\n");
+			syslog(LOG_INFO, "Internal Dect found");
 			if(resp->NvsSize != DECT_NVS_SIZE) {
 				exit_failure("Invalid NVS size from driver, something is wrong!\n");
 			}
@@ -399,6 +407,7 @@ static void connection_init_handler(packet_t *p) {
 				}
 				else {
 					printf("Error initializing Dect with NVS\n");
+					syslog(LOG_WARNING, "Error initializing Dect with NVS");
 				}
 				free(req);
 			}
@@ -471,6 +480,7 @@ static void connection_init_handler(packet_t *p) {
 			 * repair it now by activating factory setup. */
 			else if(reprogram_clock_freq()) {
 				printf("Failed reprograming clock frequency in FP!\n");
+				syslog(LOG_WARNING, "Failed reprograming clock frequency in FP!");
 			}
 		}
 		else {
@@ -495,11 +505,13 @@ static void connection_init_handler(packet_t *p) {
 						ptResp->Status == RSS_SUCCESS) {						
 					if(reprogram_rfpi()) {
 						printf("Failed reprograming RFPI in FP!\n");
+						syslog(LOG_WARNING, "Failed reprograming RFPI in FP!");
 						needReset = 1;
 					}
 				}
 				else {
 					printf("Failed reprograming clock frequency in FP!\n");
+					syslog(LOG_WARNING, "Failed reprograming clock frequency in FP!");
 				}
 			}
 			break;
@@ -515,6 +527,7 @@ static void connection_init_handler(packet_t *p) {
 				}
 				else {
 					printf("Failed reprograming RFPI in FP!\n");
+					syslog(LOG_WARNING, "Failed reprograming RFPI in FP!");
 				}
 			}
 			break;
@@ -615,12 +628,14 @@ static void connection_init_handler(packet_t *p) {
 				if(connection.registration == PENDING_ACTIVE) {
 					connection.registration = ACTIVE;
 					printf("Registration is active\n");
+					syslog(LOG_INFO, "Registration is active");
 					ubus_send_string("registration", ubusStrActive);			// Send ubus event
 					ubus_call_string("led.dect", "set", "state", "notice", NULL);// Light up box LED
 				}
 				else if(connection.registration == PENDING_INACTIVE) {
 					connection.registration = INACTIVE;
 					printf("Registration is inactive\n");
+					syslog(LOG_INFO, "Registration is inactive");
 					ubus_send_string("registration", ubusStrInActive);
 					ubus_call_string("led.dect", "set", "state", 
 						(connection.radio == ACTIVE) ? "ok" : "off", NULL);
@@ -686,6 +701,7 @@ static void timer_handler(void *unused1 __attribute__((unused)), void *unused2 _
 	}
 	else if(!connection.hasInitialized) {
 		printf("Warning, timeout initializing dect\n");
+		syslog(LOG_WARNING, "Warning, timeout initializing");
 	}
 }
 

@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <syslog.h>
+
 
 
 #include "main.h"
@@ -40,6 +42,9 @@ int main(int argc, char * argv[]) {
 	if ( check_args(argc, argv, &config) < 0 ) {
 		exit(EXIT_FAILURE);
 	}
+
+	openlog("dect manager", 0, LOG_DAEMON);
+	syslog(LOG_NOTICE, "Startup");
 
 	if(timeSinceInit()) exit(EXIT_FAILURE);
 

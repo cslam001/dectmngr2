@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <syslog.h>
 
 #include "handset.h"
 #include "busmail.h"
@@ -323,6 +324,7 @@ static void got_registration_count(busmail_t *m)
 	memset(handsets.terminal, 0, sizeof(struct terminal_t) * MAX_NR_HANDSETS);
 	printf("There are %d registered handsets (expected %d)\n",
 		handsets.termCount, handsets.termCntExpt);
+	syslog(LOG_INFO, "There are %d registered handsets", handsets.termCount);
 
 	for(i = 0 ; i < resp->TerminalIdCount; i++) {
 		handsets.terminal[i].id = resp->TerminalId[i];
