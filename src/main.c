@@ -43,7 +43,7 @@ int main(int argc, char * argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	openlog("dect manager", 0, LOG_DAEMON);
+	openlog("dectmanager", 0, LOG_DAEMON);
 	syslog(LOG_NOTICE, "Startup");
 
 	if(timeSinceInit()) exit(EXIT_FAILURE);
