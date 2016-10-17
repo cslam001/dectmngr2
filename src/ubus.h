@@ -3,20 +3,15 @@
 #define DECTMNGR_UBUS_H
 
 #include <time.h>
+
+#ifdef WITH_UBUS
 #include <libubus.h>
+#endif
 
 #include "util.h"
 #include "handset.h"
 
 //-------------------------------------------------------------
-struct querier_t {
-	int inUse;												// Free or busy?
-	struct timespec timeStamp;								// Timestamp of request
-	struct ubus_request_data req;
-	struct ubus_context *ubus_ctx;
-};
-
-
 extern const char ubusSenderPath[];
 extern const char ubusStrActive[];
 extern const char ubusStrInActive[];

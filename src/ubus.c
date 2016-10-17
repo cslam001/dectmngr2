@@ -52,6 +52,14 @@ enum {
 };
 
 
+struct querier_t {
+	int inUse;																	// Free or busy?
+	struct timespec timeStamp;													// Timestamp of request
+	struct ubus_request_data req;
+	struct ubus_context *ubus_ctx;
+};
+
+
 static int ubus_request_state(struct ubus_context *ubus_ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *methodName, struct blob_attr *msg);
 static int ubus_request_handset(struct ubus_context *ubus_ctx, struct ubus_object *obj,

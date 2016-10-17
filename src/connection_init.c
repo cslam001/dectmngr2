@@ -6,7 +6,9 @@
 #include <sys/timerfd.h>
 #include <sys/ioctl.h>
 #include <syslog.h>
-
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 
 #include "connection_init.h"
 #include "busmail.h"
@@ -360,6 +362,7 @@ static void connection_init_handler(packet_t *p) {
 			memset(connection.fwVersion, 0, sizeof(connection.fwVersion));
 			memset(connection.type, 0, sizeof(connection.type));
 			connection.hasInitialized = 0;
+			handsets.termCntExpt = -1;
 			reset_ind = time(NULL);
 			connection.radio = INACTIVE;
 			ubus_send_string("radio", ubusStrInActive);

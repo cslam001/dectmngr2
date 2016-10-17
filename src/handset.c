@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <syslog.h>
+#include <stdlib.h>
 
 #include "handset.h"
 #include "busmail.h"
@@ -290,7 +291,7 @@ int list_handsets(void)
 
 	// Only issue one listing at a time
 	needListing = isListing;
-	if(isListing) return 0;
+	if(isListing && connection.hasInitialized) return 0;
 	isListing = 1;
 
 	printf("Querying number of registered handsets (expects %d)\n",
