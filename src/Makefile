@@ -27,10 +27,14 @@ CFLAGS += -Wextra -std=gnu99
 	$(CC) -c $(CFLAGS) $(INCLUDE_PATHS) -o $@ $<
 
 
-# Ability to build without ubus etc. for Sercomm
+# Ability to build without ubus etc. for factory production
+ifdef OPENWRTVERSION
 CFLAGS += -DWITH_UBUS
 LIBS += -lubox -lubus
 dectmngr2: ubus.o
+else
+dectmngr2: ubus-dummy.o
+endif
 
 
 dectmngr2: prog.o boot.o preloader.o flashloader.o tty.o

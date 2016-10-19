@@ -55,7 +55,7 @@ static uint8_t * make_tx_packet(uint8_t * tx, void * packet, int data_size) {
 
 
 static void send_packet(void * data, int data_size, int fd) {
-
+  const char dummy[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
   int tx_size = data_size + BUSMAIL_PACKET_OVER_HEAD;
   int len, writtenLen, chunkSize;
   uint8_t * tx = malloc(tx_size);
@@ -75,6 +75,13 @@ static void send_packet(void * data, int data_size, int fd) {
 		
     writtenLen += len;
   }
+
+  /* Pad packet with empty dummy data due to the Busmail
+   * reset command otherwise sometimes fails. Unknown
+   * why. Perhaps chip doesn't flush input? We can't do this
+   * in dect_warm_reset() due to a debugger or third party
+   * appliation can send same command as well. */
+  write(fd, &dummy, sizeof(dummy));
 
   if(tty_drain(fd)) perror("Error draining to external Dect");
 
@@ -429,7 +436,7 @@ void busmail_add_handler(void * _self , void (*app_handler)(packet_t *)) {
 
 void * busmail_new(int fd) {
 
-	busmail_connection_t * bus = (busmail_connection_t *) calloc(sizeof(busmail_connection_t), 1);
+	busmail_connection_t * bus = (busmail_connection_t *) calloc(1, sizeof(busmail_connection_t));
 
 	bus->fd = fd;
 	bus->application_handlers = list_new();

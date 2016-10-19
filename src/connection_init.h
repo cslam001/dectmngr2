@@ -5,6 +5,9 @@
 #include <stdint.h>
 
 
+#define MIN_RESET_WAIT_TIME		5						// Minimum time which must elapse between chip resets
+#define MAX_RESET_INIT_TIME		11						// Maximum time we allow for Natalie initialization
+
 enum uciRadioConf_t {
 	RADIO_ALWAYS_OFF,
 	RADIO_ALWAYS_ON,

@@ -311,7 +311,7 @@ static void rx_from_client(void *proxy_stream, void *event) {
 		rawmail_receive(proxy_bus, event);
 printf("Proxy token %d\n", packToken);
 
-		/* Send packets from debugger to dect_bus */
+		/* Send packets from third party to dect_bus */
 		rawmail_dispatch(proxy_bus);
 printf("Proxy token %d\n", packToken);
 	}
