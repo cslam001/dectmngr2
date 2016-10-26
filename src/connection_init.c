@@ -921,7 +921,7 @@ int start_internal_dect(void) {
 
 	close(shimFd);
 
-	minPktDelay = 5000LL;														// Minimum delay in usec between transmitted packets
+	minPktDelay = 10000LL;														// Minimum delay in usec between transmitted packets
 	mailProto.conf(dect_bus, MIN_PKT_DELAY, &minPktDelay);
 
 	printf("WRITE: API_LINUX_INIT_GET_SYSTEM_INFO_REQ\n");
