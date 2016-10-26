@@ -26,6 +26,8 @@ struct rawmail_connection_t {
 	int fd;
 	buffer_t * buf;
 	void *application_handlers;
+	int64_t prevTxTimestamp;													// Timestamp of last transmitt
+	int64_t minPktDelay;														// Minimum delay in usec between transmitted packets
 };
 
 
@@ -35,6 +37,7 @@ struct rawmail_connection_t {
 int rawmail_send(void * _self, uint8_t *data, int size) {
 	int len, writtenLen, chunkSize;
 	struct rawmail_connection_t *bus;
+	int64_t now, timeSincePrevTx;
 	struct timespec req, rem;
 	char str[32];
 
@@ -43,6 +46,20 @@ int rawmail_send(void * _self, uint8_t *data, int size) {
 	snprintf(str, sizeof(str), "[Rawmail write %d]",  bus->fd);
 	util_dump(data, size, str);
 
+
+	/* Workaround for kernel code that does not seem to handle
+	 * multiple messages in the same read() call. This sleep
+	 * introduces a delay so that the current message hopefully
+	 * makes it into the kernel alone... */
+	now = timeSinceStart();
+	timeSincePrevTx = now - bus->prevTxTimestamp;								// Number of usec since last transmitt
+	if(timeSincePrevTx < bus->minPktDelay) {									// Only sleep if previous message was sent less than xx usec ago
+		req.tv_sec = 0;
+		req.tv_nsec = (long) (bus->minPktDelay - timeSincePrevTx) * 1000L;		// Convert to nano sec
+		while(nanosleep(&req, &rem) < 0 && errno == EINTR) req = rem;
+	}
+
+	// Send all binary data
 	while(writtenLen < size) {
 		chunkSize = size - writtenLen;
 
@@ -55,13 +72,8 @@ int rawmail_send(void * _self, uint8_t *data, int size) {
 		writtenLen += len;
 	}
 
-	/* Workaround for kernel code that does not seem to handle
-	 * multiple messages in the same read() call. This sleep
-	 * introduces a 50ms delay so that the current message hopefully
-	 * makes it into the kernel alone... */
-	req.tv_sec = 0;
-	req.tv_nsec = 50000000L;
-	while(nanosleep(&req, &rem) < 0 && errno == EINTR) req = rem;
+	// Timestamp of when transmission finished
+	bus->prevTxTimestamp = timeSinceStart();
 
 	return 0;
 }
@@ -115,6 +127,28 @@ int rawmail_dispatch(void *_self) {
 	snprintf(str, sizeof(str), "[Rawmail read %d]",  bus->fd);
 	util_dump((uint8_t*) &mail->mail_header, len, str);
 	list_call_each(bus->application_handlers, &packet);
+
+	return 0;
+}
+
+
+
+//-------------------------------------------------------------
+// Setup configuration parameters for each particular connection
+int rawmail_conf(void *_self, enum busmail_conf_t key, void *value) {
+	struct rawmail_connection_t *bus;
+
+	bus = (struct rawmail_connection_t *) _self;
+
+	switch(key) {
+		case MIN_PKT_DELAY:
+			if(*((int64_t*) value) < 0LL) return -1;
+			bus->minPktDelay = *((int64_t*) value);
+			break;
+
+		default:
+			return -1;
+	}
 
 	return 0;
 }
