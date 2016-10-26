@@ -858,7 +858,7 @@ setAccessCode.Ac[3] = 0x55u;
 		else if(connection.radio == ACTIVE) {
 			printf("WRITE: API_FP_MM_SET_REGISTRATION_MODE_REQ\n");
 			newTimer.it_value.tv_sec = 180;
-			setRegistr.RegistrationEnabled = true;
+			setRegistr.RegistrationEnabled = 2;
 			mailProto.send(dect_bus, (uint8_t *) &setRegistr,
 				sizeof(ApiFpMmSetRegistrationModeReqType));
 		}
@@ -879,7 +879,7 @@ setAccessCode.Ac[3] = 0x55u;
 		// Turn of registration
 		connection.accessCodeStatus = INACTIVE;
 		connection.registration = PENDING_INACTIVE;
-		setRegistr.RegistrationEnabled = false;
+		setRegistr.RegistrationEnabled = 0;
 		mailProto.send(dect_bus, (uint8_t *) &setRegistr,
 			sizeof(ApiFpMmSetRegistrationModeReqType));
 	}
