@@ -5,6 +5,7 @@
 #include <Api/CodecList/ApiCodecList.h>
 #include <Api/FpCc/ApiFpCc.h>
 #include <Api/FpMm/ApiFpMm.h>
+#include <Api/FpUle/ApiFpUle.h>
 #include <Api/ProdTest/ApiProdTest.h>
 #include <Api/RsStandard.h>
 
@@ -111,6 +112,50 @@ static void api_parser_handler(packet_t *p) {
 
 	case API_FP_CC_CALL_PROC_CFM:
 		printf("API_FP_CC_CALL_PROC_CFM\n");
+		break;
+
+	case API_FP_ULE_INIT_CFM:
+		printf("API_FP_ULE_INIT_CFM\n");
+		break;
+
+	case API_FP_ULE_DATA_IND:
+		printf("API_FP_ULE_DATA_IND\n");
+		break;
+
+	case API_FP_ULE_DATA_CFM:
+		printf("API_FP_ULE_DATA_CFM\n");
+		break;
+
+	case API_FP_ULE_DTR_IND:
+		printf("API_FP_ULE_DTR_IND\n");
+		break;
+
+	case API_FP_ULE_GET_REGISTRATION_COUNT_CFM:
+		printf("API_FP_ULE_GET_REGISTRATION_COUNT_CFM\n");
+		break;
+
+	case API_FP_ULE_GET_DEVICE_IPUI_CFM:
+		printf("API_FP_ULE_GET_DEVICE_IPUI_CFM\n");
+		break;
+
+	case API_FP_ULE_ABORT_DATA_CFM:
+		printf("API_FP_ULE_ABORT_DATA_CFM\n");
+		break;
+
+	case API_FP_ULE_PVC_CONFIG_REJ:
+		printf("API_FP_ULE_PVC_CONFIG_REJ\n");
+		break;
+
+	case API_FP_ULE_PVC_CONFIG_IND:
+		printf("API_FP_ULE_PVC_CONFIG_IND\n");
+		break;
+
+	case API_FP_ULE_PVC_PENDING_IND:
+		printf("API_FP_ULE_PVC_PENDING_IND\n");
+		break;
+
+	case API_FP_ULE_PVC_IWU_DATA_IND:
+		printf("API_FP_ULE_PVC_IWU_DATA_IND\n");
 		break;
 
 	default:
