@@ -899,6 +899,7 @@ int start_internal_dect(void) {
 	ApiLinuxInitGetSystemInfoReqType req;
 	DECTSHIMDRV_CHANNELCOUNT_PARAM chanCnt;
 	DECTSHIMDRV_INIT_PARAM parm;
+	int64_t minPktDelay;
 	int shimFd, r;
 
 	shimFd = open("/dev/dectshim", O_RDWR);
@@ -919,6 +920,9 @@ int start_internal_dect(void) {
 	hwIsInternal = chanCnt.channel_count > 0;
 
 	close(shimFd);
+
+	minPktDelay = 5000LL;														// Minimum delay in usec between transmitted packets
+	mailProto.conf(dect_bus, MIN_PKT_DELAY, &minPktDelay);
 
 	printf("WRITE: API_LINUX_INIT_GET_SYSTEM_INFO_REQ\n");
 	req.Primitive = API_LINUX_INIT_GET_SYSTEM_INFO_REQ;
