@@ -46,6 +46,10 @@
 #define SAMB_NO_POLL_SET 0xc0
 
 
+enum busmail_conf_t {
+	MIN_PKT_DELAY,																// Minimum delay in usec between transmitted packets
+};
+
 
 typedef struct {
 	int fd;
@@ -90,12 +94,14 @@ struct mail_protocol_t {
 	int (*dispatch)(void *_self);
 	int (*send)(void *_self, uint8_t *data, int size);
 	int (*receive)(void *_self, void *event);
+	int (*conf)(void *_self, enum busmail_conf_t key, void *value);
 };
 
 
 extern struct mail_protocol_t mailProto;
 
 void * busmail_new(int fd);
+int busmail_conf(void *_self, enum busmail_conf_t key, void *value);
 void busmail_add_handler(void * _self, void (*app_handler)(packet_t *));
 int busmail_get(void * _self, packet_t *p);
 void packet_dump(packet_t *p);

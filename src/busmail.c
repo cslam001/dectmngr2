@@ -426,6 +426,13 @@ int busmail_dispatch(void * _self) {
 }
 
 
+// Setup configuration parameters for each particular connection
+int busmail_conf(void *_self __attribute__((unused)), enum busmail_conf_t key __attribute__((unused)), void *value __attribute__((unused))) {
+	// None implemented for busmail yet.
+	return 0;
+}
+
+
 void busmail_add_handler(void * _self , void (*app_handler)(packet_t *)) {
 
 	busmail_connection_t * bus = (busmail_connection_t *) _self;

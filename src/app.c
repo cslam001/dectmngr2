@@ -134,6 +134,7 @@ void app_init(void *base __attribute__((unused)), config_t * conf __attribute__ 
 		mailProto.dispatch = rawmail_dispatch;
 		mailProto.send = rawmail_send;
 		mailProto.receive = rawmail_receive;
+		mailProto.conf = rawmail_conf;
 	}
 	else if(access("/dev/ttyS1", R_OK | W_OK) == 0) {
 		printf("Trying external Dect...\n");
@@ -148,6 +149,7 @@ void app_init(void *base __attribute__((unused)), config_t * conf __attribute__ 
 		mailProto.dispatch = busmail_dispatch;
 		mailProto.send = busmail_send;
 		mailProto.receive = busmail_receive;
+		mailProto.conf = busmail_conf;
 	}
 
 	if(!mailProto.new) exit_failure("No char dev for Dect com\n");
