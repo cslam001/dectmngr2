@@ -825,10 +825,8 @@ int connection_set_registration(int onoff) {
 	setAccessCode.Primitive = API_FP_MM_SET_ACCESS_CODE_REQ;
 	setAccessCode.Ac[0] = 0xffu;
 	setAccessCode.Ac[1] = 0xffu;
-	setAccessCode.Ac[2] = 0;
-	setAccessCode.Ac[3] = 0;
-setAccessCode.Ac[2] = 0x55u;
-setAccessCode.Ac[3] = 0x55u;
+	setAccessCode.Ac[2] = 0;													// PIN code for handset pairing (BCD encoded?).
+	setAccessCode.Ac[3] = 0;													//  TODO: read it from uci.
 
 	memset(&newTimer, 0, sizeof(newTimer));
 
