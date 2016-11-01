@@ -16,6 +16,7 @@
 #include "error.h"
 #include "connection_init.h"
 #include "rawmailproxy.h"
+#include "external_call.h"
 
 #include <Api/FpGeneral/ApiFpGeneral.h>
 #include <Api/CodecList/ApiCodecList.h>
@@ -396,8 +397,12 @@ static void handset_handler(packet_t *p)
 	
 	/* Application command */
 	switch (m->mail_header) {
-		case API_FP_MM_HANDSET_PRESENT_IND:
+		case API_FP_MM_HANDSET_PRESENT_IND: {
+			ApiFpMmHandsetPresentIndType *resp =
+				(ApiFpMmHandsetPresentIndType*)  &m->mail_header;
 			ubus_send_string("handset", "present");
+setup_req(resp->TerminalId, 0, "12345");
+			}
 			break;
 
 		case API_FP_MM_GET_REGISTRATION_COUNT_CFM:
