@@ -397,12 +397,9 @@ static void handset_handler(packet_t *p)
 	
 	/* Application command */
 	switch (m->mail_header) {
-		case API_FP_MM_HANDSET_PRESENT_IND: {
-			ApiFpMmHandsetPresentIndType *resp =
-				(ApiFpMmHandsetPresentIndType*)  &m->mail_header;
+		case API_FP_MM_HANDSET_PRESENT_IND:
 			ubus_send_string("handset", "present");
-setup_req(resp->TerminalId, 0, "12345");
-			}
+			production_test_call_hanset(m);										// Does nothing in end user units. In factory it auto-calls all new registered phones.
 			break;
 
 		case API_FP_MM_GET_REGISTRATION_COUNT_CFM:

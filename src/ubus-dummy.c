@@ -1,11 +1,16 @@
 
 /* Ability to build without ubus etc. for factory production.
- * This file is an empty API, for replacing ubus.c at link time. */
+ * This file is almost an empty API, for replacing ubus.c at
+ * link time. */
 
 
 #include "ubus.h"
 #include "util.h"
 #include "dect.h"
+#include "external_call.h"
+
+#include <Api/FpGeneral/ApiFpGeneral.h>
+#include <Api/FpMm/ApiFpMm.h>
 
 
 //-------------------------------------------------------------
@@ -16,45 +21,62 @@ const char ubusStrInActive[] = "";
 
 
 //-------------------------------------------------------------
-
 int ubus_send_strings(const char *path __attribute__((unused)), const char *msgKey[] __attribute__((unused)), const char *msgVal[] __attribute__((unused)), int len __attribute__((unused))) {
 	return 0;
 }
 
+//-------------------------------------------------------------
 int ubus_send_string_to(const char *path __attribute__((unused)), const char *msgKey __attribute__((unused)), const char *msgVal __attribute__((unused))) {
 	return 0;
 }
 
+//-------------------------------------------------------------
 int ubus_send_string(const char *msgKey __attribute__((unused)), const char *msgVal __attribute__((unused))) {
 	return 0;
 }
 
+//-------------------------------------------------------------
 int ubus_call_string(const char *path __attribute__((unused)), const char* method __attribute__((unused)), const char *key __attribute__((unused)), 
 		const char *val __attribute__((unused)), ubus_call_complete_callback cb __attribute__((unused))) {
 	return 0;
 }
 
+//-------------------------------------------------------------
 int uci_call_query(const char *option __attribute__((unused))) {
 	return -1;
 }
 
+//-------------------------------------------------------------
 int asterisk_call(int terminal __attribute__((unused)), int add __attribute__((unused)), int release __attribute__((unused)), const char *cid __attribute__((unused))) {
 	return 0;
 }
 
+//-------------------------------------------------------------
 int ubus_reply_handset_list(int retErrno __attribute__((unused)), const struct handsets_t const *handsets __attribute__((unused))) {
 	return 0;
 }
 
+//-------------------------------------------------------------
 int ubus_disable_receive(void) {
 	return 0;
 }
 
+//-------------------------------------------------------------
 int ubus_enable_receive(void) {
 	return 0;
 }
 
+//-------------------------------------------------------------
 void ubus_init(void * base __attribute__((unused)), config_t * config __attribute__((unused))) {};
 
 
+//-------------------------------------------------------------
+// For testing in factory production of new devices; immediately
+// call all newly registered handsets. In end customers units
+// this function is a stub and does nothing.
+int production_test_call_hanset(busmail_t *mail) {
+	ApiFpMmHandsetPresentIndType *resp =
+		(ApiFpMmHandsetPresentIndType*) &mail->mail_header;
+	return setup_req(resp->TerminalId, 0, "12345");
+}
 

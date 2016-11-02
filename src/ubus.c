@@ -1019,3 +1019,11 @@ void ubus_init(void *base __attribute__((unused)), config_t *config __attribute_
 	event_base_add_stream(ubus_stream);
 }
 
+
+//-------------------------------------------------------------
+// For testing in factory production of new devices. In end
+// customers units this function is a stub and does nothing.
+int production_test_call_hanset(busmail_t *mail __attribute__((unused))) {
+	return 0;
+}
+

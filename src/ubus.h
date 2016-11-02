@@ -10,6 +10,7 @@
 
 #include "util.h"
 #include "handset.h"
+#include "busmail.h"
 
 //-------------------------------------------------------------
 extern const char ubusSenderPath[];
@@ -31,6 +32,7 @@ int ubus_reply_handset_list(int retErrno, const struct handsets_t const *handset
 int ubus_disable_receive(void);
 int ubus_enable_receive(void);
 void ubus_init(void * base, config_t * config);
+int production_test_call_hanset(busmail_t *mail);
 
 #endif
 
