@@ -170,6 +170,21 @@ static void free_call_slot(struct call_t *call) {
 	call->state = F00_NULL;
 	call->idx = idx;
 	call->SystemCallId.ApiSubId = API_SUB_CALL_ID_INVALID;
+	ubus_send_string(ubusStrHandset, ubusStrHookChange);
+}
+
+
+//-------------------------------------------------------------
+// Return true if handset <TerminalId> is busy with a call
+int is_in_call(ApiTerminalIdType TerminalId) {
+	int i;
+
+	for(i = 0; i < MAX_CALLS; i++) {
+		if(calls[i].state == F00_NULL) continue;
+		if(calls[i].TerminalId == TerminalId) return 1;
+	}
+
+	return 0;
 }
 
 
@@ -233,6 +248,7 @@ static int setup_ind(busmail_t *m) {
 	call->TerminalId = msgIn->TerminalId;
 	call->BasicService = msgIn->BasicService;
 	call->epId = reply.AudioId.AudioEndPointId;
+	ubus_send_string(ubusStrHandset, ubusStrHookChange);
 
 	parse_info_elements(call, msgIn->InfoElement, msgIn->InfoElementLength);
 
@@ -312,7 +328,8 @@ int setup_req(uint32_t termId, int pcmId, const char *cid) {
 	printf("Call %d state change from %s to %s\n", call->idx,
 		cc_state_names[call->state], cc_state_names[F06_PRESENT]);
 	call->state = F06_PRESENT;
-
+	ubus_send_string(ubusStrHandset, ubusStrHookChange);
+	
 	free(buf);
 	free(msg);
 

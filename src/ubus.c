@@ -76,6 +76,8 @@ const char ubusSenderPath[] = "dect";											// The Ubus type we transmitt
 static const char ubusPathAsterisk[] = "asterisk.dect.api";						// The Ubus type for Asterisk
 const char ubusStrActive[] = "active";											// The "bool" we transmitt for service is on/enabled/operational
 const char ubusStrInActive[] = "inactive";
+const char ubusStrHookChange[] = "hookchange";									// Event when handset goes offhook
+const char ubusStrHandset[] = "handset";
 const char strOn[] = "on";
 const char strOff[] = "off";
 const char strAuto[] = "auto";
@@ -467,38 +469,40 @@ int ubus_reply_handset_list(int retErrno, const struct handsets_t const *handset
 		if(!handsets->terminal[i].codecs) continue;
 
 		tbl = blobmsg_open_table(&blob, NULL);
-		blobmsg_add_u32(&blob, "id", handsets->terminal[i].id);
-
-		list2 = blobmsg_open_array(&blob, "ipui");
-		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[0]);
-		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[1]);
-		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[2]);
-		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[3]);
-		blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[4]);
-		blobmsg_close_table(&blob, list2);
-
-		list2 = blobmsg_open_array(&blob, "codecs");
-		for(j = 0; j < handsets->terminal[i].codecs->NoOfCodecs; j++) {
-			switch(handsets->terminal[i].codecs->Codec[j].Codec) {
-				case API_CT_G726:
-					blobmsg_add_string(&blob,  NULL, "G.726");
-					break;
-				case API_CT_G722:
-					blobmsg_add_string(&blob,  NULL, "G.722");
-					break;
-				case API_CT_G711A:
-					blobmsg_add_string(&blob,  NULL, "G.711A");
-					break;
-				case API_CT_G711U:
-					blobmsg_add_string(&blob,  NULL, "G.711U");
-					break;
-				case API_CT_G7291:
-					blobmsg_add_string(&blob,  NULL, "G.791");
-					break;
-			}
-		}
-		blobmsg_close_table(&blob, list2);
-
+			blobmsg_add_u32(&blob, "id", handsets->terminal[i].id);
+	
+			list2 = blobmsg_open_array(&blob, "ipui");
+				blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[0]);
+				blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[1]);
+				blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[2]);
+				blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[3]);
+				blobmsg_add_u16(&blob, NULL, handsets->terminal[i].ipui[4]);
+			blobmsg_close_table(&blob, list2);
+	
+			list2 = blobmsg_open_array(&blob, "codecs");
+				for(j = 0; j < handsets->terminal[i].codecs->NoOfCodecs; j++) {
+					switch(handsets->terminal[i].codecs->Codec[j].Codec) {
+						case API_CT_G726:
+							blobmsg_add_string(&blob,  NULL, "G.726");
+							break;
+						case API_CT_G722:
+							blobmsg_add_string(&blob,  NULL, "G.722");
+							break;
+						case API_CT_G711A:
+							blobmsg_add_string(&blob,  NULL, "G.711A");
+							break;
+						case API_CT_G711U:
+							blobmsg_add_string(&blob,  NULL, "G.711U");
+							break;
+						case API_CT_G7291:
+							blobmsg_add_string(&blob,  NULL, "G.791");
+							break;
+					}
+				}
+			blobmsg_close_table(&blob, list2);
+			
+			blobmsg_add_string(&blob,  "hook",
+				is_in_call(handsets->terminal[i].id) ? "offhook" : "onhook");
 		blobmsg_close_table(&blob, tbl);
 	}
 	blobmsg_close_table(&blob, list1);

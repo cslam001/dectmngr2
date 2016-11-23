@@ -16,6 +16,8 @@
 extern const char ubusSenderPath[];
 extern const char ubusStrActive[];
 extern const char ubusStrInActive[];
+extern const char ubusStrHookChange[];											// String for when hook changes state
+extern const char ubusStrHandset[];
 
 typedef void (*ubus_call_complete_callback)(int ret);
 
