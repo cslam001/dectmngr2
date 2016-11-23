@@ -5,6 +5,7 @@
 #include <string.h>
 #include <syslog.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "handset.h"
 #include "busmail.h"
@@ -397,10 +398,40 @@ static void handset_handler(packet_t *p)
 	
 	/* Application command */
 	switch (m->mail_header) {
-		case API_FP_MM_HANDSET_PRESENT_IND:
-			ubus_send_string(ubusStrHandset, "present");
+		case API_FP_MM_HANDSET_PRESENT_IND: {
+			struct tm brokenDownTime;
+			ApiFpSetTimeReqType req =  {
+				.Primitive = API_FP_SET_TIME_REQ,
+				.Coding = API_CODING_TIME_DATE,
+				.Interpretation = API_INTER_CURRENT_TIME_DATE,
+			};
+			time_t now;
+
+			// Sync handset wall clocks
+			time(&now);
+			localtime_r(&now, &brokenDownTime);
+			req.ApiTimeDateCode.Year = brokenDownTime.tm_year;
+			req.ApiTimeDateCode.Month = brokenDownTime.tm_mon + 1;
+			req.ApiTimeDateCode.Day = brokenDownTime.tm_mday;
+			req.ApiTimeDateCode.Hour = brokenDownTime.tm_hour;
+			req.ApiTimeDateCode.Minute = brokenDownTime.tm_min;
+			req.ApiTimeDateCode.Second = brokenDownTime.tm_sec;
+			req.ApiTimeDateCode.TimeZone = timezone / -900;						// seconds west of UTC to quarters of an hour east
+			printf("Syncing handset clocks to current system clock...\n");
+			mailProto.send(dect_bus, (uint8_t *) &req, sizeof(req));
+
 			production_test_call_hanset(m);										// Does nothing in end user units. In factory it auto-calls all new registered phones.
-			break;
+		}
+		break;
+
+		case API_FP_SET_TIME_CFM: {
+			ApiFpSetTimeCfmType *resp = (ApiFpSetTimeCfmType*) &m->mail_header;
+
+			printf("%s setting stack time\n",
+				(resp->Status == RSS_SUCCESS ? "Success" : "Failed"));
+			ubus_send_string(ubusStrHandset, "present");
+		}
+		break;
 
 		case API_FP_MM_GET_REGISTRATION_COUNT_CFM:
 			got_registration_count(m);
@@ -428,6 +459,8 @@ void handset_init(void * bus)
 {
 	memset(&handsets, 0, sizeof(handsets));
 	handsets.termCntExpt = -1;
+
+	tzset();
 
 	dect_bus = bus;
 	mailProto.add_handler(bus, handset_handler);
