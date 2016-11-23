@@ -974,7 +974,7 @@ static int release_req(struct call_t *call, ApiCcReleaseReasonType reason) {
 //-------------------------------------------------------------
 // We have been asked by outside world (Asterisk)
 // to terminate a call.
-int release_req_async(uint32_t termId, int pcmId) {
+int release_req_async(uint32_t termId __attribute__((unused)), int pcmId) {
 	struct call_t *call;
 
 	call = find_call_by_endpoint_id(pcmId);
