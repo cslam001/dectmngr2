@@ -266,6 +266,7 @@ int setup_req(uint32_t termId, int pcmId, const char *cid) {
 	terminal = &handsets.terminal[i];
 
 	// Put the call in our list of current ongoing calls
+	if(find_call_by_endpoint_id(pcmId)) return -1;
 	call = find_free_call_slot();
 	if(!call) return -1;
 	call->epId = pcmId;
