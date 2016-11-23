@@ -50,14 +50,14 @@ static int notify_user_handets_changed(void) {
 		}
 
 		for(i = 0; i < handsets.termCntEvntDel; i++) {
-			ubus_send_string("handset", "remove");
+			ubus_send_string(ubusStrHandset, "remove");
 		}
 		handsets.termCntEvntDel = 0;
 	}
 
 	if(handsets.termCntEvntAdd) {
 		for(i = 0; i < handsets.termCntEvntAdd; i++) {
-			ubus_send_string("handset", "add");
+			ubus_send_string(ubusStrHandset, "add");
 		}
 	 	handsets.termCntEvntAdd = 0;
 	}
@@ -398,7 +398,7 @@ static void handset_handler(packet_t *p)
 	/* Application command */
 	switch (m->mail_header) {
 		case API_FP_MM_HANDSET_PRESENT_IND:
-			ubus_send_string("handset", "present");
+			ubus_send_string(ubusStrHandset, "present");
 			production_test_call_hanset(m);										// Does nothing in end user units. In factory it auto-calls all new registered phones.
 			break;
 
