@@ -643,7 +643,13 @@ static void connection_init_handler(packet_t *p) {
 					ubus_send_string("registration", ubusStrInActive);
 					ubus_call_string("led.dect", "set", "state", 
 						(connection.radio == ACTIVE) ? "ok" : "off", NULL);
-if(handsets.termCntEvntAdd || handsets.termCntEvntDel) list_handsets();
+
+					if(handsets.termCntEvntAdd || handsets.termCntEvntDel) {	// Has number of handsets changed?
+						list_handsets();
+					}
+					else {														// Handset timeout or ULE added
+						perhaps_disable_radio();
+					}
 				}
 			}
 		}
